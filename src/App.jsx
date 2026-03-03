@@ -5,18 +5,22 @@ const INDEX_TICKERS = ["^GSPC", "^DJI", "^IXIC"];
 const CRYPTO_TICKERS = ["BTC-USD", "ETH-USD", "XRP-USD"];
 const HYPERSCALER_TICKERS = ["AMZN", "MSFT", "GOOG", "META", "ORCL"];
 
+const [history, setHistory] = useState({});
+
 async function fetchLivePrices(tickers) {
   try {
     const res = await fetch(`/.netlify/functions/prices?tickers=${tickers.join(",")}`);
     const json = await res.json();
     const prices = {};
+    const histories = {};
     Object.entries(json.data ?? {}).forEach(([ticker, val]) => {
-      prices[ticker] = val?.change ?? val; // handles both object and legacy number
+      prices[ticker] = val?.change ?? val;
+      if (val?.history?.length) histories[ticker] = val.history;
     });
-    return prices;
+    return { prices, histories };
   } catch (err) {
     console.error("Price fetch failed:", err);
-    return {};
+    return { prices: {}, histories: {} };
   }
 }
 
@@ -203,13 +207,83 @@ function MarketStrip({ data, tickers, labels, colors }) {
     </div>
   );
 }
+
+// ── SPARKLINE ─────────────────────────────────────────────
+function Sparkline({ data, color, width = 120, height = 40 }) {
+  if (!data || data.length < 2) return (
+    <div style={{ width, height, display: "flex", alignItems: "center", justifyContent: "center" }}>
+      <span style={{ fontSize: 10, color: "#334155" }}>no history</span>
+    </div>
+  );
+
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const range = max - min || 1;
+  const pad = 4;
+
+  const points = data.map((v, i) => {
+    const x = pad + (i / (data.length - 1)) * (width - pad * 2);
+    const y = pad + ((max - v) / range) * (height - pad * 2);
+    return `${x},${y}`;
+  });
+
+  const polyline = points.join(" ");
+
+  // Filled area path
+  const first = points[0].split(",");
+  const last = points[points.length - 1].split(",");
+  const areaPath = `M${first[0]},${height - pad} L${polyline.replace(/(\d+\.?\d*),(\d+\.?\d*)/g, "$1,$2")} L${last[0]},${height - pad} Z`;
+
+  return (
+    <svg width={width} height={height} style={{ display: "block" }}>
+      {/* Gradient fill */}
+      <defs>
+        <linearGradient id={`sg-${color.replace("#","")}`} x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
+        </linearGradient>
+      </defs>
+      {/* Area fill */}
+      <polyline
+        points={`${first[0]},${height - pad} ${polyline} ${last[0]},${height - pad}`}
+        fill={`url(#sg-${color.replace("#","")})`}
+        stroke="none"
+      />
+      {/* Line */}
+      <polyline
+        points={polyline}
+        fill="none"
+        stroke={color}
+        strokeWidth="1.5"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      {/* Last price dot */}
+      <circle
+        cx={last[0]} cy={last[1]}
+        r="2.5"
+        fill={color}
+        stroke="#0f172a"
+        strokeWidth="1.5"
+      />
+    </svg>
+  );
+}
+
 // ── TICKER CHIP ───────────────────────────────────────────
-function TickerChip({ symbol, change, onRemove }) {
+function TickerChip({ symbol, change, onRemove, history }) {
   const [hovered, setHovered] = useState(false);
+  const [pos2, setPos2] = useState({ x: 0, y: 0 });
   const pos = change >= 0;
+  const sparkColor = change === undefined ? "#475569" : change >= 0 ? "#34d399" : "#f87171";
+
   return (
     <div
-      onMouseEnter={() => setHovered(true)}
+      onMouseEnter={e => {
+        setHovered(true);
+        setPos2({ x: e.clientX, y: e.clientY });
+      }}
+      onMouseMove={e => setPos2({ x: e.clientX, y: e.clientY })}
       onMouseLeave={() => setHovered(false)}
       style={{
         display: "flex", alignItems: "center", gap: 6, padding: "5px 10px",
@@ -223,6 +297,8 @@ function TickerChip({ symbol, change, onRemove }) {
             {pos ? "+" : ""}{change}%
           </span>
         : <span style={{ fontSize: 11, color: "#475569" }}>…</span>}
+
+      {/* Remove button */}
       {hovered && onRemove && (
         <button onClick={e => { e.stopPropagation(); onRemove(); }} style={{
           position: "absolute", top: -6, right: -6, width: 16, height: 16,
@@ -232,12 +308,44 @@ function TickerChip({ symbol, change, onRemove }) {
           lineHeight: 1, padding: 0, fontFamily: "inherit",
         }}>×</button>
       )}
+
+      {/* Sparkline tooltip */}
+      {hovered && (
+        <div style={{
+          position: "fixed",
+          top: pos2.y - 110,
+          left: pos2.x - 70,
+          background: "#0f172a",
+          border: `1px solid ${sparkColor}44`,
+          borderRadius: 10,
+          padding: "10px 12px",
+          pointerEvents: "none",
+          zIndex: 2000,
+          boxShadow: `0 8px 32px rgba(0,0,0,.6), 0 0 20px ${sparkColor}11`,
+          minWidth: 150,
+        }}>
+          {/* Header */}
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{symbol}</span>
+            <span style={{ fontSize: 12, fontWeight: 600, color: sparkColor }}>
+              {change !== undefined ? (change >= 0 ? "+" : "") + change + "%" : "—"}
+            </span>
+          </div>
+          {/* Sparkline */}
+          <Sparkline data={history} color={sparkColor} width={126} height={44} />
+          {/* Labels */}
+          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+            <span style={{ fontSize: 9, color: "#334155" }}>5D ago</span>
+            <span style={{ fontSize: 9, color: "#334155" }}>today</span>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 // ── SUBSECTOR CARD ────────────────────────────────────────
-function SubsectorCard({ sub, prices, onAddTicker, onRemoveTicker }) {
+function SubsectorCard({ sub, prices, histories, onAddTicker, onRemoveTicker }) {
   const [open, setOpen] = useState(false);
   const [addingTicker, setAddingTicker] = useState(false);
   const [newTicker, setNewTicker] = useState("");
@@ -264,9 +372,11 @@ function SubsectorCard({ sub, prices, onAddTicker, onRemoveTicker }) {
         {sub.badge && <Badge text={sub.badge} color={sub.badgeColor} />}
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-        {sub.tickers.map(t => (
-          <TickerChip key={t} symbol={t} change={prices[t]} onRemove={() => onRemoveTicker(t)} />
-        ))}
+{sub.tickers.map(t => (
+  <TickerChip key={t} symbol={t} change={prices[t]}
+    history={histories?.[t]}
+    onRemove={() => onRemoveTicker(t)} />
+))}
       </div>
       {sub.materials?.length > 0 && (
         <div>
@@ -354,32 +464,19 @@ function TrackCard({ track, isActive, onClick }) {
 }
 
 // ── TRACK PANE ────────────────────────────────────────────
-function TrackPane({ track, prices, onAddTicker, onRemoveTicker }) {
+function TrackPane({ track, prices, histories, onAddTicker, onRemoveTicker }) {
   return (
-    <div style={{
-      borderRadius: 16, border: `1px solid ${track.borderColor}44`,
-      background: "rgba(8,12,24,0.95)", boxShadow: `0 0 40px ${track.borderColor}15`,
-      padding: 20, marginTop: 8, animation: "fadeSlideIn .25s ease-out",
-    }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: track.color }}>{track.label}</h3>
-        <span style={{ fontSize: 11, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-          {track.subsectors.length} sub-sectors · {track.subsectors.flatMap(s => s.tickers).length} tickers
-        </span>
-      </div>
-      <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(track.subsectors.length, 4)}, minmax(0,1fr))`, gap: 12 }}>
-        {track.subsectors.map(sub => (
-          <SubsectorCard key={sub.id} sub={sub} prices={prices}
-            onAddTicker={(ticker) => onAddTicker(track.id, sub.id, ticker)}
-            onRemoveTicker={(ticker) => onRemoveTicker(track.id, sub.id, ticker)} />
-        ))}
-      </div>
-    </div>
+    // ...
+    {track.subsectors.map(sub => (
+      <SubsectorCard key={sub.id} sub={sub} prices={prices} histories={histories}
+        onAddTicker={(ticker) => onAddTicker(track.id, sub.id, ticker)}
+        onRemoveTicker={(ticker) => onRemoveTicker(track.id, sub.id, ticker)} />
+    ))}
   );
 }
 
 // ── HEAT MAP ──────────────────────────────────────────────
-function HeatMap({ prices, capexData }) {
+function HeatMap({ prices, capexData, histories }) {
   const [tooltip, setTooltip] = useState(null);
 
   function getHeatColor(change) {
@@ -428,7 +525,11 @@ function HeatMap({ prices, capexData }) {
                 const pos = change === undefined || change >= 0;
                 return (
                   <div key={ticker}
-                    onMouseEnter={e => setTooltip({ ticker, change, track: track.label, rect: e.currentTarget.getBoundingClientRect() })}
+                    onMouseEnter={e => setTooltip({ 
+  ticker, change, track: track.label, 
+  history: histories?.[ticker],
+  rect: e.currentTarget.getBoundingClientRect() 
+})}
                     onMouseLeave={() => setTooltip(null)}
                     style={{ background: bg, borderRadius: 8, padding: "8px 12px", border: `1px solid ${bg}`, minWidth: 60, textAlign: "center", cursor: "pointer", transition: "filter .15s, transform .15s" }}
                     onMouseOver={e => { e.currentTarget.style.filter = "brightness(1.3)"; e.currentTarget.style.transform = "scale(1.06)"; }}
@@ -446,25 +547,33 @@ function HeatMap({ prices, capexData }) {
           </div>
         );
       })}
-      {tooltip && (
-        <div style={{
-          position: "fixed", top: tooltip.rect.top - 72, left: tooltip.rect.left,
-          background: "#0f172a", border: "1px solid rgba(255,255,255,0.15)",
-          borderRadius: 8, padding: "8px 12px", pointerEvents: "none", zIndex: 1000,
-          boxShadow: "0 8px 32px rgba(0,0,0,.5)",
-        }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{tooltip.ticker}</div>
-          <div style={{ fontSize: 11, color: "#94a3b8" }}>{tooltip.track}</div>
-          {tooltip.change !== undefined && (
-            <div style={{ fontSize: 12, fontWeight: 600, color: tooltip.change >= 0 ? "#34d399" : "#f87171", marginTop: 2 }}>
-              {tooltip.change >= 0 ? "+" : ""}{tooltip.change}% today
-            </div>
-          )}
+    {tooltip && (
+  <div style={{
+    position: "fixed", top: tooltip.rect.top - 130, left: tooltip.rect.left,
+    background: "#0f172a", border: "1px solid rgba(255,255,255,0.15)",
+    borderRadius: 10, padding: "10px 12px", pointerEvents: "none", zIndex: 1000,
+    boxShadow: "0 8px 32px rgba(0,0,0,.5)", minWidth: 150,
+  }}>
+    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{tooltip.ticker}</div>
+      {tooltip.change !== undefined && (
+        <div style={{ fontSize: 12, fontWeight: 600, color: tooltip.change >= 0 ? "#34d399" : "#f87171" }}>
+          {tooltip.change >= 0 ? "+" : ""}{tooltip.change}% today
         </div>
       )}
     </div>
-  );
-}
+    <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 6 }}>{tooltip.track}</div>
+    <Sparkline
+      data={tooltip.history}
+      color={tooltip.change >= 0 ? "#34d399" : "#f87171"}
+      width={126} height={44}
+    />
+    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+      <span style={{ fontSize: 9, color: "#334155" }}>5D ago</span>
+      <span style={{ fontSize: 9, color: "#334155" }}>today</span>
+    </div>
+  </div>
+)}
 
 // ── DONUT CHART ───────────────────────────────────────────
 function DonutChart({ prices, capexData }) {
@@ -687,36 +796,30 @@ export default function App() {
     catch {}
   }, [capexData]);
 
-  const refresh = useCallback(async () => {
-    setRefreshing(true);
-    // CURRENT — replaces all market data on every refresh
-// UPDATED — merges new data with existing, keeps old values if fetch returns empty
-const [newPrices, newMarket] = await Promise.all([
-  fetchLivePrices(getAllTickers(capexData)),
-  fetchMarketData(),
-]);
-setPrices(prev => ({ ...prev, ...newPrices }));
-setMarketData(prev => {
-  // Only overwrite entries that have real data, keep old values for anything missing
-  const merged = { ...prev };
-  Object.entries(newMarket).forEach(([ticker, val]) => {
-    if (val !== null && val !== undefined) {
-      // For objects { change, price }, only update if price is real
-      if (typeof val === "object") {
-        if (val.price !== null && val.price !== undefined) {
+const refresh = useCallback(async () => {
+  setRefreshing(true);
+  const [priceResult, newMarket] = await Promise.all([
+    fetchLivePrices(getAllTickers(capexData)),
+    fetchMarketData(),
+  ]);
+  setPrices(prev => ({ ...prev, ...priceResult.prices }));
+  setHistory(prev => ({ ...prev, ...priceResult.histories }));
+  setMarketData(prev => {
+    const merged = { ...prev };
+    Object.entries(newMarket).forEach(([ticker, val]) => {
+      if (val !== null && val !== undefined) {
+        if (typeof val === "object") {
+          if (val.price !== null && val.price !== undefined) merged[ticker] = val;
+        } else {
           merged[ticker] = val;
         }
-      } else {
-        merged[ticker] = val;
       }
-    }
+    });
+    return merged;
   });
-  return merged;
-});
-    setLastUpdated(new Date().toLocaleTimeString());
-    setRefreshing(false);
-  }, [capexData]);
-
+  setLastUpdated(new Date().toLocaleTimeString());
+  setRefreshing(false);
+}, [capexData]);
   useEffect(() => {
     refresh();
     const id = setInterval(refresh, 30000);
@@ -952,14 +1055,15 @@ setMarketData(prev => {
           </div>
 
           {/* EXPANDED PANE */}
-          {activeData && (
-            <TrackPane
-              track={activeData}
-              prices={prices}
-              onAddTicker={addTickerToSubsector}
-              onRemoveTicker={removeTickerFromSubsector}
-            />
-          )}
+{activeData && (
+  <TrackPane
+    track={activeData}
+    prices={prices}
+    histories={history}
+    onAddTicker={addTickerToSubsector}
+    onRemoveTicker={removeTickerFromSubsector}
+  />
+)}
 
           {/* BOTTOM PANELS */}
           <div>
@@ -980,7 +1084,7 @@ setMarketData(prev => {
             </div>
             {bottomTab === "all" ? (
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                <div style={{ gridColumn: "1/-1" }}><HeatMap prices={prices} capexData={capexData} /></div>
+                <div style={{ gridColumn: "1/-1" }}><HeatMap prices={prices} capexData={capexData} histories={history} /></div>
                 <DonutChart prices={prices} capexData={capexData} />
                 <Watchlist prices={prices} capexData={capexData} />
               </div>
