@@ -21,8 +21,8 @@ async function fetchMarketData() {
   try {
     const tickers = [...INDEX_TICKERS, ...CRYPTO_TICKERS];
     const res = await fetch(`/.netlify/functions/prices?tickers=${tickers.join(",")}`);
-    const data = await res.json();
-    return data.prices ?? {};
+    const json = await res.json();
+    return json.data ?? {}; // returns { "^GSPC": { change: 0.5, price: 5800.12 }, ... }
   } catch {
     return {};
   }
