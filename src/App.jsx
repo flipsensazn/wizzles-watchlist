@@ -554,34 +554,39 @@ function HeatMap({ prices, capexData, histories }) {
         );
       })}
     {tooltip && (
-  <div style={{
-    position: "fixed", top: tooltip.rect.top - 130, left: tooltip.rect.left,
-    background: "#0f172a", border: "1px solid rgba(255,255,255,0.15)",
-    borderRadius: 10, padding: "10px 12px", pointerEvents: "none", zIndex: 1000,
-    boxShadow: "0 8px 32px rgba(0,0,0,.5)", minWidth: 150,
-  }}>
-    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-      <div style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{tooltip.ticker}</div>
-      {tooltip.change !== undefined && (
-        <div style={{ fontSize: 12, fontWeight: 600, color: tooltip.change >= 0 ? "#34d399" : "#f87171" }}>
-          {tooltip.change >= 0 ? "+" : ""}{tooltip.change}% today
+      <div style={{
+        position: "fixed", top: tooltip.rect.top - 130, left: tooltip.rect.left,
+        background: "#0f172a", border: "1px solid rgba(255,255,255,0.15)",
+        borderRadius: 10, padding: "10px 12px", pointerEvents: "none", zIndex: 1000,
+        boxShadow: "0 8px 32px rgba(0,0,0,.5)", minWidth: 150,
+      }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{tooltip.ticker}</div>
+          {tooltip.change !== undefined && (
+            <div style={{ fontSize: 12, fontWeight: 600, color: tooltip.change >= 0 ? "#34d399" : "#f87171" }}>
+              {tooltip.change >= 0 ? "+" : ""}{tooltip.change}% today
+            </div>
+          )}
         </div>
-      )}
-    </div>
-    <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 6 }}>{tooltip.track}</div>
-    <Sparkline
-      data={tooltip.history}
-      color={tooltip.change >= 0 ? "#34d399" : "#f87171"}
-      width={126} height={44}
-    />
-    <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
-      <span style={{ fontSize: 9, color: "#334155" }}>5D ago</span>
-      <span style={{ fontSize: 9, color: "#334155" }}>today</span>
-    </div>
-  </div>
-)}
+        <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 6 }}>{tooltip.track}</div>
+        <Sparkline
+          data={tooltip.history}
+          color={tooltip.change >= 0 ? "#34d399" : "#f87171"}
+          width={126} height={44}
+        />
+        <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
+          <span style={{ fontSize: 9, color: "#334155" }}>5D ago</span>
+          <span style={{ fontSize: 9, color: "#334155" }}>today</span>
+        </div>
+      </div>
+    )}
+    </div> 
+  );        
+}        
 
-// ── DONUT CHART ───────────────────────────────────────────
+// ── DONUT CHART ─────────────────────────────
+function DonutChart({ prices, capexData }) {
+
 function DonutChart({ prices, capexData }) {
   const [hovered, setHovered] = useState(null);
   const total = capexData.tracks.reduce((s, t) => s + (t.capex || 0), 0);
