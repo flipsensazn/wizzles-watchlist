@@ -3,62 +3,17 @@ import { useState, useEffect, useCallback, useMemo } from "react";
 const OTC_TICKERS = ["IQEPF", "SLOIF", "ALMU"];
 
 async function fetchLivePrices(tickers) {
-  const API_KEY = "d6jgcppr01qomr5gobu0d6jgcppr01qomr5gobug";
-  const acc = {};
-
-  const otcTickers = tickers.filter(t => OTC_TICKERS.includes(t));
-  const exchangeTickers = tickers.filter(t => !OTC_TICKERS.includes(t));
-
-  // OTC via Yahoo + CORS proxy
-  await Promise.all(
-    otcTickers.map(async ticker => {
-      try {
-        const url = `https://query1.finance.yahoo.com/v8/finance/chart/${ticker}?interval=1d&range=5d`;
-        const res = await fetch(`https://api.allorigins.win/raw?url=${encodeURIComponent(url)}`);
-        const data = await res.json();
-        const closes = data.chart.result[0].indicators.quote[0].close
-          .filter(v => v !== null); // ← filter out nulls
-        const prev = closes[closes.length - 2];
-        const curr = closes[closes.length - 1];
-        if (prev && curr) {
-          acc[ticker] = parseFloat((((curr - prev) / prev) * 100).toFixed(2));
-        }
-      } catch (err) {
-        console.warn(`OTC fetch failed for ${ticker}:`, err);
-      }
-    })
-  );
-
-  // Exchange stocks via Finnhub in batches
-  const batchSize = 10;
-  for (let i = 0; i < exchangeTickers.length; i += batchSize) {
-    const batch = exchangeTickers.slice(i, i + batchSize);
-    const results = await Promise.all(
-      batch.map(ticker =>
-        fetch(`https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${API_KEY}`)
-          .then(r => r.json())
-          .then(data => {
-            const change = data.dp;
-            if (change !== null && change !== undefined && !isNaN(change)) {
-              return { ticker, change: parseFloat(change.toFixed(2)) };
-            }
-            console.warn(`No data for ${ticker}:`, data);
-            return { ticker, change: null };
-          })
-          .catch(err => {
-            console.error(`Fetch failed for ${ticker}:`, err);
-            return { ticker, change: null };
-          })
-      )
-    );
-    results.forEach(r => { if (r.change !== null) acc[r.ticker] = r.change; });
-    if (i + batchSize < exchangeTickers.length) {
-      await new Promise(r => setTimeout(r, 1000));
-    }
+  try {
+    const tickerList = tickers.join(",");
+    const res = await fetch(`/.netlify/functions/prices?tickers=${tickerList}`);
+    const data = await res.json();
+    return data.prices ?? {};
+  } catch (err) {
+    console.error("Price fetch failed:", err);
+    return {};
   }
-
-  return acc;
 }
+
 // ── DATA ──────────────────────────────────────────────────
 const CAPEX_DATA = {
   companies: ["AMZN", "MSFT", "GOOG", "META", "ORCL"],
