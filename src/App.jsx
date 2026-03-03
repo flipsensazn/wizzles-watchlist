@@ -84,7 +84,7 @@ const CAPEX_DATA = {
         { id: "eth", label: "Ethernet Switching", badge: null, tickers: ["ANET","CSCO","HPE"],
           materials: ["Copper Cat8","PCB Laminate","Silicon"] },
         { id: "trans", label: "Optical Transceivers 400G/800G", badge: "HIGH DEMAND", badgeColor: "#f59e0b",
-          tickers: ["LITE","COHR","CIEN","INFN"], materials: ["Indium Phosphide","Gallium Arsenide","Single-Mode Fiber"] },
+          tickers: ["LITE","COHR","CIEN","POET"], materials: ["Indium Phosphide","Gallium Arsenide","Single-Mode Fiber"] },
         { id: "cable", label: "Cables & Connectors", badge: null, tickers: ["FN"],
           materials: ["Copper","Optical Fiber SiO2","Polymer Cladding"] },
       ],
