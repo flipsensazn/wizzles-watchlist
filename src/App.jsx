@@ -586,8 +586,6 @@ function HeatMap({ prices, capexData, histories }) {
 
 // ── DONUT CHART ─────────────────────────────
 function DonutChart({ prices, capexData }) {
-
-function DonutChart({ prices, capexData }) {
   const [hovered, setHovered] = useState(null);
   const total = capexData.tracks.reduce((s, t) => s + (t.capex || 0), 0);
   const cx = 130, cy = 130, R = 90, r = 52;
