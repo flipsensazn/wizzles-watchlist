@@ -1,7 +1,7 @@
 // netlify/functions/prices.js
 
 const OTC_TICKERS = ["IQEPF", "SLOIF", "ALMU"];
-const FINNHUB_KEY = "d6jgcppr01qomr5gobu0d6jgcppr01qomr5gobug";
+const FINNHUB_KEY = process.env.FINNHUB_KEY;
 
 // In-memory cache
 let cache = { prices: {}, timestamp: 0 };
