@@ -466,12 +466,18 @@ function TrackCard({ track, isActive, onClick }) {
 // ── TRACK PANE ────────────────────────────────────────────
 function TrackPane({ track, prices, histories, onAddTicker, onRemoveTicker }) {
   return (
-    // ...
-    {track.subsectors.map(sub => (
-      <SubsectorCard key={sub.id} sub={sub} prices={prices} histories={histories}
-        onAddTicker={(ticker) => onAddTicker(track.id, sub.id, ticker)}
-        onRemoveTicker={(ticker) => onRemoveTicker(track.id, sub.id, ticker)} />
-    ))}
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      {track.subsectors.map(sub => (
+        <SubsectorCard
+          key={sub.id}
+          sub={sub}
+          prices={prices}
+          histories={histories}
+          onAddTicker={(ticker) => onAddTicker(track.id, sub.id, ticker)}
+          onRemoveTicker={(ticker) => onRemoveTicker(track.id, sub.id, ticker)}
+        />
+      ))}
+    </div>
   );
 }
 
