@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 
 // ── MARKET DATA ───────────────────────────────────────────
 const INDEX_TICKERS = ["^GSPC", "^DJI", "^IXIC"];
-const CRYPTO_TICKERS = ["BTC-USD", "ETH-USD", "SOL-USD", "XRP-USD"];
+const CRYPTO_TICKERS = ["BTC-USD", "ETH-USD", "XRP-USD"];
 const HYPERSCALER_TICKERS = ["AMZN", "MSFT", "GOOG", "META", "ORCL"];
 
 async function fetchLivePrices(tickers) {
@@ -934,11 +934,11 @@ setMarketData(prev => {
 
             {/* RIGHT — Crypto */}
             <MarketStrip
-              data={marketData}
-              tickers={["BTC-USD", "ETH-USD", "SOL-USD", "XRP-USD"]}
-              labels={["BTC", "ETH", "SOL", "XRP"]}
-              colors={["#f59e0b", "#60a5fa", "#a855f7", "#34d399"]}
-            />
+  data={marketData}
+  tickers={["BTC-USD", "ETH-USD", "XRP-USD"]}
+  labels={["BTC", "ETH", "XRP"]}
+  colors={["#f59e0b", "#60a5fa", "#34d399"]}
+/>
           </div>
 
           {/* TRACK CARDS */}
