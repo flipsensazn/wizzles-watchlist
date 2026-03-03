@@ -11,8 +11,7 @@ async function fetchLivePrices(tickers) {
     const json = await res.json();
     const prices = {};
     Object.entries(json.data ?? {}).forEach(([ticker, val]) => {
-      // val is either a plain number (Finnhub) or { change, price } object (Yahoo)
-      prices[ticker] = typeof val === "object" ? val.change : val;
+      prices[ticker] = val?.change ?? val; // handles both object and legacy number
     });
     return prices;
   } catch (err) {
