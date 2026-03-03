@@ -7,10 +7,14 @@ const OTC_TICKERS = ["IQEPF", "SLOIF", "ALMU"];
 
 async function fetchLivePrices(tickers) {
   try {
-    const tickerList = tickers.join(",");
-    const res = await fetch(`/.netlify/functions/prices?tickers=${tickerList}`);
-    const data = await res.json();
-    return data.prices ?? {};
+    const res = await fetch(`/.netlify/functions/prices?tickers=${tickers.join(",")}`);
+    const json = await res.json();
+    const prices = {};
+    Object.entries(json.data ?? {}).forEach(([ticker, val]) => {
+      // val is either a plain number (Finnhub) or { change, price } object (Yahoo)
+      prices[ticker] = typeof val === "object" ? val.change : val;
+    });
+    return prices;
   } catch (err) {
     console.error("Price fetch failed:", err);
     return {};
@@ -139,34 +143,60 @@ function Badge({ text, color }) {
 
 // ── MARKET STRIP ──────────────────────────────────────────
 function MarketStrip({ data, tickers, labels, colors }) {
+  function formatPrice(p, ticker) {
+    if (p === null || p === undefined) return "—";
+    if (ticker === "BTC-USD") return "$" + p.toLocaleString("en-US", { maximumFractionDigits: 0 });
+    if (ticker === "ETH-USD") return "$" + p.toLocaleString("en-US", { maximumFractionDigits: 0 });
+    if (ticker === "SOL-USD") return "$" + p.toFixed(2);
+    if (ticker === "XRP-USD") return "$" + p.toFixed(3);
+    // Indices — no $ sign, comma formatted
+    return p.toLocaleString("en-US", { maximumFractionDigits: 2 });
+  }
+
   return (
     <div style={{
       display: "flex", flexDirection: "column", gap: 8,
       justifyContent: "center", padding: "0 20px",
     }}>
       {tickers.map((ticker, i) => {
-        const change = data[ticker];
+        const entry = data[ticker];
+        // entry is { change, price } object from Yahoo
+        const price = entry?.price;
+        const change = entry?.change;
         const pos = (change ?? 0) >= 0;
+
         return (
           <div key={ticker} style={{
             display: "flex", flexDirection: "column", alignItems: "center",
-            padding: "8px 14px", borderRadius: 10, minWidth: 96,
+            padding: "8px 14px", borderRadius: 10, minWidth: 100,
             background: "rgba(255,255,255,0.03)",
             border: `1px solid ${colors[i]}22`,
             transition: "border-color .2s",
           }}
             onMouseEnter={e => e.currentTarget.style.borderColor = colors[i] + "55"}
             onMouseLeave={e => e.currentTarget.style.borderColor = colors[i] + "22"}>
+
+            {/* Label */}
             <span style={{
               fontSize: 10, fontWeight: 700, color: colors[i],
               letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 3,
             }}>{labels[i]}</span>
-            {change !== undefined ? (
-              <span style={{ fontSize: 14, fontWeight: 700, color: pos ? "#34d399" : "#f87171" }}>
+
+            {/* Current Price — large */}
+            <span style={{
+              fontSize: 13, fontWeight: 700, color: "#f1f5f9",
+              fontFamily: "'DM Mono', monospace", marginBottom: 2,
+            }}>
+              {formatPrice(price, ticker)}
+            </span>
+
+            {/* % change — small subtitle */}
+            {change !== undefined && change !== null ? (
+              <span style={{ fontSize: 10, fontWeight: 600, color: pos ? "#34d399" : "#f87171" }}>
                 {pos ? "+" : ""}{change.toFixed(2)}%
               </span>
             ) : (
-              <span style={{ fontSize: 12, color: "#334155" }}>—</span>
+              <span style={{ fontSize: 10, color: "#334155" }}>—</span>
             )}
           </div>
         );
@@ -174,7 +204,6 @@ function MarketStrip({ data, tickers, labels, colors }) {
     </div>
   );
 }
-
 // ── TICKER CHIP ───────────────────────────────────────────
 function TickerChip({ symbol, change, onRemove }) {
   const [hovered, setHovered] = useState(false);
