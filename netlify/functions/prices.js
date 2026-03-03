@@ -34,22 +34,23 @@ async function fetchYahoo(ticker) {
     const data = await res.json();
 
     const result = data?.chart?.result?.[0];
-    if (!result) {
-      console.warn(`No Yahoo result for ${ticker}`);
-      return { ticker, change: null };
-    }
+    if (!result) return { ticker, change: null, price: null };
 
     const closes = result.indicators.quote[0].close.filter(v => v !== null);
     const prev = closes[closes.length - 2];
     const curr = closes[closes.length - 1];
 
     if (prev && curr) {
-      return { ticker, change: parseFloat((((curr - prev) / prev) * 100).toFixed(2)) };
+      return {
+        ticker,
+        change: parseFloat((((curr - prev) / prev) * 100).toFixed(2)),
+        price: parseFloat(curr.toFixed(2)),
+      };
     }
-    return { ticker, change: null };
+    return { ticker, change: null, price: null };
   } catch (err) {
     console.warn(`Yahoo fetch failed for ${ticker}:`, err);
-    return { ticker, change: null };
+    return { ticker, change: null, price: null };
   }
 }
 
@@ -60,11 +61,11 @@ exports.handler = async function(event) {
   };
 
   const now = Date.now();
-  if (now - cache.timestamp < CACHE_TTL && Object.keys(cache.prices).length > 0) {
+  if (now - cache.timestamp < CACHE_TTL && Object.keys(cache.data ?? {}).length > 0) {
     return {
       statusCode: 200,
       headers,
-      body: JSON.stringify({ prices: cache.prices, cached: true }),
+      body: JSON.stringify({ data: cache.data, cached: true }),
     };
   }
 
@@ -85,7 +86,7 @@ exports.handler = async function(event) {
   // Fetch Yahoo tickers (OTC + indices + crypto)
   await Promise.all(yahooTickers.map(async t => {
     const r = await fetchYahoo(t);
-    if (r.change !== null) results[r.ticker] = r.change;
+    if (r.change !== null) results[r.ticker] = { change: r.change, price: r.price };
   }));
 
   // Fetch Finnhub tickers in batches
@@ -93,17 +94,18 @@ exports.handler = async function(event) {
   for (let i = 0; i < finnhubTickers.length; i += batchSize) {
     const batch = finnhubTickers.slice(i, i + batchSize);
     const batchResults = await Promise.all(batch.map(fetchFinnhub));
-    batchResults.forEach(r => { if (r.change !== null) results[r.ticker] = r.change; });
+    batchResults.forEach(r => {
+      if (r.change !== null) results[r.ticker] = r.change; // plain number, not object
+    });
     if (i + batchSize < finnhubTickers.length) {
       await new Promise(r => setTimeout(r, 1000));
     }
   }
 
-  cache = { prices: results, timestamp: Date.now() };
-
+  cache = { data: results, timestamp: Date.now() };
   return {
     statusCode: 200,
     headers,
-    body: JSON.stringify({ prices: results, cached: false }),
+    body: JSON.stringify({ data: results, cached: false }),
   };
 };
