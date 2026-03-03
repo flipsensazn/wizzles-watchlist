@@ -691,12 +691,29 @@ export default function App() {
   const refresh = useCallback(async () => {
     setRefreshing(true);
     // CURRENT — replaces all market data on every refresh
-  const [newPrices, newMarket] = await Promise.all([
-    fetchLivePrices(getAllTickers(capexData)),
-    fetchMarketData(),
-    ]);
-    setPrices(prev => ({ ...prev, ...newPrices }));
-    setMarketData(newMarket);
+// UPDATED — merges new data with existing, keeps old values if fetch returns empty
+const [newPrices, newMarket] = await Promise.all([
+  fetchLivePrices(getAllTickers(capexData)),
+  fetchMarketData(),
+]);
+setPrices(prev => ({ ...prev, ...newPrices }));
+setMarketData(prev => {
+  // Only overwrite entries that have real data, keep old values for anything missing
+  const merged = { ...prev };
+  Object.entries(newMarket).forEach(([ticker, val]) => {
+    if (val !== null && val !== undefined) {
+      // For objects { change, price }, only update if price is real
+      if (typeof val === "object") {
+        if (val.price !== null && val.price !== undefined) {
+          merged[ticker] = val;
+        }
+      } else {
+        merged[ticker] = val;
+      }
+    }
+  });
+  return merged;
+});
     setLastUpdated(new Date().toLocaleTimeString());
     setRefreshing(false);
   }, [capexData]);
