@@ -1,5 +1,6 @@
-// netlify/functions/prices.js
-
+const INDEX_TICKERS = ["^GSPC", "^DJI", "^IXIC"]; // SPX, DOW, NASDAQ
+const CRYPTO_TICKERS = ["BTC-USD", "ETH-USD", "SOL-USD", "XRP-USD"];
+const YAHOO_TICKERS = [...OTC_TICKERS, ...INDEX_TICKERS, ...CRYPTO_TICKERS];
 const OTC_TICKERS = ["IQEPF", "SLOIF", "ALMU"];
 const FINNHUB_KEY = process.env.FINNHUB_KEY;
 
@@ -59,8 +60,8 @@ exports.handler = async function(event) {
     return { statusCode: 400, headers, body: JSON.stringify({ error: "No tickers provided" }) };
   }
 
-  const otc = tickers.filter(t => OTC_TICKERS.includes(t));
-  const exchange = tickers.filter(t => !OTC_TICKERS.includes(t));
+  const otc = tickers.filter(t => YAHOO_TICKERS.includes(t));
+  const exchange = tickers.filter(t => !YAHOO_TICKERS.includes(t));
 
   const results = {};
 
