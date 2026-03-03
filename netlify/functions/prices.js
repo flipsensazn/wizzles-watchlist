@@ -23,47 +23,53 @@ async function fetchYahoo(ticker) {
     const res = await fetch(url);
     const data = await res.json();
     const result = data?.chart?.result?.[0];
-    if (!result) {
-      console.warn(`No Yahoo result for ${ticker}`);
-      return { ticker, change: null, price: null };
-    }
+    if (!result) return { ticker, change: null, price: null, history: [] };
+
     const closes = result.indicators.quote[0].close.filter(v => v !== null);
     const prev = closes[closes.length - 2];
     const curr = closes[closes.length - 1];
+
     if (prev && curr) {
       return {
         ticker,
         change: parseFloat((((curr - prev) / prev) * 100).toFixed(2)),
         price: parseFloat(curr.toFixed(2)),
+        history: closes.map(v => parseFloat(v.toFixed(2))), // ← ADD THIS
       };
     }
-    return { ticker, change: null, price: null };
+    return { ticker, change: null, price: null, history: [] };
   } catch (err) {
     console.warn(`Yahoo fetch failed for ${ticker}:`, err);
-    return { ticker, change: null, price: null };
+    return { ticker, change: null, price: null, history: [] };
   }
 }
 
+// Also update fetchFinnhub to include history (from intraday if available, else empty)
 async function fetchFinnhub(ticker) {
   try {
-    const res = await fetch(
-      `https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${FINNHUB_KEY}`
-    );
-    const data = await res.json();
-    const change = data.dp;
-    const price = data.c;
+    const [quoteRes, candleRes] = await Promise.all([
+      fetch(`https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${FINNHUB_KEY}`),
+      fetch(`https://finnhub.io/api/v1/stock/candle?symbol=${ticker}&resolution=D&count=5&token=${FINNHUB_KEY}`)
+    ]);
+    const quote = await quoteRes.json();
+    const candle = await candleRes.json();
+
+    const change = quote.dp;
+    const price = quote.c;
+    const history = candle.c ? candle.c.map(v => parseFloat(v.toFixed(2))) : [];
+
     if (change !== null && change !== undefined && !isNaN(change)) {
       return {
         ticker,
         change: parseFloat(change.toFixed(2)),
         price: parseFloat((price ?? 0).toFixed(2)),
+        history,
       };
     }
-    console.warn(`No Finnhub data for ${ticker}:`, data);
-    return { ticker, change: null, price: null };
+    return { ticker, change: null, price: null, history: [] };
   } catch (err) {
     console.error(`Finnhub fetch failed for ${ticker}:`, err);
-    return { ticker, change: null, price: null };
+    return { ticker, change: null, price: null, history: [] };
   }
 }
 
@@ -98,7 +104,7 @@ exports.handler = async function(event) {
   // Yahoo — returns { change, price } for all Yahoo tickers
   await Promise.all(yahooTickers.map(async t => {
     const r = await fetchYahoo(t);
-    if (r.change !== null) results[r.ticker] = { change: r.change, price: r.price };
+    if (r.change !== null) results[r.ticker] = { change: r.change, price: r.price, history: r.history };
   }));
 
   // Finnhub — also returns { change, price } now for consistency
@@ -107,8 +113,8 @@ exports.handler = async function(event) {
     const batch = finnhubTickers.slice(i, i + batchSize);
     const batchResults = await Promise.all(batch.map(fetchFinnhub));
     batchResults.forEach(r => {
-      if (r.change !== null) results[r.ticker] = { change: r.change, price: r.price };
-    });
+    if (r.change !== null) results[r.ticker] = { change: r.change, price: r.price, history: r.history };
+  });
     if (i + batchSize < finnhubTickers.length) {
       await new Promise(r => setTimeout(r, 1000));
     }
