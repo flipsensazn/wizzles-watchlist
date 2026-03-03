@@ -690,9 +690,10 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
-    const [newPrices, newMarket] = await Promise.all([
-      fetchLivePrices(getAllTickers(capexData)),
-      fetchMarketData(),
+    // CURRENT — replaces all market data on every refresh
+  const [newPrices, newMarket] = await Promise.all([
+    fetchLivePrices(getAllTickers(capexData)),
+    fetchMarketData(),
     ]);
     setPrices(prev => ({ ...prev, ...newPrices }));
     setMarketData(newMarket);
