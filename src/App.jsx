@@ -3,7 +3,7 @@ import { useState, useEffect, useCallback } from "react";
 // ── MARKET DATA ───────────────────────────────────────────
 const INDEX_TICKERS = ["^GSPC", "^DJI", "^IXIC"];
 const CRYPTO_TICKERS = ["BTC-USD", "ETH-USD", "SOL-USD", "XRP-USD"];
-const OTC_TICKERS = ["IQEPF", "SLOIF", "ALMU"];
+const HYPERSCALER_TICKERS = ["AMZN", "MSFT", "GOOG", "META", "ORCL"];
 
 async function fetchLivePrices(tickers) {
   try {
@@ -23,10 +23,10 @@ async function fetchLivePrices(tickers) {
 
 async function fetchMarketData() {
   try {
-    const tickers = [...INDEX_TICKERS, ...CRYPTO_TICKERS];
+    const tickers = [...INDEX_TICKERS, ...CRYPTO_TICKERS, ...HYPERSCALER_TICKERS];
     const res = await fetch(`/.netlify/functions/prices?tickers=${tickers.join(",")}`);
     const json = await res.json();
-    return json.data ?? {}; // returns { "^GSPC": { change: 0.5, price: 5800.12 }, ... }
+    return json.data ?? {};
   } catch {
     return {};
   }
@@ -878,11 +878,52 @@ setMarketData(prev => {
                 <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 16 }}>
                   Hyperscaler AI Capex <span style={{ color: "rgba(251,191,36,.7)" }}>(2026 Est.)</span>
                 </div>
-                <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap" }}>
-                  {CAPEX_DATA.companies.map(co => (
-                    <span key={co} style={{ fontSize: 11, fontWeight: 700, padding: "4px 12px", borderRadius: 8, background: "rgba(255,255,255,.05)", border: "1px solid rgba(255,255,255,.15)", color: "#e2e8f0" }}>{co}</span>
-                  ))}
-                </div>
+                <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
+  {CAPEX_DATA.companies.map(co => {
+    const entry = marketData[co];
+    const price = entry?.price;
+    const change = entry?.change;
+    const pos = (change ?? 0) >= 0;
+
+    function formatPrice(p) {
+      if (!p) return "—";
+      return "$" + p.toLocaleString("en-US", { maximumFractionDigits: 2 });
+    }
+
+    return (
+      <div key={co} style={{
+        display: "flex", flexDirection: "column", alignItems: "center",
+        padding: "6px 12px", borderRadius: 8, minWidth: 72,
+        background: "rgba(255,255,255,0.05)",
+        border: "1px solid rgba(255,255,255,0.12)",
+        transition: "border-color .2s",
+      }}
+        onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(251,191,36,0.4)"}
+        onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"}>
+        {/* Ticker */}
+        <span style={{
+          fontSize: 10, fontWeight: 800, color: "#fbbf24",
+          letterSpacing: "0.1em", marginBottom: 2,
+        }}>{co}</span>
+        {/* Price */}
+        <span style={{
+          fontSize: 12, fontWeight: 700, color: "#f1f5f9",
+          fontFamily: "'DM Mono', monospace", marginBottom: 1,
+        }}>
+          {formatPrice(price)}
+        </span>
+        {/* % change */}
+        {change !== undefined && change !== null ? (
+          <span style={{ fontSize: 10, fontWeight: 600, color: pos ? "#34d399" : "#f87171" }}>
+            {pos ? "+" : ""}{change.toFixed(2)}%
+          </span>
+        ) : (
+          <span style={{ fontSize: 10, color: "#334155" }}>—</span>
+        )}
+      </div>
+    );
+  })}
+</div>
               </div>
               <div style={{ width: 1, height: 28, background: "linear-gradient(to bottom,rgba(251,191,36,.4),transparent)" }} />
               <div style={{ position: "relative", width: "100%", height: 2, background: "linear-gradient(90deg,transparent 5%,rgba(255,255,255,.08) 20%,rgba(255,255,255,.08) 80%,transparent 95%)" }}>
