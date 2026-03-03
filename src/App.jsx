@@ -59,7 +59,7 @@ const CAPEX_DATA = {
       ],
     },
     {
-      id: "photonics", label: "Photonics & Optical Interconnect", value: "Core Focus", capex: 35,
+      id: "photonics", label: "Photonics & Optical Interconnect", value: "~$40B", capex: 35,
       color: "#fbbf24", borderColor: "#f59e0b",
       subsectors: [
         { id: "engine", label: "Optical Engine & Transceiver L1", badge: null,
@@ -86,7 +86,7 @@ const CAPEX_DATA = {
         { id: "reit", label: "Hyperscale REITs", badge: null, tickers: ["EQIX","DLR","AMT","COR"],
           materials: ["Structural Steel","Concrete","Copper Busbar","Fiber"] },
         { id: "neocloud", label: "GPU Cloud Operators", badge: "RAPID GROWTH", badgeColor: "#34d399",
-          tickers: ["CONE","IREN","CORZ","APLD","CRWV"],
+          tickers: ["CIFR","IREN","CORZ","APLD","CRWV"],
           materials: ["Power Infrastructure","Cooling Systems","High-density Racks"] },
         { id: "servers", label: "AI Server Infrastructure", badge: null, tickers: ["SMCI","VRT","VRT"],
           materials: ["Copper Heat Pipes","PCB","Aluminum Extrusions"] },
@@ -97,8 +97,8 @@ const CAPEX_DATA = {
       color: "#fb923c", borderColor: "#f97316",
       subsectors: [
         { id: "grid", label: "Power Generation & Utilities", badge: "GRID BOTTLENECK", badgeColor: "#ef4444",
-          tickers: ["VST","NEE","BE","LEU"], materials: ["Copper Grid","Silicon Steel Transformers","Lithium Storage"] },
-        { id: "ups", label: "Power Management & UPS", badge: null, tickers: ["ETN","VRT"],
+          tickers: ["VST","NEE","BE","LEU","OKLO","SMR"], materials: ["Copper Grid","Silicon Steel Transformers","Lithium Storage"] },
+        { id: "ups", label: "Power Management & UPS", badge: null, tickers: ["ETN","VRT","PLPC","ENS"],
           materials: ["Silicon Carbide SiC","Electrolytic Capacitors","Copper Winding"] },
         { id: "cooling", label: "Liquid & Immersion Cooling", badge: "EMERGING", badgeColor: "#60a5fa",
           tickers: ["VRT","SMCI","TDC"], materials: ["Dielectric Fluid","Copper Cold Plates","Deionized Water"] },
@@ -116,7 +116,7 @@ const CAPEX_DATA = {
             { name: "Sapphire Substrate", constraint: "Moderate availability", color: "#60a5fa" },
           ] },
         { id: "neuro", label: "Neuromorphic & Edge AI", badge: "EARLY STAGE", badgeColor: "#c084fc",
-          tickers: ["GTLB","INFN"], materials: ["Phase-Change Materials","Memristive Oxides","Hafnium Oxide"] },
+          tickers: ["GTLB","OSS"], materials: ["Phase-Change Materials","Memristive Oxides","Hafnium Oxide"] },
       ],
     },
   ],
