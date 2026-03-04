@@ -43,6 +43,9 @@ const CAPEX_DATA = {
       subsectors: [
         { id: "gpu", label: "GPU & AI Accelerators", badge: null, tickers: ["NVDA","AMD","INTC"],
           materials: ["Cobalt","Tungsten","Silicon Wafer 300mm","HBM DRAM"] },
+        { id: "memory", label: "Memory & Storage", badge: "HBM CRITICAL", badgeColor: "#f59e0b",
+          tickers: ["MU", "WDC", "SNDK"],
+          materials: ["HBM3e Stacks", "LPDDR5", "3D NAND Flash", "Silicon Wafer 300mm"] },
         { id: "asic", label: "Custom ASICs & TPUs", badge: null, tickers: ["AVGO","MRVL","QCOM"],
           materials: ["Advanced Packaging CoWoS","HBM","EUV Photomasks"] },
         { id: "foundry", label: "Leading-Edge Foundry", badge: "CAPACITY CONSTRAINED", badgeColor: "#f59e0b",
@@ -122,6 +125,14 @@ const CAPEX_DATA = {
           ] },
         { id: "neuro", label: "Neuromorphic & Edge AI", badge: "EARLY STAGE", badgeColor: "#c084fc",
           tickers: ["GTLB","OSS"], materials: ["Phase-Change Materials","Memristive Oxides","Hafnium Oxide"] },
+        { id: "metals", label: "Precious Metals & Commodities", badge: "MACRO HEDGE", badgeColor: "#f59e0b",
+          tickers: ["USAS", "COPX", "SLV", "GLD", "NEM"],
+          materials: [
+            { name: "Gold", constraint: "Safe haven demand rising", color: "#f59e0b" },
+            { name: "Silver", constraint: "Industrial + monetary demand", color: "#94a3b8" },
+            { name: "Copper", constraint: "CRITICAL — AI grid buildout demand", color: "#fb923c" },
+  ]
+},
       ],
     },
   ],
