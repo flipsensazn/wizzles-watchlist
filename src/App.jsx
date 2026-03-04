@@ -5,10 +5,10 @@ const INDEX_TICKERS = ["^GSPC", "^DJI", "^IXIC"];
 const CRYPTO_TICKERS = ["BTC-USD", "ETH-USD", "XRP-USD"];
 const HYPERSCALER_TICKERS = ["AMZN", "MSFT", "GOOG", "META", "ORCL"];
 
-// PERF: No longer return or store histories — sparklines removed
 async function fetchLivePrices(tickers) {
   try {
-    const res = await fetch(`/.netlify/functions/prices?tickers=${tickers.join(",")}`);
+    // CLOUDFLARE UPDATE: Route changed to /prices
+    const res = await fetch(`/prices?tickers=${tickers.join(",")}`);
     const json = await res.json();
     const prices = {};
     Object.entries(json.data ?? {}).forEach(([ticker, val]) => {
@@ -24,7 +24,8 @@ async function fetchLivePrices(tickers) {
 async function fetchMarketData() {
   try {
     const tickers = [...INDEX_TICKERS, ...CRYPTO_TICKERS, ...HYPERSCALER_TICKERS];
-    const res = await fetch(`/.netlify/functions/prices?tickers=${tickers.join(",")}`);
+    // CLOUDFLARE UPDATE: Route changed to /prices
+    const res = await fetch(`/prices?tickers=${tickers.join(",")}`);
     const json = await res.json();
     return json.data ?? {};
   } catch {
@@ -37,20 +38,16 @@ const quoteCache = {};
 async function fetchQuoteSummary(ticker) {
   if (quoteCache[ticker]) return quoteCache[ticker];
   try {
-    const url = `/.netlify/functions/quote?ticker=${encodeURIComponent(ticker)}`;
+    // CLOUDFLARE UPDATE: Route changed to /quote
+    const url = `/quote?ticker=${encodeURIComponent(ticker)}`;
     const res = await fetch(url);
     const json = await res.json();
 
-    // Log the raw payload so we can see exactly what the frontend sees!
-    console.log(`[Quote Fetch] Raw JSON for ${ticker}:`, json);
-
-    // Un-wrap the payload just in case the backend nested it inside a "data" property
     const payload = json.data ? json.data : json;
     const r = payload?.quoteSummary?.result?.[0];
 
-    // If we still can't find the result, sound the alarm in the console
     if (!r) {
-      console.warn(`[Quote Fetch] Could not find result array for ${ticker}. Payload was:`, payload);
+      console.warn(`[Quote Fetch] Could not find result array for ${ticker}.`);
       return null;
     }
 
@@ -58,7 +55,6 @@ async function fetchQuoteSummary(ticker) {
     const detail  = r.summaryDetail ?? {};
     const price   = r.price ?? {};
 
-    // A slightly more defensive formatter
     function fmt(n) {
       if (n == null || isNaN(n)) return "—";
       const num = Number(n);
@@ -85,7 +81,6 @@ async function fetchQuoteSummary(ticker) {
     quoteCache[ticker] = data;
     return data;
   } catch (err) {
-    // If anything breaks during the mapping process, it will loudly log here
     console.error(`[Quote Fetch] Error mapping data for ${ticker}:`, err);
     return null;
   }
@@ -203,7 +198,6 @@ function getAllTickers(data = CAPEX_DATA) {
 }
 
 // ── BADGE ─────────────────────────────────────────────────
-// memo: pure display, never needs to re-render
 const Badge = memo(function Badge({ text, color }) {
   return (
     <span style={{
@@ -222,46 +216,40 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
   const pos = (change ?? 0) >= 0;
   const changeColor = change === undefined ? "#475569" : pos ? "#34d399" : "#f87171";
 
-  // Fetch on mount
   useEffect(() => {
     setLoading(true);
     fetchQuoteSummary(ticker).then(d => { setData(d); setLoading(false); });
   }, [ticker]);
 
-  // Close on outside click
   useEffect(() => {
     function handler(e) {
       if (popupRef.current && !popupRef.current.contains(e.target)) onClose();
     }
-    // Slight delay so the opening click doesn't immediately close it
     const id = setTimeout(() => document.addEventListener("mousedown", handler), 50);
     return () => { clearTimeout(id); document.removeEventListener("mousedown", handler); };
   }, [onClose]);
 
-  // Close on Escape
   useEffect(() => {
     function handler(e) { if (e.key === "Escape") onClose(); }
     document.addEventListener("keydown", handler);
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  // Smart positioning: try to appear above the anchor, flip below if too close to top
   const POPUP_W = 320;
-  const POPUP_H = 300; // approximate
+  const POPUP_H = 300; 
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   let left = anchorRect ? anchorRect.left : vw / 2 - POPUP_W / 2;
   let top  = anchorRect ? anchorRect.top - POPUP_H - 10 : vh / 2 - POPUP_H / 2;
-  // Flip below if not enough space above
+  
   if (top < 10) top = anchorRect ? anchorRect.bottom + 10 : vh / 2 - POPUP_H / 2;
-  // Clamp horizontally
   if (left + POPUP_W > vw - 12) left = vw - POPUP_W - 12;
   if (left < 12) left = 12;
 
   return (
     <div ref={popupRef} style={{
       position: "fixed", top, left, width: POPUP_W, zIndex: 3000,
-      background: "rgba(6,3,22,0.97)",
+      background: "rgba(18,18,18,0.97)",
       border: `1px solid ${changeColor}44`,
       borderRadius: 14,
       boxShadow: `0 8px 48px rgba(0,0,0,0.85), 0 0 30px ${changeColor}18`,
@@ -312,7 +300,6 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
           </div>
         ) : (
           <>
-            {/* Sector / Industry */}
             {(data.sector !== "—" || data.industry !== "—") && (
               <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
                 {data.sector !== "—" && (
@@ -324,7 +311,6 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
               </div>
             )}
 
-            {/* Key stats grid */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 12px", marginBottom: 12 }}>
               {[
                 { label: "Market Cap", value: data.marketCap },
@@ -341,7 +327,6 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
               ))}
             </div>
 
-            {/* Description */}
             {data.description && (
               <div style={{
                 fontSize: 10.5, color: "#94a3b8", lineHeight: 1.55,
@@ -352,7 +337,6 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
               </div>
             )}
 
-            {/* Website link */}
             {data.website && (
               <a href={data.website} target="_blank" rel="noopener noreferrer" style={{
                 display: "inline-block", marginTop: 10, fontSize: 10, color: "#60a5fa",
@@ -387,8 +371,6 @@ function MarketStrip({ data, tickers, labels, colors }) {
         const change = entry?.change;
         const pos = (change ?? 0) >= 0;
         return (
-          // PERF: backdropFilter removed from each strip pill — was compositing
-          // 6 blurred layers simultaneously, expensive on low-end GPUs
           <div key={ticker} style={{
             display: "flex", flexDirection: "column", alignItems: "center",
             padding: "8px 14px", borderRadius: 10, minWidth: 96,
@@ -416,14 +398,6 @@ function MarketStrip({ data, tickers, labels, colors }) {
 }
 
 // ── TICKER CHIP ───────────────────────────────────────────
-// PERF: Removed sparkline tooltip entirely:
-//   - No history prop
-//   - No mousePos state (was firing setState on every mousemove)
-//   - No onMouseMove handler
-//   - No isTouchDevice check
-//   - No Sparkline SVG render on hover
-//   - No backdropFilter on the chip itself
-//   - Wrapped in memo so chips only re-render when their own price changes
 const TickerChip = memo(function TickerChip({ symbol, change, onRemove, onTickerClick }) {
   const [hovered, setHovered] = useState(false);
   const pos = (change ?? 0) >= 0;
@@ -462,7 +436,6 @@ const TickerChip = memo(function TickerChip({ symbol, change, onRemove, onTicker
 });
 
 // ── SUBSECTOR CARD ────────────────────────────────────────
-// PERF: backdropFilter removed; histories prop removed
 function SubsectorCard({ sub, prices, onAddTicker, onRemoveTicker, onTickerClick }) {
   const [open, setOpen] = useState(false);
   const [addingTicker, setAddingTicker] = useState(false);
@@ -538,14 +511,13 @@ function SubsectorCard({ sub, prices, onAddTicker, onRemoveTicker, onTickerClick
 }
 
 // ── TRACK CARD ────────────────────────────────────────────
-// PERF: memo + backdropFilter removed
 const TrackCard = memo(function TrackCard({ track, isActive, onClick }) {
   return (
     <div onClick={onClick} style={{
       position: "relative", borderRadius: 14, padding: "14px 12px", minHeight: 120,
       cursor: "pointer", userSelect: "none",
       background: isActive
-        ? `linear-gradient(135deg,${track.borderColor}28 0%,rgba(6,4,20,.95) 100%)`
+        ? `linear-gradient(135deg,${track.borderColor}28 0%,rgba(18,18,18,.95) 100%)`
         : "rgba(255,255,255,0.03)",
       border: `1px solid ${isActive ? track.borderColor : "rgba(255,255,255,0.09)"}`,
       boxShadow: isActive ? `0 0 28px ${track.borderColor}44, 0 4px 20px rgba(0,0,0,0.5)` : "0 2px 12px rgba(0,0,0,0.3)",
@@ -573,12 +545,11 @@ const TrackCard = memo(function TrackCard({ track, isActive, onClick }) {
 });
 
 // ── TRACK PANE ────────────────────────────────────────────
-// PERF: histories prop removed; backdropFilter removed
 function TrackPane({ track, prices, onAddTicker, onRemoveTicker, onTickerClick }) {
   return (
     <div style={{
       borderRadius: 18, border: `1px solid ${track.borderColor}44`,
-      background: "rgba(4,2,16,0.92)",
+      background: "rgba(24,24,24,0.92)",
       boxShadow: `0 0 60px ${track.borderColor}18, 0 8px 40px rgba(0,0,0,0.6)`,
       padding: 22, marginTop: 8, animation: "fadeSlideIn .25s ease-out",
     }}>
@@ -604,7 +575,6 @@ function TrackPane({ track, prices, onAddTicker, onRemoveTicker, onTickerClick }
 }
 
 // ── HEAT MAP ──────────────────────────────────────────────
-// PERF: histories prop removed; tooltip simplified to text-only (no Sparkline)
 function HeatMap({ prices, capexData, onTickerClick }) {
   const [tooltip, setTooltip] = useState(null);
 
@@ -622,7 +592,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
   }
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(4,2,16,0.7)", padding: 20, boxShadow: "0 4px 30px rgba(0,0,0,0.4)" }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, boxShadow: "0 4px 30px rgba(0,0,0,0.4)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
         <div>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Portfolio Heat Map</h3>
@@ -673,13 +643,12 @@ function HeatMap({ prices, capexData, onTickerClick }) {
           </div>
         );
       })}
-      {/* Lightweight text-only tooltip — no Sparkline SVG */}
       {tooltip && (
         <div style={{
           position: "fixed",
           top: tooltip.rect.top - 52,
           left: tooltip.rect.left,
-          background: "rgba(6,3,20,0.95)",
+          background: "rgba(18,18,18,0.95)",
           border: `1px solid ${(tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171"}44`,
           borderRadius: 8, padding: "7px 12px",
           pointerEvents: "none", zIndex: 1000,
@@ -734,7 +703,7 @@ function DonutChart({ prices, capexData }) {
   }).sort((a, b) => b.avg - a.avg);
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(4,2,16,0.7)", padding: 20, boxShadow: "0 4px 30px rgba(0,0,0,0.4)" }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, boxShadow: "0 4px 30px rgba(0,0,0,0.4)" }}>
       <div style={{ marginBottom: 16 }}>
         <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Sector Allocation</h3>
         <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Capex weight · hover to inspect avg performance</p>
@@ -749,11 +718,11 @@ function DonutChart({ prices, capexData }) {
                 onMouseLeave={() => setHovered(null)}
                 style={{ transformOrigin: `${cx}px ${cy}px`, transform: `scale(${isHov ? 1.06 : 1})`, transition: "transform .2s", cursor: "pointer" }}>
                 <path d={seg.path} fill={isHov ? seg.track.color : seg.track.borderColor}
-                  opacity={isHov ? 1 : hovered ? 0.35 : 0.82} stroke="rgba(4,2,16,0.8)" strokeWidth="2.5" />
+                  opacity={isHov ? 1 : hovered ? 0.35 : 0.82} stroke="rgba(24,24,24,0.8)" strokeWidth="2.5" />
               </g>
             );
           })}
-          <circle cx={cx} cy={cy} r={r - 2} fill="rgba(4,2,16,0.95)" />
+          <circle cx={cx} cy={cy} r={r - 2} fill="rgba(24,24,24,0.95)" />
           {hov ? (
             <>
               <text x={cx} y={cy - 14} textAnchor="middle" fill={hov.track.color} fontSize="11" fontWeight="600">{hov.track.label.split(" ")[0]}</text>
@@ -830,7 +799,7 @@ function Watchlist({ prices, capexData }) {
   }
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(4,2,16,0.7)", padding: 20, display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 4px 30px rgba(0,0,0,0.4)" }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 4px 30px rgba(0,0,0,0.4)" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <div>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Watchlist</h3>
@@ -913,12 +882,11 @@ export default function App() {
   });
   const [activeTrack, setActiveTrack] = useState(null);
   const [prices, setPrices] = useState({});
-  // PERF: history state entirely removed — no longer fetched, stored, or passed down
   const [marketData, setMarketData] = useState({});
   const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [bottomTab, setBottomTab] = useState("all");
-  const [popup, setPopup] = useState(null); // { ticker, change, rect }
+  const [popup, setPopup] = useState(null); 
 
   const openPopup = useCallback((ticker, rect) => {
     setPopup(prev => (prev?.ticker === ticker ? null : { ticker, change: prices[ticker], rect }));
@@ -953,7 +921,12 @@ export default function App() {
 
   useEffect(() => {
     refresh();
-    const id = setInterval(refresh, 30000);
+    const id = setInterval(() => {
+      // ONLY refresh if the tab is actively being viewed
+      if (!document.hidden) {
+        refresh();
+      }
+    }, 30000); 
     return () => clearInterval(id);
   }, [refresh]);
 
@@ -999,7 +972,6 @@ export default function App() {
   const gainers = Object.values(prices).filter(v => v > 0).length;
   const losers = Object.values(prices).filter(v => v < 0).length;
   const activeData = capexData.tracks.find(t => t.id === activeTrack);
-  // PERF: build tape entries once, avoid re-spreading on every render
   const tickerEntries = Object.entries(prices);
 
   const styles = `
@@ -1014,7 +986,6 @@ export default function App() {
     @keyframes pulseDot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(.7); } }
     .ticker-tape { animation: scroll-left 80s linear infinite; white-space: nowrap; display: inline-flex; gap: 24px; }
     .pulse { animation: pulseDot 2s infinite; }
-    .capex-box { /* animation removed */ }
 
     /* ── MOBILE ───────────────────────────────────────────── */
     @media (max-width: 640px) {
@@ -1039,10 +1010,10 @@ export default function App() {
         minHeight: "100vh", color: "#fff",
         fontFamily: "'DM Mono','Fira Code',monospace",
       }}>
-        
+
         {/* TICKER TAPE */}
         {tickerEntries.length > 0 && (
-          <div style={{ overflow: "hidden", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(4,2,14,0.75)", padding: "6px 0" }}>
+          <div style={{ overflow: "hidden", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(18,18,18,0.75)", padding: "6px 0" }}>
             <div className="ticker-tape">
               {[...tickerEntries, ...tickerEntries].map(([sym, chg], i) => (
                 <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#64748b", fontSize: 11 }}>
@@ -1055,7 +1026,7 @@ export default function App() {
         )}
 
         {/* HEADER */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(4,2,14,0.6)", flexWrap: "wrap", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
           <div>
             <div style={{ fontSize: 10, color: "#2d3a52", letterSpacing: "0.35em", textTransform: "uppercase", marginBottom: 3 }}>
               HOW ~$600B+ IN HYPERSCALER CAPEX FLOWS THROUGH AI INFRASTRUCTURE TRACKS
@@ -1101,9 +1072,9 @@ export default function App() {
             <MarketStrip data={marketData} tickers={["^GSPC","^DJI","^IXIC"]} labels={["S&P 500","DOW","NASDAQ"]} colors={["#60a5fa","#34d399","#c084fc"]} />
 
             <div className="top-node-center" style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "0 0 auto" }}>
-              <div className="capex-box" style={{
+              <div style={{
                 width: 480, borderRadius: 22, padding: "26px 30px", textAlign: "center",
-                background: "linear-gradient(135deg,rgba(251,191,36,.1) 0%,rgba(180,120,10,.04) 50%,rgba(4,2,14,.9) 100%)",
+                background: "linear-gradient(135deg,rgba(251,191,36,.1) 0%,rgba(180,120,10,.04) 50%,rgba(18,18,18,.9) 100%)",
                 border: "1.5px solid rgba(251,191,36,.45)",
               }}>
                 <div style={{ fontSize: 10, color: "rgba(251,191,36,.5)", letterSpacing: "0.4em", textTransform: "uppercase", marginBottom: 6 }}>Total Investment Flow</div>
@@ -1195,14 +1166,14 @@ export default function App() {
           </div>
 
           {/* FOOTER */}
-          <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 10, color: "#1e2638", borderTop: "1px solid rgba(255,255,255,.03)", paddingTop: 16, flexWrap: "wrap" }}>
-            <span style={{ color: "#2d3a52", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" }}>Legend:</span>
+          <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 10, color: "#475569", borderTop: "1px solid rgba(255,255,255,.03)", paddingTop: 16, flexWrap: "wrap" }}>
+            <span style={{ color: "#64748b", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" }}>Legend:</span>
             {[{ c: "#ef4444", l: "Extreme Bottleneck" }, { c: "#f59e0b", l: "Constrained" }, { c: "#34d399", l: "Rapid Growth" }, { c: "#60a5fa", l: "Emerging" }, { c: "#f472b6", l: "Speculative" }].map(x => (
-              <span key={x.l} style={{ display: "flex", alignItems: "center", gap: 5, color: "#2d3a52" }}>
+              <span key={x.l} style={{ display: "flex", alignItems: "center", gap: 5, color: "#94a3b8" }}>
                 <span style={{ width: 7, height: 7, borderRadius: "50%", background: x.c, display: "inline-block", opacity: 0.6, boxShadow: `0 0 5px ${x.c}66` }} />{x.l}
               </span>
             ))}
-            <span style={{ marginLeft: "auto", color: "#1e2638" }}>Live via Finnhub + Yahoo · server-cached · auto-refreshes 30s</span>
+            <span style={{ marginLeft: "auto" }}>Live via Finnhub + Yahoo · server-cached · auto-refreshes 30s</span>
           </div>
         </div>
       </div>
