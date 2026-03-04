@@ -1317,7 +1317,12 @@ useEffect(() => {
 ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} />
   : bottomTab === "donut" ? <DonutChart prices={prices} capexData={capexData} />
   : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={capexData} />
-  : <MultibaggerPanel prices={prices} onTickerClick={openPopup} /> // ADD THIS LINE
+  : <MultibaggerPanel 
+      prices={prices} 
+      scannerPool={scannerPool} 
+      setScannerPool={setScannerPool} 
+      onTickerClick={openPopup} 
+    />
 }
           </div>
 
