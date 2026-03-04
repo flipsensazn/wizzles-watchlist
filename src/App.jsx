@@ -954,7 +954,6 @@ const results = await Promise.all(
               <th style={{ padding: "10px 8px" }}>TICKER</th>
               <th style={{ padding: "10px 8px" }}>FCF YIELD</th>
               <th style={{ padding: "10px 8px" }}>ROA</th>
-              <th style={{ padding: "10px 8px" }}>ASSET GR.</th>
               <th style={{ padding: "10px 8px" }}>1Y RET.</th>
               <th style={{ padding: "10px 8px", textAlign: "right" }}>BLUEPRINT SCORE</th>
               <th style={{ width: 30 }}></th>
@@ -972,7 +971,6 @@ const results = await Promise.all(
                   </td>
                   <td style={{ padding: "12px 8px", color: stock.fcfYield > 8 ? "#34d399" : "#e2e8f0" }}>{stock.fcfYield.toFixed(2)}%</td>
                   <td style={{ padding: "12px 8px" }}>{stock.roa.toFixed(1)}%</td>
-                  <td style={{ padding: "12px 8px", color: stock.assetGrowth > 15 ? "#34d399" : "#e2e8f0" }}>{stock.assetGrowth.toFixed(1)}%</td>
                   <td style={{ padding: "12px 8px" }}>{stock.marketReturn.toFixed(1)}%</td>
                   <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(stock.score), fontSize: 13 }}>{stock.score.toFixed(1)}</td>
                   <td style={{ textAlign: "right" }}><button onClick={() => removeTicker(stock.ticker)} style={{ background: "none", border: "none", color: "#334155", cursor: "pointer", fontSize: 16 }}>×</button></td>
