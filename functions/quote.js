@@ -32,13 +32,19 @@ export async function onRequest(context) {
     const yahooPromise = fetch(yahooUrl, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } })
       .then(res => res.json());
 
-    // 2. FISCAL.AI FETCH (Standardized Annual Balance Sheet)
-    let fiscalPromise = Promise.resolve(null);
+// 2. FISCAL.AI FETCH (Standardized Annual Balance Sheet)
+    let fiscalPromise = Promise.resolve({ _debug: "No API Key found in env" });
+    
     if (FISCALAI_KEY) {
       const fiscalUrl = `https://api.fiscal.ai/v1/company/financials/balance-sheet/standardized?ticker=${ticker}&periodType=annual`;
       fiscalPromise = fetch(fiscalUrl, {
         headers: { "X-Api-Key": FISCALAI_KEY }
-      }).then(res => res.ok ? res.json() : null).catch(() => null);
+      })
+      .then(async res => {
+        if (!res.ok) return { _error: res.status, _details: await res.text() };
+        return res.json();
+      })
+      .catch(err => ({ _error: "Network/Parse Error", _details: err.message }));
     }
 
     // Await both APIs concurrently
