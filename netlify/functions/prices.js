@@ -47,16 +47,28 @@ async function fetchYahoo(ticker) {
 // Also update fetchFinnhub to include history (from intraday if available, else empty)
 async function fetchFinnhub(ticker) {
   try {
-    const [quoteRes, candleRes] = await Promise.all([
+    // Use Yahoo for history since it's more reliable on free tier
+    const now = Math.floor(Date.now() / 1000);
+    const from = now - (7 * 24 * 60 * 60);
+
+    const [quoteRes, yahooRes] = await Promise.all([
       fetch(`https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${FINNHUB_KEY}`),
-      fetch(`https://finnhub.io/api/v1/stock/candle?symbol=${ticker}&resolution=D&count=5&token=${FINNHUB_KEY}`)
+      fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=5d`)
     ]);
+
     const quote = await quoteRes.json();
-    const candle = await candleRes.json();
+    const yahooData = await yahooRes.json();
 
     const change = quote.dp;
     const price = quote.c;
-    const history = candle.c ? candle.c.map(v => parseFloat(v.toFixed(2))) : [];
+
+    // Get history from Yahoo
+    const yahooResult = yahooData?.chart?.result?.[0];
+    const history = yahooResult
+      ? yahooResult.indicators.quote[0].close
+          .filter(v => v !== null)
+          .map(v => parseFloat(v.toFixed(2)))
+      : [];
 
     if (change !== null && change !== undefined && !isNaN(change)) {
       return {
