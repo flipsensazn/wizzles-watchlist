@@ -113,19 +113,15 @@ export async function onRequest(context) {
     if (r.change !== null) results[r.ticker] = { change: r.change, price: r.price };
   }));
 
-  // 5. FETCH FINNHUB (Batching to stay under rate limits)
-  const batchSize = 10;
-  for (let i = 0; i < finnhubTickers.length; i += batchSize) {
-    const batch = finnhubTickers.slice(i, i + batchSize);
-    const batchResults = await Promise.all(batch.map(t => fetchFinnhub(t, FINNHUB_KEY)));
-    
-    batchResults.forEach(r => {
-      if (r.change !== null) results[r.ticker] = { change: r.change, price: r.price };
-    });
-
-    if (i + batchSize < finnhubTickers.length) {
-      await new Promise(resolve => setTimeout(resolve, 1000));
+  // 5. FETCH FINNHUB (Sequential to strictly obey 60/min rate limit)
+  for (const t of finnhubTickers) {
+    const r = await fetchFinnhub(t, FINNHUB_KEY);
+    if (r.change !== null) {
+      results[r.ticker] = { change: r.change, price: r.price };
     }
+    // Add a 35ms delay between EACH call to spread them out safely
+    // (60 calls * 35ms = ~2.1 seconds of total processing time)
+    await new Promise(resolve => setTimeout(resolve, 35));
   }
 
   // Update Cache
