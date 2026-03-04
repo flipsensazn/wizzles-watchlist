@@ -873,102 +873,110 @@ function Watchlist({ prices, capexData }) {
 }
 
 // ── MULTIBAGGER PANEL ─────────────────────────────────────
-function MultibaggerPanel({ prices, onTickerClick }) {
+function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
-  
-  // pool of small-cap companies related to the AI/Datacenter thesis
-  const SMALL_CAP_POOL = ["VRT", "APLD", "CORZ", "WULF", "LITE", "COHR", "AAOI", "OSS", "GTLB", "IREN"];
+  const [newTicker, setNewTicker] = useState("");
+  const fetchIdRef = useRef(0);
 
   useEffect(() => {
+    const currentFetchId = ++fetchIdRef.current;
     async function getFundamentals() {
-      setLoading(true);
-      const results = await Promise.all(
-        SMALL_CAP_POOL.map(async (ticker) => {
+      if (data.length === 0) setLoading(true);
+const results = await Promise.all(
+        scannerPool.map(async (ticker) => {
           try {
             const res = await fetch(`/quote?ticker=${ticker}`);
+            if (currentFetchId !== fetchIdRef.current) return null;
             const json = await res.json();
             const r = json?.quoteSummary?.result?.[0];
             if (!r) return null;
 
+            // Metrics Extraction
             const fcf = r.financialData?.freeCashflow?.raw || 0;
             const marketCap = r.price?.marketCap?.raw || 1;
-            const roa = r.financialData?.returnOnAssets?.raw || 0;
+            const roa = (r.financialData?.returnOnAssets?.raw || 0) * 100;
             const pb = r.defaultKeyStatistics?.priceToBook?.raw || 0;
+            const marketReturn = (r.defaultKeyStatistics?.['52WeekChange']?.raw || 0) * 100;
 
-            // Score logic based on the Blueprint:
-            // High FCF Yield + High ROA + Low P/B (High Book-to-Market)
             const fcfYield = (fcf / marketCap) * 100;
             const bookToMarket = pb > 0 ? (1 / pb) : 0;
             
-            // Basic ranking score (Higher is better)
-            const score = (fcfYield * 2) + (roa * 100) + (bookToMarket * 10);
+            // Score Calculation (Focusing on FCF Yield, B/M, ROA, and Momentum)
+            const score = (fcfYield * 10) + (bookToMarket * 20) + (roa * 2) + (marketReturn * 0.5);
 
-            return {
-              ticker,
-              name: r.price?.shortName || ticker,
-              price: r.financialData?.currentPrice?.raw,
-              change: prices[ticker],
-              fcfYield,
-              roa: roa * 100, // convert to %
-              bookToMarket,
-              score
-            };
-          } catch { return null; }
+            return { ticker, fcfYield, roa, bookToMarket, marketReturn, score };
+          } catch (err) { 
+            console.error(`Error processing ${ticker}:`, err);
+            return null; 
+          }
         })
       );
-      setData(results.filter(x => x !== null).sort((a, b) => b.score - a.score));
-      setLoading(false);
+      
+      if (currentFetchId === fetchIdRef.current) {
+        setData(results.filter(x => x !== null).sort((a, b) => b.score - a.score));
+        setLoading(false);
+      }
     }
     getFundamentals();
-  }, [prices]);
+  }, [scannerPool]);
 
-  if (loading) return <div style={{ color: "#475569", padding: 20 }}>Scanning small-cap fundamentals...</div>;
+  const addTicker = () => {
+    const sym = newTicker.trim().toUpperCase();
+    if (sym && !scannerPool.includes(sym)) { setScannerPool([...scannerPool, sym]); setNewTicker(""); }
+  };
+
+  const removeTicker = (ticker) => { setScannerPool(scannerPool.filter(t => t !== ticker)); };
+  const getScoreColor = (score) => {
+    if (score > 40) return "#34d399"; // Elite
+    if (score > 15) return "#fbbf24"; // Good
+    return "#f87171"; // Poor
+  };
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, boxShadow: "0 4px 30px rgba(0,0,0,0.4)" }}>
-      <div style={{ marginBottom: 16 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24" }}>Multibagger Blueprint Scanner</h3>
-        <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Dynamic ranking by FCF Yield, ROA, and Book-to-Market</p>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+        <div>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24" }}>Multibagger Blueprint Scanner</h3>
+          <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Prioritizing FCF Yield & Asset Growth</p>
+        </div>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input value={newTicker} onChange={e => setNewTicker(e.target.value.toUpperCase())}
+            onKeyDown={e => e.key === "Enter" && addTicker()} placeholder="Add ticker..." 
+            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 12, outline: "none" }} />
+          <button onClick={addTicker} style={{ background: "#fbbf24", color: "#000", borderRadius: 8, padding: "6px 12px", fontWeight: 700, cursor: "pointer", border: "none" }}>+</button>
+        </div>
       </div>
       <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, textAlign: "left" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, textAlign: "left" }}>
           <thead>
             <tr style={{ color: "#475569", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
               <th style={{ padding: "10px 8px" }}>TICKER</th>
               <th style={{ padding: "10px 8px" }}>FCF YIELD</th>
               <th style={{ padding: "10px 8px" }}>ROA</th>
-              <th style={{ padding: "10px 8px" }}>B/M</th>
+              <th style={{ padding: "10px 8px" }}>1Y RET.</th>
               <th style={{ padding: "10px 8px", textAlign: "right" }}>BLUEPRINT SCORE</th>
+              <th style={{ width: 30 }}></th>
             </tr>
           </thead>
           <tbody>
-            {data.map((stock) => (
-              <tr 
-                key={stock.ticker} 
-                onClick={(e) => onTickerClick(stock.ticker, e.currentTarget.getBoundingClientRect())}
-                style={{ borderBottom: "1px solid rgba(255,255,255,0.03)", cursor: "pointer", transition: "background .15s" }}
-                onMouseEnter={e => e.currentTarget.style.background = "rgba(251,191,36,0.03)"}
-                onMouseLeave={e => e.currentTarget.style.background = ""}
-              >
-                <td style={{ padding: "12px 8px" }}>
-                  <div style={{ fontWeight: 700, color: "#f1f5f9" }}>{stock.ticker}</div>
-                  <div style={{ fontSize: 10, color: (stock.change >= 0 ? "#34d399" : "#f87171") }}>
-                    {stock.change >= 0 ? "+" : ""}{stock.change}%
-                  </div>
-                </td>
-                <td style={{ padding: "12px 8px", color: stock.fcfYield > 5 ? "#34d399" : "#e2e8f0" }}>
-                  {stock.fcfYield.toFixed(2)}%
-                </td>
-                <td style={{ padding: "12px 8px", color: stock.roa > 10 ? "#34d399" : "#e2e8f0" }}>
-                  {stock.roa.toFixed(2)}%
-                </td>
-                <td style={{ padding: "12px 8px" }}>{stock.bookToMarket.toFixed(2)}</td>
-                <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: "#fbbf24" }}>
-                  {stock.score.toFixed(1)}
-                </td>
-              </tr>
-            ))}
+            {loading ? <tr><td colSpan="7" style={{ padding: 20, color: "#475569" }}>Scanning fundamentals...</td></tr> : 
+             data.map((stock) => {
+              const change = prices[stock.ticker]?.change ?? prices[stock.ticker];
+              return (
+                <tr key={stock.ticker} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
+                  <td onClick={(e) => onTickerClick(stock.ticker, e.currentTarget.getBoundingClientRect())} style={{ padding: "12px 8px", cursor: "pointer" }}>
+                    <div style={{ fontWeight: 700, color: "#f1f5f9" }}>{stock.ticker}</div>
+                    <div style={{ fontSize: 9, color: (change >= 0 ? "#34d399" : "#f87171") }}>{change !== undefined ? `${change >= 0 ? "+" : ""}${change}%` : "—"}</div>
+                  </td>
+                  <td style={{ padding: "12px 8px", color: stock.fcfYield > 8 ? "#34d399" : "#e2e8f0" }}>{stock.fcfYield.toFixed(2)}%</td>
+                  <td style={{ padding: "12px 8px" }}>{stock.roa.toFixed(1)}%</td>
+                  <td style={{ padding: "12px 8px" }}>{stock.marketReturn.toFixed(1)}%</td>
+                  <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(stock.score), fontSize: 13 }}>{stock.score.toFixed(1)}</td>
+                  <td style={{ textAlign: "right" }}><button onClick={() => removeTicker(stock.ticker)} style={{ background: "none", border: "none", color: "#334155", cursor: "pointer", fontSize: 16 }}>×</button></td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -978,6 +986,18 @@ function MultibaggerPanel({ prices, onTickerClick }) {
 
 // ── ROOT APP ──────────────────────────────────────────────
 export default function App() {
+  const [scannerPool, setScannerPool] = useState(() => {
+  try {
+    const saved = localStorage.getItem("scannerPool");
+    // Default pool if nothing is saved
+    return saved ? JSON.parse(saved) : ["VRT", "APLD", "CORZ", "WULF", "LITE", "COHR", "AAOI", "OSS", "GTLB", "IREN"];
+  } catch { return ["VRT", "APLD", "CORZ", "WULF", "LITE", "COHR", "AAOI", "OSS", "GTLB", "IREN"]; }
+});
+
+// Save to localStorage whenever the pool changes
+useEffect(() => {
+  localStorage.setItem("scannerPool", JSON.stringify(scannerPool));
+}, [scannerPool]);
   const [capexData, setCapexData] = useState(() => {
     try {
       const saved = localStorage.getItem("capexData");
@@ -1030,7 +1050,7 @@ export default function App() {
       if (!document.hidden) {
         refresh();
       }
-    }, 30000); 
+    }, 15000); 
     return () => clearInterval(id);
   }, [refresh]);
 
@@ -1264,12 +1284,22 @@ export default function App() {
     <div style={{ gridColumn: "1/-1" }}><HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} /></div>
     <DonutChart prices={prices} capexData={capexData} />
     <Watchlist prices={prices} capexData={capexData} />
-    <div style={{ gridColumn: "1/-1" }}><MultibaggerPanel prices={prices} onTickerClick={openPopup} /></div> // ADD THIS LINE
+    <div style={{ gridColumn: "1/-1" }}><MultibaggerPanel 
+  prices={prices} 
+  scannerPool={scannerPool} 
+  setScannerPool={setScannerPool} 
+  onTickerClick={openPopup} 
+/></div>
   </div>
 ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} />
   : bottomTab === "donut" ? <DonutChart prices={prices} capexData={capexData} />
   : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={capexData} />
-  : <MultibaggerPanel prices={prices} onTickerClick={openPopup} /> // ADD THIS LINE
+  : <MultibaggerPanel 
+      prices={prices} 
+      scannerPool={scannerPool} 
+      setScannerPool={setScannerPool} 
+      onTickerClick={openPopup} 
+    />
 }
           </div>
 
@@ -1281,7 +1311,7 @@ export default function App() {
                 <span style={{ width: 7, height: 7, borderRadius: "50%", background: x.c, display: "inline-block", opacity: 0.6, boxShadow: `0 0 5px ${x.c}66` }} />{x.l}
               </span>
             ))}
-            <span style={{ marginLeft: "auto" }}>Live via Finnhub + Yahoo · server-cached · auto-refreshes 30s</span>
+            <span style={{ marginLeft: "auto" }}>Live via Finnhub + Yahoo · server-cached · auto-refreshes 15s</span>
           </div>
         </div>
       </div>
