@@ -18,31 +18,26 @@ export async function onRequest(context) {
   const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
   try {
-    // Step 1: Ping Yahoo's consent/cookie domain to get a valid session cookie
+    // Step 1: Get session cookie
     const cookieRes = await fetch("https://fc.yahoo.com", {
       headers: { "User-Agent": USER_AGENT }
     });
     const rawCookie = cookieRes.headers.get("set-cookie");
     const cookie = rawCookie ? rawCookie.split(";")[0] : "";
 
-    // Step 2: Use the cookie to request a valid "crumb" token
+    // Step 2: Get crumb
     const crumbRes = await fetch("https://query1.finance.yahoo.com/v1/test/getcrumb", {
-      headers: {
-        "User-Agent": USER_AGENT,
-        "Cookie": cookie,
-      }
+      headers: { "User-Agent": USER_AGENT, "Cookie": cookie }
     });
     const crumb = await crumbRes.text();
 
-    // Step 3: Fetch the actual data, appending the crumb to the URL
-    const modules = "assetProfile,summaryDetail,price";
+    // Step 3: Fetch expanded modules for Multibagger Blueprint
+    // Added: financialData, defaultKeyStatistics
+    const modules = "assetProfile,summaryDetail,price,financialData,defaultKeyStatistics";
     const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${modules}&crumb=${crumb}`;
     
     const res = await fetch(url, {
-      headers: {
-        "User-Agent": USER_AGENT,
-        "Cookie": cookie
-      }
+      headers: { "User-Agent": USER_AGENT, "Cookie": cookie }
     });
     
     const data = await res.json();
