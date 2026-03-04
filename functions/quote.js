@@ -1,20 +1,20 @@
-// netlify/functions/quote.js
-exports.handler = async function(event) {
+// functions/quote.js
+export async function onRequest(context) {
   const headers = {
     "Access-Control-Allow-Origin": "*",
     "Content-Type": "application/json",
   };
 
-  const ticker = event.queryStringParameters?.ticker;
+  const { searchParams } = new URL(context.request.url);
+  const ticker = searchParams.get("ticker");
+
   if (!ticker) {
-    return {
-      statusCode: 400,
-      headers,
-      body: JSON.stringify({ error: "No ticker provided" }),
-    };
+    return new Response(JSON.stringify({ error: "No ticker provided" }), {
+      status: 400,
+      headers
+    });
   }
 
-  // A standard User-Agent is required, otherwise Yahoo blocks the request entirely
   const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
   try {
@@ -22,7 +22,6 @@ exports.handler = async function(event) {
     const cookieRes = await fetch("https://fc.yahoo.com", {
       headers: { "User-Agent": USER_AGENT }
     });
-    // Extract the raw cookie string from the response headers
     const rawCookie = cookieRes.headers.get("set-cookie");
     const cookie = rawCookie ? rawCookie.split(";")[0] : "";
 
@@ -48,17 +47,15 @@ exports.handler = async function(event) {
     
     const data = await res.json();
 
-    return {
-      statusCode: 200,
-      headers,
-      body: JSON.stringify(data),
-    };
+    return new Response(JSON.stringify(data), {
+      status: 200,
+      headers
+    });
   } catch (err) {
     console.error(`Quote fetch failed for ${ticker}:`, err);
-    return {
-      statusCode: 500,
-      headers,
-      body: JSON.stringify({ error: "Failed to fetch quote data" }),
-    };
+    return new Response(JSON.stringify({ error: "Failed to fetch quote data" }), {
+      status: 500,
+      headers
+    });
   }
-};
+}
