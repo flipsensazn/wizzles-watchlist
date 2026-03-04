@@ -883,7 +883,7 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
     const currentFetchId = ++fetchIdRef.current;
     async function getFundamentals() {
       if (data.length === 0) setLoading(true);
-      const results = await Promise.all(
+     const results = await Promise.all(
         scannerPool.map(async (ticker) => {
           try {
             const res = await fetch(`/quote?ticker=${ticker}`);
@@ -897,39 +897,39 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
             const marketCap = r.price?.marketCap?.raw || 1;
             const roa = (r.financialData?.returnOnAssets?.raw || 0) * 100;
             const pb = r.defaultKeyStatistics?.priceToBook?.raw || 0;
-            
-            // Market Return (52 Week Price Change)
             const marketReturn = (r.defaultKeyStatistics?.['52WeekChange']?.raw || 0) * 100;
 
-// Asset Growth Calculation (YoY)
-const history = r.balanceSheetHistory?.balanceSheetStatements || [];
+            // ── Asset Growth Calculation (YoY) ──
+            const bh = r.balanceSheetHistory;
+            const history = bh?.balanceSheetStatements || bh?.all || [];
 
-// --- ADD THESE TWO LINES HERE ---
-console.log(`[Asset Keys for ${ticker}]:`, history[0] ? Object.keys(history[0]).join(", ") : "No data");
-console.log(`[Total Assets Check for ${ticker}]:`, history[0]?.totalAssets);
-// --------------------------------
+            console.log(`[Asset Keys for ${ticker}]:`, history[0] ? Object.keys(history[0]).join(", ") : "No data");
+            console.log(`[Total Assets Check for ${ticker}]:`, history[0]?.totalAssets);
 
-let assetGrowth = 0;
-if (history.length >= 2) {
-  const currentAssets = history[0].totalAssets?.raw || 0;
-  const prevAssets = history[1].totalAssets?.raw || 1;
-  assetGrowth = ((currentAssets - prevAssets) / prevAssets) * 100;
-}
-}
+            let assetGrowth = 0;
+
+            if (Array.isArray(history) && history.length >= 2) {
+              const currentAssets = history[0].totalAssets?.raw || history[0].totalAssets;
+              const prevAssets = history[1].totalAssets?.raw || history[1].totalAssets;
+
+              if (typeof currentAssets === 'number' && typeof prevAssets === 'number' && prevAssets !== 0) {
+                assetGrowth = ((currentAssets - prevAssets) / prevAssets) * 100;
+              }
+            }
+
             const fcfYield = (fcf / marketCap) * 100;
             const bookToMarket = pb > 0 ? (1 / pb) : 0;
             
-            // ── BLUEPRINT SCORE (Prioritizing FCF Yield) ──
-            // High Weight: FCF Yield (x10)
-            // Medium Weight: B/M (x20), ROA (x2), Asset Growth (x1)
-            // Low Weight: Market Return (x0.5)
             const score = (fcfYield * 10) + (bookToMarket * 20) + (roa * 2) + (assetGrowth * 1) + (marketReturn * 0.5);
 
             return { ticker, fcfYield, roa, bookToMarket, assetGrowth, marketReturn, score };
-          } catch { return null; }
+          } catch (err) { 
+            console.error(`Error processing ${ticker}:`, err);
+            return null; 
+          }
         })
       );
-
+      
       if (currentFetchId === fetchIdRef.current) {
         setData(results.filter(x => x !== null).sort((a, b) => b.score - a.score));
         setLoading(false);
