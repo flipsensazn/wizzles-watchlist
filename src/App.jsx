@@ -37,11 +37,6 @@ const quoteCache = {};
 async function fetchQuoteSummary(ticker) {
   if (quoteCache[ticker]) return quoteCache[ticker];
   try {
-    // ❌ OLD: Directly calling Yahoo (blocked by CORS)
-    // const modules = "assetProfile,summaryDetail,price";
-    // const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${modules}`;
-    
-    // ✅ NEW: Call your Netlify serverless function
     const url = `/.netlify/functions/quote?ticker=${encodeURIComponent(ticker)}`;
     
     const res = await fetch(url);
@@ -72,7 +67,8 @@ async function fetchQuoteSummary(ticker) {
     };
     quoteCache[ticker] = data;
     return data;
-  } catch {
+  } catch (err) {
+    console.error("Quote fetch error for", ticker, ":", err);
     return null;
   }
 }
