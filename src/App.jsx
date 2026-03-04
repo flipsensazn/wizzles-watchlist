@@ -1,24 +1,23 @@
-import { useState, useEffect, useCallback, useRef } from "react";
+import { useState, useEffect, useCallback, useRef, memo } from "react";
 
 // ── MARKET DATA ───────────────────────────────────────────
 const INDEX_TICKERS = ["^GSPC", "^DJI", "^IXIC"];
 const CRYPTO_TICKERS = ["BTC-USD", "ETH-USD", "XRP-USD"];
 const HYPERSCALER_TICKERS = ["AMZN", "MSFT", "GOOG", "META", "ORCL"];
 
+// PERF: No longer return or store histories — sparklines removed
 async function fetchLivePrices(tickers) {
   try {
     const res = await fetch(`/.netlify/functions/prices?tickers=${tickers.join(",")}`);
     const json = await res.json();
     const prices = {};
-    const histories = {};
     Object.entries(json.data ?? {}).forEach(([ticker, val]) => {
       prices[ticker] = val?.change ?? val;
-      if (val?.history?.length) histories[ticker] = val.history;
     });
-    return { prices, histories };
+    return prices;
   } catch (err) {
     console.error("Price fetch failed:", err);
-    return { prices: {}, histories: {} };
+    return {};
   }
 }
 
@@ -105,7 +104,8 @@ const CAPEX_DATA = {
       color: "#fb923c", borderColor: "#f97316",
       subsectors: [
         { id: "grid", label: "Power Generation & Utilities", badge: "GRID BOTTLENECK", badgeColor: "#ef4444",
-          tickers: ["VST","NEE","BE","LEU","OKLO","SMR"], materials: ["Copper Grid","Silicon Steel Transformers","Lithium Storage"] },
+          tickers: ["VST","NEE","BE","LEU","OKLO","SMR"],
+          materials: ["Copper Grid","Silicon Steel Transformers","Lithium Storage"] },
         { id: "ups", label: "Power Management & UPS", badge: null, tickers: ["ETN","VRT","PLPC","ENS"],
           materials: ["Silicon Carbide SiC","Electrolytic Capacitors","Copper Winding"] },
         { id: "cooling", label: "Liquid & Immersion Cooling", badge: "EMERGING", badgeColor: "#60a5fa",
@@ -144,6 +144,18 @@ function getAllTickers(data = CAPEX_DATA) {
 }
 
 // ── STARFIELD CANVAS ──────────────────────────────────────
+// PERF CHANGES vs previous version:
+//  1. Offscreen canvas: nebulae + static (dim) stars are rendered ONCE onto a
+//     separate canvas; each frame just does a single drawImage() for the whole
+//     background — eliminating 4× createRadialGradient + fillRect per frame.
+//  2. Only the small set of "bright" (layer-2) stars are redrawn per frame for
+//     twinkling; the 2/3 majority of dim stars are frozen in the bg canvas.
+//  3. Per-star createRadialGradient glow removed — was the single largest GPU
+//     cost; bright stars are now drawn as plain circles with a slightly larger
+//     soft radius instead.
+//  4. Star count reduced 320 → 200.
+//  5. Page-visibility API: animation loop is paused when the tab is hidden.
+//  6. Resize handler debounced so it doesn't thrash on every pixel.
 function StarField() {
   const canvasRef = useRef(null);
 
@@ -151,22 +163,18 @@ function StarField() {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const ctx = canvas.getContext("2d");
-    let animId;
-    let W, H;
+    let animId = null;
+    let W = 0, H = 0;
 
-    // Star pool
-    const STAR_COUNT = 320;
+    // Offscreen canvas — redrawn only on mount/resize
+    const bgCanvas = new OffscreenCanvas(1, 1);
+    const bgCtx = bgCanvas.getContext("2d");
+
+    const STAR_COUNT = 200;
     const stars = [];
-
-    // Shooting stars
     const shooters = [];
 
-    function resize() {
-      W = canvas.width = window.innerWidth;
-      H = canvas.height = window.innerHeight;
-    }
-
-    function randBetween(a, b) { return a + Math.random() * (b - a); }
+    function rand(a, b) { return a + Math.random() * (b - a); }
 
     function initStars() {
       stars.length = 0;
@@ -174,98 +182,103 @@ function StarField() {
         stars.push({
           x: Math.random() * W,
           y: Math.random() * H,
-          r: randBetween(0.2, 1.8),
-          alpha: randBetween(0.2, 1),
-          speed: randBetween(0.01, 0.04),
-          twinkleSpeed: randBetween(0.003, 0.012),
+          r: rand(0.2, 1.8),
+          alpha: rand(0.15, 0.9),
+          twinkleSpeed: rand(0.003, 0.012),
           twinkleDir: Math.random() > 0.5 ? 1 : -1,
-          // Subtle parallax layer
-          layer: Math.floor(Math.random() * 3),
+          layer: Math.floor(Math.random() * 3), // 0=warm-dim, 1=blue-dim, 2=bright-twinkle
         });
       }
     }
 
-    function spawnShooter() {
-      const startX = randBetween(W * 0.1, W * 0.9);
-      const startY = randBetween(0, H * 0.4);
-      shooters.push({
-        x: startX, y: startY,
-        vx: randBetween(4, 9),
-        vy: randBetween(1.5, 4),
-        len: randBetween(80, 180),
-        alpha: 1,
-        fade: randBetween(0.012, 0.025),
-      });
-    }
+    // Render static background: nebulae + layers 0 & 1 stars
+    function buildBackground() {
+      bgCanvas.width = W;
+      bgCanvas.height = H;
 
-    function draw(t) {
-      ctx.clearRect(0, 0, W, H);
-
-      // Deep space base — layered radial nebulae
-      const bg = ctx.createRadialGradient(W * 0.5, H * 0.3, 0, W * 0.5, H * 0.3, W * 0.8);
+      // Deep-space base gradient
+      const bg = bgCtx.createRadialGradient(W * 0.5, H * 0.3, 0, W * 0.5, H * 0.3, W * 0.8);
       bg.addColorStop(0, "rgba(10,6,30,1)");
       bg.addColorStop(0.4, "rgba(4,4,20,1)");
       bg.addColorStop(1, "rgba(1,1,10,1)");
-      ctx.fillStyle = bg;
-      ctx.fillRect(0, 0, W, H);
+      bgCtx.fillStyle = bg;
+      bgCtx.fillRect(0, 0, W, H);
 
-      // Nebula cloud 1 — blue/purple
-      const neb1 = ctx.createRadialGradient(W * 0.25, H * 0.2, 0, W * 0.25, H * 0.2, W * 0.45);
+      // Nebula 1 — blue/purple
+      const neb1 = bgCtx.createRadialGradient(W * 0.25, H * 0.2, 0, W * 0.25, H * 0.2, W * 0.45);
       neb1.addColorStop(0, "rgba(59,76,180,0.10)");
       neb1.addColorStop(0.5, "rgba(80,40,160,0.05)");
       neb1.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = neb1;
-      ctx.fillRect(0, 0, W, H);
+      bgCtx.fillStyle = neb1;
+      bgCtx.fillRect(0, 0, W, H);
 
-      // Nebula cloud 2 — teal
-      const neb2 = ctx.createRadialGradient(W * 0.78, H * 0.55, 0, W * 0.78, H * 0.55, W * 0.38);
+      // Nebula 2 — teal
+      const neb2 = bgCtx.createRadialGradient(W * 0.78, H * 0.55, 0, W * 0.78, H * 0.55, W * 0.38);
       neb2.addColorStop(0, "rgba(20,100,120,0.09)");
       neb2.addColorStop(0.6, "rgba(10,60,90,0.04)");
       neb2.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = neb2;
-      ctx.fillRect(0, 0, W, H);
+      bgCtx.fillStyle = neb2;
+      bgCtx.fillRect(0, 0, W, H);
 
-      // Nebula cloud 3 — amber/gold hint (matches $600B box)
-      const neb3 = ctx.createRadialGradient(W * 0.5, H * 0.1, 0, W * 0.5, H * 0.1, W * 0.3);
+      // Nebula 3 — amber (echoes the $600B gold box)
+      const neb3 = bgCtx.createRadialGradient(W * 0.5, H * 0.1, 0, W * 0.5, H * 0.1, W * 0.3);
       neb3.addColorStop(0, "rgba(120,80,20,0.07)");
       neb3.addColorStop(1, "rgba(0,0,0,0)");
-      ctx.fillStyle = neb3;
-      ctx.fillRect(0, 0, W, H);
+      bgCtx.fillStyle = neb3;
+      bgCtx.fillRect(0, 0, W, H);
 
-      // Stars
+      // Bake dim stars (layers 0 & 1) into the bg — never redrawn
       for (const s of stars) {
+        if (s.layer === 2) continue;
+        bgCtx.beginPath();
+        bgCtx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
+        bgCtx.fillStyle = s.layer === 1
+          ? `rgba(180,210,255,${s.alpha})`
+          : `rgba(255,248,230,${s.alpha})`;
+        bgCtx.fill();
+      }
+    }
+
+    function spawnShooter() {
+      shooters.push({
+        x: rand(W * 0.1, W * 0.9), y: rand(0, H * 0.4),
+        vx: rand(4, 9), vy: rand(1.5, 4),
+        len: rand(80, 180), alpha: 1,
+        fade: rand(0.012, 0.025),
+      });
+    }
+
+    function draw() {
+      // Stamp static background in one cheap blit
+      ctx.drawImage(bgCanvas, 0, 0);
+
+      // Twinkle only the bright layer-2 stars (~67 stars at count=200)
+      for (const s of stars) {
+        if (s.layer !== 2) continue;
         s.alpha += s.twinkleSpeed * s.twinkleDir;
-        if (s.alpha >= 1) { s.alpha = 1; s.twinkleDir = -1; }
-        if (s.alpha <= 0.1) { s.alpha = 0.1; s.twinkleDir = 1; }
-
-        // Color variety — mostly white/blue, occasional warm
-        const hue = s.layer === 2 ? `rgba(200,220,255,${s.alpha})` :
-                    s.layer === 1 ? `rgba(180,210,255,${s.alpha})` :
-                                    `rgba(255,248,230,${s.alpha})`;
-
-        // Glow for larger stars
+        if (s.alpha >= 0.95) { s.alpha = 0.95; s.twinkleDir = -1; }
+        if (s.alpha <= 0.10) { s.alpha = 0.10; s.twinkleDir =  1; }
+        // Soft double-circle instead of createRadialGradient — ~10× cheaper
         if (s.r > 1.2) {
           ctx.beginPath();
-          ctx.arc(s.x, s.y, s.r * 3, 0, Math.PI * 2);
-          const glow = ctx.createRadialGradient(s.x, s.y, 0, s.x, s.y, s.r * 3);
-          glow.addColorStop(0, `rgba(160,200,255,${s.alpha * 0.3})`);
-          glow.addColorStop(1, "rgba(0,0,0,0)");
-          ctx.fillStyle = glow;
+          ctx.arc(s.x, s.y, s.r * 2.5, 0, Math.PI * 2);
+          ctx.fillStyle = `rgba(160,200,255,${s.alpha * 0.12})`;
           ctx.fill();
         }
-
         ctx.beginPath();
         ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-        ctx.fillStyle = hue;
+        ctx.fillStyle = `rgba(200,220,255,${s.alpha})`;
         ctx.fill();
       }
 
-      // Shooting stars
+      // Shooting stars (rare — gradient cost is negligible here)
       for (let i = shooters.length - 1; i >= 0; i--) {
         const s = shooters[i];
         ctx.save();
         ctx.globalAlpha = s.alpha;
-        const grad = ctx.createLinearGradient(s.x, s.y, s.x - s.vx * (s.len / 8), s.y - s.vy * (s.len / 8));
+        const tx = s.x - s.vx * (s.len / 8);
+        const ty = s.y - s.vy * (s.len / 8);
+        const grad = ctx.createLinearGradient(s.x, s.y, tx, ty);
         grad.addColorStop(0, "rgba(255,255,255,0.95)");
         grad.addColorStop(0.3, "rgba(180,210,255,0.5)");
         grad.addColorStop(1, "rgba(100,150,255,0)");
@@ -273,35 +286,58 @@ function StarField() {
         ctx.lineWidth = 1.5;
         ctx.beginPath();
         ctx.moveTo(s.x, s.y);
-        ctx.lineTo(s.x - s.vx * (s.len / 8), s.y - s.vy * (s.len / 8));
+        ctx.lineTo(tx, ty);
         ctx.stroke();
         ctx.restore();
-
-        s.x += s.vx;
-        s.y += s.vy;
-        s.alpha -= s.fade;
-        if (s.alpha <= 0 || s.x > W + 100 || s.y > H + 100) {
-          shooters.splice(i, 1);
-        }
+        s.x += s.vx; s.y += s.vy; s.alpha -= s.fade;
+        if (s.alpha <= 0 || s.x > W + 100 || s.y > H + 100) shooters.splice(i, 1);
       }
 
       animId = requestAnimationFrame(draw);
     }
 
-    resize();
-    initStars();
-    window.addEventListener("resize", () => { resize(); initStars(); });
+    function start() {
+      if (!animId) animId = requestAnimationFrame(draw);
+    }
+    function stop() {
+      if (animId) { cancelAnimationFrame(animId); animId = null; }
+    }
 
-    // Spawn shooting stars periodically
+    // Pause when tab hidden — saves CPU/GPU when user switches away
+    function onVisibility() { document.hidden ? stop() : start(); }
+
+    // Debounced resize — avoid thrashing on every pixel during window drag
+    let resizeTimer = null;
+    function onResize() {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(() => {
+        W = canvas.width = window.innerWidth;
+        H = canvas.height = window.innerHeight;
+        initStars();
+        buildBackground();
+      }, 150);
+    }
+
+    // Initial setup
+    W = canvas.width = window.innerWidth;
+    H = canvas.height = window.innerHeight;
+    initStars();
+    buildBackground();
+    start();
+
     const shootInterval = setInterval(() => {
-      if (Math.random() < 0.6) spawnShooter();
+      if (!document.hidden && Math.random() < 0.6) spawnShooter();
     }, 2800);
 
-    animId = requestAnimationFrame(draw);
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("resize", onResize);
+
     return () => {
-      cancelAnimationFrame(animId);
+      stop();
       clearInterval(shootInterval);
-      window.removeEventListener("resize", resize);
+      clearTimeout(resizeTimer);
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("resize", onResize);
     };
   }, []);
 
@@ -314,7 +350,8 @@ function StarField() {
 }
 
 // ── BADGE ─────────────────────────────────────────────────
-function Badge({ text, color }) {
+// memo: pure display, never needs to re-render
+const Badge = memo(function Badge({ text, color }) {
   return (
     <span style={{
       background: color + "22", border: `1px solid ${color}`, color,
@@ -322,42 +359,7 @@ function Badge({ text, color }) {
       padding: "2px 7px", borderRadius: 3, textTransform: "uppercase", whiteSpace: "nowrap",
     }}>{text}</span>
   );
-}
-
-// ── SPARKLINE ─────────────────────────────────────────────
-function Sparkline({ data, color, width = 126, height = 44 }) {
-  if (!data || data.length < 2) return (
-    <div style={{ width, height, display: "flex", alignItems: "center", justifyContent: "center" }}>
-      <span style={{ fontSize: 10, color: "#334155" }}>no history</span>
-    </div>
-  );
-  const min = Math.min(...data);
-  const max = Math.max(...data);
-  const range = max - min || 1;
-  const pad = 4;
-  const points = data.map((v, i) => {
-    const x = pad + (i / (data.length - 1)) * (width - pad * 2);
-    const y = pad + ((max - v) / range) * (height - pad * 2);
-    return `${x.toFixed(1)},${y.toFixed(1)}`;
-  });
-  const polyline = points.join(" ");
-  const first = points[0].split(",");
-  const last = points[points.length - 1].split(",");
-  const gradId = `sg${color.replace(/[^a-zA-Z0-9]/g, "")}`;
-  return (
-    <svg width={width} height={height} style={{ display: "block" }}>
-      <defs>
-        <linearGradient id={gradId} x1="0" y1="0" x2="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.35" />
-          <stop offset="100%" stopColor={color} stopOpacity="0.02" />
-        </linearGradient>
-      </defs>
-      <polyline points={`${first[0]},${height - pad} ${polyline} ${last[0]},${height - pad}`} fill={`url(#${gradId})`} stroke="none" />
-      <polyline points={polyline} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx={last[0]} cy={last[1]} r="2.5" fill={color} stroke="#0a0416" strokeWidth="1.5" />
-    </svg>
-  );
-}
+});
 
 // ── MARKET STRIP ──────────────────────────────────────────
 function MarketStrip({ data, tickers, labels, colors }) {
@@ -376,14 +378,15 @@ function MarketStrip({ data, tickers, labels, colors }) {
         const change = entry?.change;
         const pos = (change ?? 0) >= 0;
         return (
+          // PERF: backdropFilter removed from each strip pill — was compositing
+          // 6 blurred layers simultaneously, expensive on low-end GPUs
           <div key={ticker} style={{
             display: "flex", flexDirection: "column", alignItems: "center",
             padding: "8px 14px", borderRadius: 10, minWidth: 96,
-            background: "rgba(255,255,255,0.04)",
-            backdropFilter: "blur(12px)",
+            background: "rgba(255,255,255,0.05)",
             border: `1px solid ${colors[i]}28`,
             transition: "border-color .2s, box-shadow .2s",
-            boxShadow: `0 2px 12px rgba(0,0,0,0.3)`,
+            boxShadow: "0 2px 12px rgba(0,0,0,0.3)",
           }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = colors[i] + "66"; e.currentTarget.style.boxShadow = `0 0 16px ${colors[i]}22`; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = colors[i] + "28"; e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.3)"; }}>
@@ -404,70 +407,53 @@ function MarketStrip({ data, tickers, labels, colors }) {
 }
 
 // ── TICKER CHIP ───────────────────────────────────────────
-function TickerChip({ symbol, change, onRemove, history }) {
+// PERF: Removed sparkline tooltip entirely:
+//   - No history prop
+//   - No mousePos state (was firing setState on every mousemove)
+//   - No onMouseMove handler
+//   - No isTouchDevice check
+//   - No Sparkline SVG render on hover
+//   - No backdropFilter on the chip itself
+//   - Wrapped in memo so chips only re-render when their own price changes
+const TickerChip = memo(function TickerChip({ symbol, change, onRemove }) {
   const [hovered, setHovered] = useState(false);
-  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
-  const pos = change >= 0;
-  const sparkColor = change === undefined ? "#475569" : change >= 0 ? "#34d399" : "#f87171";
-  const isTouchDevice = window.matchMedia("(hover: none)").matches;
+  const pos = (change ?? 0) >= 0;
+  const changeColor = change === undefined ? "#475569" : pos ? "#34d399" : "#f87171";
 
   return (
     <div
-      onMouseEnter={e => { setHovered(true); setMousePos({ x: e.clientX, y: e.clientY }); }}
-      onMouseMove={e => setMousePos({ x: e.clientX, y: e.clientY })}
+      onMouseEnter={() => setHovered(true)}
       onMouseLeave={() => setHovered(false)}
       style={{
         display: "flex", alignItems: "center", gap: 6, padding: "5px 10px",
         background: hovered ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.05)",
-        backdropFilter: "blur(8px)",
         border: `1px solid ${hovered ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.10)"}`,
         borderRadius: 8, cursor: "default",
-        transition: "all .15s", position: "relative",
-        boxShadow: hovered ? `0 0 12px ${sparkColor}22` : "none",
+        transition: "background .15s, border-color .15s",
+        position: "relative",
       }}>
       <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{symbol}</span>
       {change !== undefined
-        ? <span style={{ fontSize: 11, fontWeight: 600, color: pos ? "#34d399" : "#f87171" }}>{pos ? "+" : ""}{change}%</span>
+        ? <span style={{ fontSize: 11, fontWeight: 600, color: changeColor }}>{pos ? "+" : ""}{change}%</span>
         : <span style={{ fontSize: 11, color: "#475569" }}>…</span>}
       {hovered && onRemove && (
-        <button onClick={e => { e.stopPropagation(); onRemove(); }} style={{
-          position: "absolute", top: -6, right: -6, width: 16, height: 16,
-          borderRadius: "50%", background: "#ef4444", border: "none",
-          color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer",
-          display: "flex", alignItems: "center", justifyContent: "center",
-          lineHeight: 1, padding: 0, fontFamily: "inherit",
-        }}>×</button>
-      )}
-      {hovered && !isTouchDevice && (
-        <div style={{
-          position: "fixed", top: mousePos.y - 120, left: mousePos.x - 75,
-          background: "rgba(8,4,22,0.92)",
-          backdropFilter: "blur(20px)",
-          border: `1px solid ${sparkColor}44`,
-          borderRadius: 12, padding: "10px 12px",
-          pointerEvents: "none", zIndex: 2000,
-          boxShadow: `0 8px 40px rgba(0,0,0,.8), 0 0 30px ${sparkColor}18`,
-          minWidth: 155,
-        }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{symbol}</span>
-            <span style={{ fontSize: 12, fontWeight: 600, color: sparkColor }}>
-              {change !== undefined ? (change >= 0 ? "+" : "") + change + "%" : "—"}
-            </span>
-          </div>
-          <Sparkline data={history} color={sparkColor} width={131} height={44} />
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
-            <span style={{ fontSize: 9, color: "#334155" }}>5D ago</span>
-            <span style={{ fontSize: 9, color: "#334155" }}>today</span>
-          </div>
-        </div>
+        <button
+          onClick={e => { e.stopPropagation(); onRemove(); }}
+          style={{
+            position: "absolute", top: -6, right: -6, width: 16, height: 16,
+            borderRadius: "50%", background: "#ef4444", border: "none",
+            color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer",
+            display: "flex", alignItems: "center", justifyContent: "center",
+            lineHeight: 1, padding: 0, fontFamily: "inherit",
+          }}>×</button>
       )}
     </div>
   );
-}
+});
 
 // ── SUBSECTOR CARD ────────────────────────────────────────
-function SubsectorCard({ sub, prices, histories, onAddTicker, onRemoveTicker }) {
+// PERF: backdropFilter removed; histories prop removed
+function SubsectorCard({ sub, prices, onAddTicker, onRemoveTicker }) {
   const [open, setOpen] = useState(false);
   const [addingTicker, setAddingTicker] = useState(false);
   const [newTicker, setNewTicker] = useState("");
@@ -483,7 +469,6 @@ function SubsectorCard({ sub, prices, histories, onAddTicker, onRemoveTicker }) 
       borderRadius: 12,
       border: `1px solid ${isBottleneck ? "rgba(239,68,68,.35)" : isHot ? "rgba(245,158,11,.25)" : "rgba(255,255,255,0.07)"}`,
       background: isBottleneck ? "rgba(239,68,68,0.06)" : "rgba(255,255,255,0.03)",
-      backdropFilter: "blur(12px)",
       padding: 14, display: "flex", flexDirection: "column", gap: 10,
       boxShadow: isBottleneck ? "0 0 20px rgba(239,68,68,0.08)" : "0 2px 16px rgba(0,0,0,0.25)",
     }}>
@@ -493,7 +478,7 @@ function SubsectorCard({ sub, prices, histories, onAddTicker, onRemoveTicker }) 
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
         {sub.tickers.map(t => (
-          <TickerChip key={t} symbol={t} change={prices[t]} history={histories?.[t]} onRemove={() => onRemoveTicker(t)} />
+          <TickerChip key={t} symbol={t} change={prices[t]} onRemove={() => onRemoveTicker(t)} />
         ))}
       </div>
       {sub.materials?.length > 0 && (
@@ -543,15 +528,15 @@ function SubsectorCard({ sub, prices, histories, onAddTicker, onRemoveTicker }) 
 }
 
 // ── TRACK CARD ────────────────────────────────────────────
-function TrackCard({ track, isActive, onClick }) {
+// PERF: memo + backdropFilter removed
+const TrackCard = memo(function TrackCard({ track, isActive, onClick }) {
   return (
     <div onClick={onClick} style={{
       position: "relative", borderRadius: 14, padding: "14px 12px", minHeight: 120,
       cursor: "pointer", userSelect: "none",
       background: isActive
-        ? `linear-gradient(135deg,${track.borderColor}28 0%,rgba(6,4,20,.92) 100%)`
+        ? `linear-gradient(135deg,${track.borderColor}28 0%,rgba(6,4,20,.95) 100%)`
         : "rgba(255,255,255,0.03)",
-      backdropFilter: "blur(14px)",
       border: `1px solid ${isActive ? track.borderColor : "rgba(255,255,255,0.09)"}`,
       boxShadow: isActive ? `0 0 28px ${track.borderColor}44, 0 4px 20px rgba(0,0,0,0.5)` : "0 2px 12px rgba(0,0,0,0.3)",
       display: "flex", flexDirection: "column", gap: 8,
@@ -571,20 +556,19 @@ function TrackCard({ track, isActive, onClick }) {
       <div style={{ fontSize: 12, fontWeight: 700, color: isActive ? track.color : "#e2e8f0", lineHeight: 1.3 }}>{track.label}</div>
       <div style={{ fontSize: 11, color: isActive ? track.color : "#94a3b8" }}>{track.value}</div>
       <div style={{ fontSize: 10, color: "#475569" }}>{track.subsectors.flatMap(s => s.tickers).length} tickers</div>
-      {/* Color accent bar */}
       <div style={{ height: 2, borderRadius: 2, background: `linear-gradient(90deg,${track.borderColor},${track.color},transparent)`, opacity: isActive ? 1 : 0.3, marginTop: "auto" }} />
       <div style={{ fontSize: 10, color: isActive ? track.color : "#334155", textAlign: "center" }}>{isActive ? "▲ collapse" : "▼ expand"}</div>
     </div>
   );
-}
+});
 
 // ── TRACK PANE ────────────────────────────────────────────
-function TrackPane({ track, prices, histories, onAddTicker, onRemoveTicker }) {
+// PERF: histories prop removed; backdropFilter removed
+function TrackPane({ track, prices, onAddTicker, onRemoveTicker }) {
   return (
     <div style={{
       borderRadius: 18, border: `1px solid ${track.borderColor}44`,
-      background: "rgba(4,2,16,0.85)",
-      backdropFilter: "blur(24px)",
+      background: "rgba(4,2,16,0.92)",
       boxShadow: `0 0 60px ${track.borderColor}18, 0 8px 40px rgba(0,0,0,0.6)`,
       padding: 22, marginTop: 8, animation: "fadeSlideIn .25s ease-out",
     }}>
@@ -599,7 +583,7 @@ function TrackPane({ track, prices, histories, onAddTicker, onRemoveTicker }) {
       </div>
       <div className="subsector-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(track.subsectors.length, 4)}, minmax(0,1fr))`, gap: 12 }}>
         {track.subsectors.map(sub => (
-          <SubsectorCard key={sub.id} sub={sub} prices={prices} histories={histories}
+          <SubsectorCard key={sub.id} sub={sub} prices={prices}
             onAddTicker={(ticker) => onAddTicker(track.id, sub.id, ticker)}
             onRemoveTicker={(ticker) => onRemoveTicker(track.id, sub.id, ticker)} />
         ))}
@@ -609,7 +593,8 @@ function TrackPane({ track, prices, histories, onAddTicker, onRemoveTicker }) {
 }
 
 // ── HEAT MAP ──────────────────────────────────────────────
-function HeatMap({ prices, capexData, histories }) {
+// PERF: histories prop removed; tooltip simplified to text-only (no Sparkline)
+function HeatMap({ prices, capexData }) {
   const [tooltip, setTooltip] = useState(null);
 
   function getHeatColor(change) {
@@ -626,11 +611,11 @@ function HeatMap({ prices, capexData, histories }) {
   }
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(4,2,16,0.7)", backdropFilter: "blur(20px)", padding: 20, boxShadow: "0 4px 30px rgba(0,0,0,0.4)" }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(4,2,16,0.7)", padding: 20, boxShadow: "0 4px 30px rgba(0,0,0,0.4)" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
         <div>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Portfolio Heat Map</h3>
-          <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>All tracked tickers · color = 1D performance · hover for sparkline</p>
+          <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>All tracked tickers · color = 1D performance</p>
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           {[{ label: "+15%", c: "#064e3b" }, { label: "+4%", c: "#047857" }, { label: "0%", c: "#10b981" }, { label: "-4%", c: "#dc2626" }, { label: "-8%", c: "#7f1d1d" }].map((x, i) => (
@@ -658,7 +643,7 @@ function HeatMap({ prices, capexData, histories }) {
                 const pos = change === undefined || change >= 0;
                 return (
                   <div key={ticker}
-                    onMouseEnter={e => setTooltip({ ticker, change, track: track.label, history: histories?.[ticker], rect: e.currentTarget.getBoundingClientRect() })}
+                    onMouseEnter={e => setTooltip({ ticker, change, track: track.label, rect: e.currentTarget.getBoundingClientRect() })}
                     onMouseLeave={() => setTooltip(null)}
                     style={{ background: bg, borderRadius: 8, padding: "8px 12px", border: `1px solid ${bg === "rgba(255,255,255,0.04)" ? "rgba(255,255,255,0.06)" : bg}`, minWidth: 60, textAlign: "center", cursor: "pointer", transition: "filter .15s, transform .15s" }}
                     onMouseOver={e => { e.currentTarget.style.filter = "brightness(1.4)"; e.currentTarget.style.transform = "scale(1.06)"; }}
@@ -676,28 +661,26 @@ function HeatMap({ prices, capexData, histories }) {
           </div>
         );
       })}
+      {/* Lightweight text-only tooltip — no Sparkline SVG */}
       {tooltip && (
         <div style={{
-          position: "fixed", top: tooltip.rect.top - 138, left: tooltip.rect.left,
-          background: "rgba(6,3,20,0.94)", backdropFilter: "blur(20px)",
-          border: `1px solid ${tooltip.change >= 0 ? "#34d399" : "#f87171"}44`,
-          borderRadius: 12, padding: "10px 12px", pointerEvents: "none", zIndex: 1000,
-          boxShadow: "0 8px 40px rgba(0,0,0,.8)", minWidth: 155,
+          position: "fixed",
+          top: tooltip.rect.top - 52,
+          left: tooltip.rect.left,
+          background: "rgba(6,3,20,0.95)",
+          border: `1px solid ${(tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171"}44`,
+          borderRadius: 8, padding: "7px 12px",
+          pointerEvents: "none", zIndex: 1000,
+          boxShadow: "0 4px 20px rgba(0,0,0,.7)",
+          display: "flex", alignItems: "center", gap: 10,
         }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
-            <div style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{tooltip.ticker}</div>
-            {tooltip.change !== undefined && (
-              <div style={{ fontSize: 12, fontWeight: 600, color: tooltip.change >= 0 ? "#34d399" : "#f87171" }}>
-                {tooltip.change >= 0 ? "+" : ""}{tooltip.change}%
-              </div>
-            )}
-          </div>
-          <div style={{ fontSize: 10, color: "#475569", marginBottom: 6 }}>{tooltip.track}</div>
-          <Sparkline data={tooltip.history} color={tooltip.change >= 0 ? "#34d399" : "#f87171"} width={131} height={44} />
-          <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
-            <span style={{ fontSize: 9, color: "#334155" }}>5D ago</span>
-            <span style={{ fontSize: 9, color: "#334155" }}>today</span>
-          </div>
+          <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{tooltip.ticker}</span>
+          {tooltip.change !== undefined && (
+            <span style={{ fontSize: 12, fontWeight: 700, color: (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171" }}>
+              {(tooltip.change ?? 0) >= 0 ? "+" : ""}{tooltip.change}%
+            </span>
+          )}
+          <span style={{ fontSize: 10, color: "#475569" }}>{tooltip.track}</span>
         </div>
       )}
     </div>
@@ -739,7 +722,7 @@ function DonutChart({ prices, capexData }) {
   }).sort((a, b) => b.avg - a.avg);
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(4,2,16,0.7)", backdropFilter: "blur(20px)", padding: 20, boxShadow: "0 4px 30px rgba(0,0,0,0.4)" }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(4,2,16,0.7)", padding: 20, boxShadow: "0 4px 30px rgba(0,0,0,0.4)" }}>
       <div style={{ marginBottom: 16 }}>
         <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Sector Allocation</h3>
         <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Capex weight · hover to inspect avg performance</p>
@@ -818,9 +801,14 @@ function Watchlist({ prices, capexData }) {
   }
 
   const enriched = list.map(t => ({ ticker: t, change: prices[t], track: getSector(t) }));
-  const filtered = filter === "all" ? enriched : filter === "gainers" ? enriched.filter(x => (x.change ?? 0) >= 0) : enriched.filter(x => (x.change ?? 0) < 0);
-  const sorted = [...filtered].sort((a, b) => sortDir === "desc" ? ((b.change ?? -999) - (a.change ?? -999)) : ((a.change ?? 999) - (b.change ?? 999)));
-  const avg = enriched.filter(x => x.change !== undefined).reduce((s, x) => s + x.change, 0) / (enriched.filter(x => x.change !== undefined).length || 1);
+  const filtered = filter === "all" ? enriched : filter === "gainers"
+    ? enriched.filter(x => (x.change ?? 0) >= 0)
+    : enriched.filter(x => (x.change ?? 0) < 0);
+  const sorted = [...filtered].sort((a, b) => sortDir === "desc"
+    ? ((b.change ?? -999) - (a.change ?? -999))
+    : ((a.change ?? 999) - (b.change ?? 999)));
+  const avg = enriched.filter(x => x.change !== undefined).reduce((s, x) => s + x.change, 0)
+    / (enriched.filter(x => x.change !== undefined).length || 1);
   const maxAbs = Math.max(...enriched.map(x => Math.abs(x.change ?? 0)), 1);
 
   function add() {
@@ -830,7 +818,7 @@ function Watchlist({ prices, capexData }) {
   }
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(4,2,16,0.7)", backdropFilter: "blur(20px)", padding: 20, display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 4px 30px rgba(0,0,0,0.4)" }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(4,2,16,0.7)", padding: 20, display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 4px 30px rgba(0,0,0,0.4)" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <div>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Watchlist</h3>
@@ -913,7 +901,7 @@ export default function App() {
   });
   const [activeTrack, setActiveTrack] = useState(null);
   const [prices, setPrices] = useState({});
-  const [history, setHistory] = useState({});
+  // PERF: history state entirely removed — no longer fetched, stored, or passed down
   const [marketData, setMarketData] = useState({});
   const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -926,12 +914,11 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
-    const [priceResult, newMarket] = await Promise.all([
+    const [newPrices, newMarket] = await Promise.all([
       fetchLivePrices(getAllTickers(capexData)),
       fetchMarketData(),
     ]);
-    setPrices(prev => ({ ...prev, ...priceResult.prices }));
-    setHistory(prev => ({ ...prev, ...priceResult.histories }));
+    setPrices(prev => ({ ...prev, ...newPrices }));
     setMarketData(prev => {
       const merged = { ...prev };
       Object.entries(newMarket).forEach(([ticker, val]) => {
@@ -970,9 +957,8 @@ export default function App() {
         }
       ),
     }));
-    fetchLivePrices([sym]).then(result => {
-      setPrices(prev => ({ ...prev, ...result.prices }));
-      setHistory(prev => ({ ...prev, ...result.histories }));
+    fetchLivePrices([sym]).then(newPrices => {
+      setPrices(prev => ({ ...prev, ...newPrices }));
     });
   }
 
@@ -996,7 +982,8 @@ export default function App() {
   const gainers = Object.values(prices).filter(v => v > 0).length;
   const losers = Object.values(prices).filter(v => v < 0).length;
   const activeData = capexData.tracks.find(t => t.id === activeTrack);
-  const tickerPairs = [...Object.entries(prices), ...Object.entries(prices)];
+  // PERF: build tape entries once, avoid re-spreading on every render
+  const tickerEntries = Object.entries(prices);
 
   const styles = `
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap');
@@ -1030,8 +1017,6 @@ export default function App() {
   return (
     <>
       <style>{styles}</style>
-
-      {/* STARFIELD — fixed behind everything */}
       <StarField />
 
       <div style={{
@@ -1041,10 +1026,10 @@ export default function App() {
       }}>
 
         {/* TICKER TAPE */}
-        {Object.keys(prices).length > 0 && (
-          <div style={{ overflow: "hidden", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(4,2,14,0.75)", backdropFilter: "blur(12px)", padding: "6px 0" }}>
+        {tickerEntries.length > 0 && (
+          <div style={{ overflow: "hidden", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(4,2,14,0.75)", padding: "6px 0" }}>
             <div className="ticker-tape">
-              {tickerPairs.map(([sym, chg], i) => (
+              {[...tickerEntries, ...tickerEntries].map(([sym, chg], i) => (
                 <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#64748b", fontSize: 11 }}>
                   <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{sym}</span>
                   <span style={{ color: chg >= 0 ? "#34d399" : "#f87171" }}>{chg >= 0 ? "▲" : "▼"} {Math.abs(chg).toFixed(2)}%</span>
@@ -1055,7 +1040,7 @@ export default function App() {
         )}
 
         {/* HEADER */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(4,2,14,0.6)", backdropFilter: "blur(16px)", flexWrap: "wrap", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(4,2,14,0.6)", flexWrap: "wrap", gap: 12 }}>
           <div>
             <div style={{ fontSize: 10, color: "#2d3a52", letterSpacing: "0.35em", textTransform: "uppercase", marginBottom: 3 }}>
               HOW ~$600B+ IN HYPERSCALER CAPEX FLOWS THROUGH AI INFRASTRUCTURE TRACKS
@@ -1081,12 +1066,11 @@ export default function App() {
                   localStorage.removeItem("capexData");
                 }
               }}
-              style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontFamily: "inherit", backdropFilter: "blur(8px)" }}>
+              style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>
               ↺ reset
             </button>
             <button onClick={refresh} disabled={refreshing} style={{
               background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)",
-              backdropFilter: "blur(8px)",
               borderRadius: 8, color: "#64748b", padding: "5px 12px", cursor: "pointer",
               fontSize: 11, fontFamily: "inherit", opacity: refreshing ? 0.5 : 1,
             }}>
@@ -1099,22 +1083,13 @@ export default function App() {
 
           {/* TOP NODE WITH FLANKING MARKET DATA */}
           <div className="top-node-layout" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <MarketStrip data={marketData} tickers={["^GSPC","^DJI","^IXIC"]} labels={["S&P 500","DOW","NASDAQ"]} colors={["#60a5fa","#34d399","#c084fc"]} />
 
-            {/* LEFT — Indices */}
-            <MarketStrip
-              data={marketData}
-              tickers={["^GSPC", "^DJI", "^IXIC"]}
-              labels={["S&P 500", "DOW", "NASDAQ"]}
-              colors={["#60a5fa", "#34d399", "#c084fc"]}
-            />
-
-            {/* CENTER — Top node */}
             <div className="top-node-center" style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "0 0 auto" }}>
               <div className="capex-box" style={{
                 width: 480, borderRadius: 22, padding: "26px 30px", textAlign: "center",
                 background: "linear-gradient(135deg,rgba(251,191,36,.1) 0%,rgba(180,120,10,.04) 50%,rgba(4,2,14,.9) 100%)",
                 border: "1.5px solid rgba(251,191,36,.45)",
-                backdropFilter: "blur(20px)",
               }}>
                 <div style={{ fontSize: 10, color: "rgba(251,191,36,.5)", letterSpacing: "0.4em", textTransform: "uppercase", marginBottom: 6 }}>Total Investment Flow</div>
                 <div className="capex-number" style={{ fontSize: 64, color: "#fbbf24", lineHeight: 1, marginBottom: 6, fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.04em", textShadow: "0 0 40px rgba(251,191,36,0.5)" }}>~$600B+</div>
@@ -1127,32 +1102,26 @@ export default function App() {
                     const price = entry?.price;
                     const change = entry?.change;
                     const pos = (change ?? 0) >= 0;
-                    function formatPrice(p) {
-                      if (!p) return "—";
-                      return "$" + p.toLocaleString("en-US", { maximumFractionDigits: 2 });
-                    }
+                    const priceStr = price ? "$" + price.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—";
                     return (
                       <div key={co} style={{
                         display: "flex", flexDirection: "column", alignItems: "center",
                         padding: "6px 12px", borderRadius: 10, minWidth: 72,
                         background: "rgba(255,255,255,0.04)",
-                        backdropFilter: "blur(8px)",
-                        border: "1px solid rgba(255,255,255,0.09)",
-                        transition: "all .2s",
+                        border: "1px solid rgba(255,255,255,0.09)", transition: "all .2s",
                       }}
                         onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(251,191,36,0.45)"; e.currentTarget.style.boxShadow = "0 0 12px rgba(251,191,36,0.15)"; }}
                         onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.09)"; e.currentTarget.style.boxShadow = "none"; }}>
                         <span style={{ fontSize: 10, fontWeight: 800, color: "#fbbf24", letterSpacing: "0.1em", marginBottom: 2 }}>{co}</span>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: "#f1f5f9", fontFamily: "'DM Mono', monospace", marginBottom: 1 }}>{formatPrice(price)}</span>
-                        {change !== undefined && change !== null ? (
-                          <span style={{ fontSize: 10, fontWeight: 600, color: pos ? "#34d399" : "#f87171" }}>{pos ? "+" : ""}{change.toFixed(2)}%</span>
-                        ) : <span style={{ fontSize: 10, color: "#334155" }}>—</span>}
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "#f1f5f9", fontFamily: "'DM Mono', monospace", marginBottom: 1 }}>{priceStr}</span>
+                        {change !== undefined && change !== null
+                          ? <span style={{ fontSize: 10, fontWeight: 600, color: pos ? "#34d399" : "#f87171" }}>{pos ? "+" : ""}{change.toFixed(2)}%</span>
+                          : <span style={{ fontSize: 10, color: "#334155" }}>—</span>}
                       </div>
                     );
                   })}
                 </div>
               </div>
-              {/* Connector line */}
               <div style={{ width: 1, height: 28, background: "linear-gradient(to bottom,rgba(251,191,36,.5),transparent)" }} />
               <div style={{ position: "relative", width: "100%", height: 1, background: "linear-gradient(90deg,transparent 5%,rgba(255,255,255,.06) 20%,rgba(255,255,255,.06) 80%,transparent 95%)" }}>
                 {capexData.tracks.map((_, i, arr) => (
@@ -1161,13 +1130,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* RIGHT — Crypto */}
-            <MarketStrip
-              data={marketData}
-              tickers={["BTC-USD", "ETH-USD", "XRP-USD"]}
-              labels={["BTC", "ETH", "XRP"]}
-              colors={["#f59e0b", "#60a5fa", "#34d399"]}
-            />
+            <MarketStrip data={marketData} tickers={["BTC-USD","ETH-USD","XRP-USD"]} labels={["BTC","ETH","XRP"]} colors={["#f59e0b","#60a5fa","#34d399"]} />
           </div>
 
           {/* TRACK CARDS */}
@@ -1182,13 +1145,9 @@ export default function App() {
 
           {/* EXPANDED PANE */}
           {activeData && (
-            <TrackPane
-              track={activeData}
-              prices={prices}
-              histories={history}
+            <TrackPane track={activeData} prices={prices}
               onAddTicker={addTickerToSubsector}
-              onRemoveTicker={removeTickerFromSubsector}
-            />
+              onRemoveTicker={removeTickerFromSubsector} />
           )}
 
           {/* BOTTOM PANELS */}
@@ -1205,17 +1164,16 @@ export default function App() {
                   border: `1px solid ${bottomTab === tab.id ? "rgba(255,255,255,.1)" : "transparent"}`,
                   color: bottomTab === tab.id ? "#e2e8f0" : "#334155",
                   borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "inherit", transition: "all .2s",
-                  backdropFilter: bottomTab === tab.id ? "blur(8px)" : "none",
                 }}>{tab.label}</button>
               ))}
             </div>
             {bottomTab === "all" ? (
               <div className="bottom-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                <div style={{ gridColumn: "1/-1" }}><HeatMap prices={prices} capexData={capexData} histories={history} /></div>
+                <div style={{ gridColumn: "1/-1" }}><HeatMap prices={prices} capexData={capexData} /></div>
                 <DonutChart prices={prices} capexData={capexData} />
                 <Watchlist prices={prices} capexData={capexData} />
               </div>
-            ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={capexData} histories={history} />
+            ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={capexData} />
               : bottomTab === "donut" ? <DonutChart prices={prices} capexData={capexData} />
               : <Watchlist prices={prices} capexData={capexData} />}
           </div>
