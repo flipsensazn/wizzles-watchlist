@@ -872,6 +872,110 @@ function Watchlist({ prices, capexData }) {
   );
 }
 
+// ── MULTIBAGGER PANEL ─────────────────────────────────────
+function MultibaggerPanel({ prices, onTickerClick }) {
+  const [data, setData] = useState([]);
+  const [loading, setLoading] = useState(true);
+  
+  // pool of small-cap companies related to the AI/Datacenter thesis
+  const SMALL_CAP_POOL = ["VRT", "APLD", "CORZ", "WULF", "LITE", "COHR", "AAOI", "OSS", "GTLB", "IREN"];
+
+  useEffect(() => {
+    async function getFundamentals() {
+      setLoading(true);
+      const results = await Promise.all(
+        SMALL_CAP_POOL.map(async (ticker) => {
+          try {
+            const res = await fetch(`/quote?ticker=${ticker}`);
+            const json = await res.json();
+            const r = json?.quoteSummary?.result?.[0];
+            if (!r) return null;
+
+            const fcf = r.financialData?.freeCashflow?.raw || 0;
+            const marketCap = r.price?.marketCap?.raw || 1;
+            const roa = r.financialData?.returnOnAssets?.raw || 0;
+            const pb = r.defaultKeyStatistics?.priceToBook?.raw || 0;
+
+            // Score logic based on the Blueprint:
+            // High FCF Yield + High ROA + Low P/B (High Book-to-Market)
+            const fcfYield = (fcf / marketCap) * 100;
+            const bookToMarket = pb > 0 ? (1 / pb) : 0;
+            
+            // Basic ranking score (Higher is better)
+            const score = (fcfYield * 2) + (roa * 100) + (bookToMarket * 10);
+
+            return {
+              ticker,
+              name: r.price?.shortName || ticker,
+              price: r.financialData?.currentPrice?.raw,
+              change: prices[ticker],
+              fcfYield,
+              roa: roa * 100, // convert to %
+              bookToMarket,
+              score
+            };
+          } catch { return null; }
+        })
+      );
+      setData(results.filter(x => x !== null).sort((a, b) => b.score - a.score));
+      setLoading(false);
+    }
+    getFundamentals();
+  }, [prices]);
+
+  if (loading) return <div style={{ color: "#475569", padding: 20 }}>Scanning small-cap fundamentals...</div>;
+
+  return (
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, boxShadow: "0 4px 30px rgba(0,0,0,0.4)" }}>
+      <div style={{ marginBottom: 16 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24" }}>Multibagger Blueprint Scanner</h3>
+        <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Dynamic ranking by FCF Yield, ROA, and Book-to-Market</p>
+      </div>
+      <div style={{ overflowX: "auto" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, textAlign: "left" }}>
+          <thead>
+            <tr style={{ color: "#475569", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+              <th style={{ padding: "10px 8px" }}>TICKER</th>
+              <th style={{ padding: "10px 8px" }}>FCF YIELD</th>
+              <th style={{ padding: "10px 8px" }}>ROA</th>
+              <th style={{ padding: "10px 8px" }}>B/M</th>
+              <th style={{ padding: "10px 8px", textAlign: "right" }}>BLUEPRINT SCORE</th>
+            </tr>
+          </thead>
+          <tbody>
+            {data.map((stock) => (
+              <tr 
+                key={stock.ticker} 
+                onClick={(e) => onTickerClick(stock.ticker, e.currentTarget.getBoundingClientRect())}
+                style={{ borderBottom: "1px solid rgba(255,255,255,0.03)", cursor: "pointer", transition: "background .15s" }}
+                onMouseEnter={e => e.currentTarget.style.background = "rgba(251,191,36,0.03)"}
+                onMouseLeave={e => e.currentTarget.style.background = ""}
+              >
+                <td style={{ padding: "12px 8px" }}>
+                  <div style={{ fontWeight: 700, color: "#f1f5f9" }}>{stock.ticker}</div>
+                  <div style={{ fontSize: 10, color: (stock.change >= 0 ? "#34d399" : "#f87171") }}>
+                    {stock.change >= 0 ? "+" : ""}{stock.change}%
+                  </div>
+                </td>
+                <td style={{ padding: "12px 8px", color: stock.fcfYield > 5 ? "#34d399" : "#e2e8f0" }}>
+                  {stock.fcfYield.toFixed(2)}%
+                </td>
+                <td style={{ padding: "12px 8px", color: stock.roa > 10 ? "#34d399" : "#e2e8f0" }}>
+                  {stock.roa.toFixed(2)}%
+                </td>
+                <td style={{ padding: "12px 8px" }}>{stock.bookToMarket.toFixed(2)}</td>
+                <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: "#fbbf24" }}>
+                  {stock.score.toFixed(1)}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  );
+}
+
 // ── ROOT APP ──────────────────────────────────────────────
 export default function App() {
   const [capexData, setCapexData] = useState(() => {
@@ -1145,6 +1249,7 @@ export default function App() {
                 { id: "heatmap", label: "📊 Heat Map" },
                 { id: "donut", label: "🥧 Allocation" },
                 { id: "watchlist", label: "👁 Watchlist" },
+                { id: "multibagger", label: "🚀 Multibagger" },
               ].map(tab => (
                 <button key={tab.id} onClick={() => setBottomTab(tab.id)} style={{
                   background: bottomTab === tab.id ? "rgba(255,255,255,.06)" : "transparent",
@@ -1154,15 +1259,18 @@ export default function App() {
                 }}>{tab.label}</button>
               ))}
             </div>
-            {bottomTab === "all" ? (
-              <div className="bottom-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-                <div style={{ gridColumn: "1/-1" }}><HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} /></div>
-                <DonutChart prices={prices} capexData={capexData} />
-                <Watchlist prices={prices} capexData={capexData} />
-              </div>
-            ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} />
-              : bottomTab === "donut" ? <DonutChart prices={prices} capexData={capexData} />
-              : <Watchlist prices={prices} capexData={capexData} />}
+          {bottomTab === "all" ? (
+            <div className="bottom-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+    <div style={{ gridColumn: "1/-1" }}><HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} /></div>
+    <DonutChart prices={prices} capexData={capexData} />
+    <Watchlist prices={prices} capexData={capexData} />
+    <div style={{ gridColumn: "1/-1" }}><MultibaggerPanel prices={prices} onTickerClick={openPopup} /></div> // ADD THIS LINE
+  </div>
+) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} />
+  : bottomTab === "donut" ? <DonutChart prices={prices} capexData={capexData} />
+  : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={capexData} />
+  : <MultibaggerPanel prices={prices} onTickerClick={openPopup} /> // ADD THIS LINE
+}
           </div>
 
           {/* FOOTER */}
