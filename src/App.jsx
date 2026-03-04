@@ -873,133 +873,124 @@ function Watchlist({ prices, capexData }) {
 }
 
 // ── MULTIBAGGER PANEL ─────────────────────────────────────
+// ── MULTIBAGGER PANEL ─────────────────────────────────────
 function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newTicker, setNewTicker] = useState("");
-  // Use a ref to prevent overlapping fetches
   const fetchIdRef = useRef(0);
 
   useEffect(() => {
     const currentFetchId = ++fetchIdRef.current;
-    
     async function getFundamentals() {
-      // Only show the "Full Loading" state if we have no data yet
       if (data.length === 0) setLoading(true);
-
       const results = await Promise.all(
         scannerPool.map(async (ticker) => {
           try {
             const res = await fetch(`/quote?ticker=${ticker}`);
-            // If the request took too long and a new fetch started, ignore this result
             if (currentFetchId !== fetchIdRef.current) return null;
-            
             const json = await res.json();
             const r = json?.quoteSummary?.result?.[0];
             if (!r) return null;
 
+            // Metrics Extraction
             const fcf = r.financialData?.freeCashflow?.raw || 0;
             const marketCap = r.price?.marketCap?.raw || 1;
-            const roa = r.financialData?.returnOnAssets?.raw || 0;
+            const roa = (r.financialData?.returnOnAssets?.raw || 0) * 100;
             const pb = r.defaultKeyStatistics?.priceToBook?.raw || 0;
+            
+            // Market Return (52 Week Price Change)
+            const marketReturn = (r.defaultKeyStatistics?.52WeekChange?.raw || 0) * 100;
+
+            // Asset Growth Calculation (YoY)
+            const history = r.balanceSheetHistory?.balanceSheetStatements || [];
+            let assetGrowth = 0;
+            if (history.length >= 2) {
+              const currentAssets = history[0].totalAssets?.raw || 0;
+              const prevAssets = history[1].totalAssets?.raw || 1;
+              assetGrowth = ((currentAssets - prevAssets) / prevAssets) * 100;
+            }
 
             const fcfYield = (fcf / marketCap) * 100;
             const bookToMarket = pb > 0 ? (1 / pb) : 0;
-            const score = (fcfYield * 2) + (roa * 100) + (bookToMarket * 10);
+            
+            // ── BLUEPRINT SCORE (Prioritizing FCF Yield) ──
+            // High Weight: FCF Yield (x10)
+            // Medium Weight: B/M (x20), ROA (x2), Asset Growth (x1)
+            // Low Weight: Market Return (x0.5)
+            const score = (fcfYield * 10) + (bookToMarket * 20) + (roa * 2) + (assetGrowth * 1) + (marketReturn * 0.5);
 
-            return { ticker, fcfYield, roa: roa * 100, bookToMarket, score };
-          } catch (err) {
-            console.error(`Error fetching ${ticker}:`, err);
-            return null; 
-          }
+            return { ticker, fcfYield, roa, bookToMarket, assetGrowth, marketReturn, score };
+          } catch { return null; }
         })
       );
 
-      // Only update state if this is still the latest fetch request
       if (currentFetchId === fetchIdRef.current) {
-        const validResults = results.filter(x => x !== null);
-        setData(validResults.sort((a, b) => b.score - a.score));
+        setData(results.filter(x => x !== null).sort((a, b) => b.score - a.score));
         setLoading(false);
       }
     }
-
     getFundamentals();
-  }, [scannerPool]); // REMOVED 'prices' from here to stop the loading loop
+  }, [scannerPool]);
 
   const addTicker = () => {
     const sym = newTicker.trim().toUpperCase();
-    if (sym && !scannerPool.includes(sym)) {
-      setScannerPool([...scannerPool, sym]);
-      setNewTicker("");
-    }
+    if (sym && !scannerPool.includes(sym)) { setScannerPool([...scannerPool, sym]); setNewTicker(""); }
   };
 
-  const removeTicker = (ticker) => {
-    setScannerPool(scannerPool.filter(t => t !== ticker));
-  };
-
+  const removeTicker = (ticker) => { setScannerPool(scannerPool.filter(t => t !== ticker)); };
   const getScoreColor = (score) => {
-    if (score > 25) return "#34d399";
-    if (score > 10) return "#fbbf24";
-    return "#f87171";
+    if (score > 40) return "#34d399"; // Elite
+    if (score > 15) return "#fbbf24"; // Good
+    return "#f87171"; // Poor
   };
 
   return (
     <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
         <div>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24" }}>Multibagger Blueprint Scanner</h3>
-          <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Weighted by FCF Yield (Predictor #1), ROA, and Book-to-Market</p>
+          <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Prioritizing FCF Yield & Asset Growth</p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
-          <input 
-            value={newTicker} 
-            onChange={e => setNewTicker(e.target.value.toUpperCase())}
-            onKeyDown={e => e.key === "Enter" && addTicker()}
-            placeholder="Add ticker..." 
-            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 12, outline: "none" }}
-          />
-          <button onClick={addTicker} style={{ background: "#fbbf24", color: "#000", border: "none", borderRadius: 8, padding: "6px 12px", fontWeight: 700, fontSize: 12, cursor: "pointer" }}>+</button>
+          <input value={newTicker} onChange={e => setNewTicker(e.target.value.toUpperCase())}
+            onKeyDown={e => e.key === "Enter" && addTicker()} placeholder="Add ticker..." 
+            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 12, outline: "none" }} />
+          <button onClick={addTicker} style={{ background: "#fbbf24", color: "#000", borderRadius: 8, padding: "6px 12px", fontWeight: 700, cursor: "pointer", border: "none" }}>+</button>
         </div>
       </div>
-
       <div style={{ overflowX: "auto" }}>
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 12, textAlign: "left" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, textAlign: "left" }}>
           <thead>
             <tr style={{ color: "#475569", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
               <th style={{ padding: "10px 8px" }}>TICKER</th>
               <th style={{ padding: "10px 8px" }}>FCF YIELD</th>
               <th style={{ padding: "10px 8px" }}>ROA</th>
-              <th style={{ padding: "10px 8px" }}>B/M</th>
+              <th style={{ padding: "10px 8px" }}>ASSET GR.</th>
+              <th style={{ padding: "10px 8px" }}>1Y RET.</th>
               <th style={{ padding: "10px 8px", textAlign: "right" }}>BLUEPRINT SCORE</th>
-              <th style={{ width: 40 }}></th>
+              <th style={{ width: 30 }}></th>
             </tr>
           </thead>
           <tbody>
-            {loading ? <tr><td colSpan="6" style={{ padding: 20, color: "#475569" }}>Updating fundamentals...</td></tr> : 
+            {loading ? <tr><td colSpan="7" style={{ padding: 20, color: "#475569" }}>Scanning fundamentals...</td></tr> : 
              data.map((stock) => {
-              const currentPriceData = prices[stock.ticker];
-              const change = currentPriceData?.change ?? currentPriceData;
+              const change = prices[stock.ticker]?.change ?? prices[stock.ticker];
               return (
                 <tr key={stock.ticker} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
                   <td onClick={(e) => onTickerClick(stock.ticker, e.currentTarget.getBoundingClientRect())} style={{ padding: "12px 8px", cursor: "pointer" }}>
                     <div style={{ fontWeight: 700, color: "#f1f5f9" }}>{stock.ticker}</div>
-                    <div style={{ fontSize: 10, color: (change >= 0 ? "#34d399" : "#f87171") }}>
-                        {change !== undefined ? `${change >= 0 ? "+" : ""}${change}%` : "—"}
-                    </div>
+                    <div style={{ fontSize: 9, color: (change >= 0 ? "#34d399" : "#f87171") }}>{change !== undefined ? `${change >= 0 ? "+" : ""}${change}%` : "—"}</div>
                   </td>
-                  <td style={{ padding: "12px 8px" }}>{stock.fcfYield.toFixed(2)}%</td>
-                  <td style={{ padding: "12px 8px" }}>{stock.roa.toFixed(2)}%</td>
-                  <td style={{ padding: "12px 8px" }}>{stock.bookToMarket.toFixed(2)}</td>
-                  <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(stock.score), textShadow: `0 0 10px ${getScoreColor(stock.score)}44` }}>
-                    {stock.score.toFixed(1)}
-                  </td>
-                  <td style={{ textAlign: "right" }}>
-                    <button onClick={() => removeTicker(stock.ticker)} style={{ background: "none", border: "none", color: "#334155", cursor: "pointer", fontSize: 16 }}>×</button>
-                  </td>
+                  <td style={{ padding: "12px 8px", color: stock.fcfYield > 8 ? "#34d399" : "#e2e8f0" }}>{stock.fcfYield.toFixed(2)}%</td>
+                  <td style={{ padding: "12px 8px" }}>{stock.roa.toFixed(1)}%</td>
+                  <td style={{ padding: "12px 8px", color: stock.assetGrowth > 15 ? "#34d399" : "#e2e8f0" }}>{stock.assetGrowth.toFixed(1)}%</td>
+                  <td style={{ padding: "12px 8px" }}>{stock.marketReturn.toFixed(1)}%</td>
+                  <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(stock.score), fontSize: 13 }}>{stock.score.toFixed(1)}</td>
+                  <td style={{ textAlign: "right" }}><button onClick={() => removeTicker(stock.ticker)} style={{ background: "none", border: "none", color: "#334155", cursor: "pointer", fontSize: 16 }}>×</button></td>
                 </tr>
               );
-             })}
+            })}
           </tbody>
         </table>
       </div>
