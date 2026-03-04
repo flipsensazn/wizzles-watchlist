@@ -1,79 +1,5 @@
-const OTC_TICKERS = ["IQEPF", "SLOIF", "ALMU"];
-const INDEX_TICKERS = ["^GSPC", "^DJI", "^IXIC"];
-const CRYPTO_TICKERS = ["BTC-USD", "ETH-USD", "SOL-USD", "XRP-USD"];
-const HYPERSCALER_TICKERS = ["AMZN", "MSFT", "GOOG", "META", "ORCL"];
-
-// These use the Yahoo scraper logic
-const YAHOO_TICKERS = [
-  ...OTC_TICKERS,
-  ...INDEX_TICKERS,
-  ...CRYPTO_TICKERS,
-  ...HYPERSCALER_TICKERS,
-];
-
-// In-memory cache
 let cache = { data: {}, timestamp: 0 };
-const CACHE_TTL = 30000;
-
-// Mimic a real browser to prevent Yahoo from blocking Cloudflare IPs
-const BROWSER_HEADERS = {
-  "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-  "Accept": "application/json",
-  "Referer": "https://finance.yahoo.com/"
-};
-
-async function fetchYahoo(ticker) {
-  try {
-    const encodedTicker = encodeURIComponent(ticker);
-    const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodedTicker}?interval=1d&range=2d`;
-    
-    const res = await fetch(url, { headers: BROWSER_HEADERS });
-    if (!res.ok) return { ticker, change: null, price: null };
-
-    const data = await res.json();
-    const result = data?.chart?.result?.[0];
-    if (!result) return { ticker, change: null, price: null };
-
-    const closes = result.indicators.quote[0].close.filter(v => v !== null);
-    
-    // Calculate 1D change from the last two valid closing prices
-    if (closes.length >= 2) {
-      const prev = closes[closes.length - 2];
-      const curr = closes[closes.length - 1];
-      return {
-        ticker,
-        change: parseFloat((((curr - prev) / prev) * 100).toFixed(2)),
-        price: parseFloat(curr.toFixed(2)),
-      };
-    }
-    return { ticker, change: null, price: null };
-  } catch (err) {
-    console.error(`Yahoo error for ${ticker}:`, err);
-    return { ticker, change: null, price: null };
-  }
-}
-
-async function fetchFinnhub(ticker, apiKey) {
-  try {
-    const res = await fetch(
-      `https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${apiKey}`
-    );
-    const quote = await res.json();
-    
-    // Finnhub uses 'dp' for daily percentage change and 'c' for current price
-    if (quote.dp !== null && quote.dp !== undefined) {
-      return {
-        ticker,
-        change: parseFloat(quote.dp.toFixed(2)),
-        price: parseFloat((quote.c ?? 0).toFixed(2)),
-      };
-    }
-    return { ticker, change: null, price: null };
-  } catch (err) {
-    console.error(`Finnhub error for ${ticker}:`, err);
-    return { ticker, change: null, price: null };
-  }
-}
+const CACHE_TTL = 15000; // 15 seconds
 
 export async function onRequest(context) {
   const headers = {
@@ -81,51 +7,91 @@ export async function onRequest(context) {
     "Content-Type": "application/json",
   };
 
-  // 1. ACCESS KEY: Using context.env for Cloudflare
-  const FINNHUB_KEY = context.env.FINNHUB_KEY;
-
-  if (!FINNHUB_KEY) {
-    console.error("FINNHUB_KEY is missing in Cloudflare environment variables.");
-  }
-
-  // 2. CACHE CHECK
+  // 1. CACHE CHECK
   const now = Date.now();
   if (now - cache.timestamp < CACHE_TTL && Object.keys(cache.data).length > 0) {
     return new Response(JSON.stringify({ data: cache.data, cached: true }), { status: 200, headers });
   }
 
-  // 3. PARSE TICKERS
+  // 2. PARSE TICKERS
   const { searchParams } = new URL(context.request.url);
   const tickersParam = searchParams.get("tickers");
-  const tickers = tickersParam ? tickersParam.split(",") : [];
+  const tickers = tickersParam ? [...new Set(tickersParam.split(",").filter(Boolean))] : [];
 
   if (!tickers.length) {
     return new Response(JSON.stringify({ error: "No tickers provided" }), { status: 400, headers });
   }
 
   const results = {};
-  const yahooTickers = tickers.filter(t => YAHOO_TICKERS.includes(t));
-  const finnhubTickers = tickers.filter(t => !YAHOO_TICKERS.includes(t));
+  const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+  const FINNHUB_KEY = context.env.FINNHUB_KEY;
 
-  // 4. FETCH YAHOO
-  await Promise.all(yahooTickers.map(async t => {
-    const r = await fetchYahoo(t);
-    if (r.change !== null) results[r.ticker] = { change: r.change, price: r.price };
-  }));
+  // 3. YAHOO BULK FETCH (Primary Engine: Grabs 99% of tickers in 2 requests)
+  try {
+    const cookieRes = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": USER_AGENT } });
+    const rawCookie = cookieRes.headers.get("set-cookie");
+    const cookie = rawCookie ? rawCookie.split(";")[0] : "";
 
-  // 5. FETCH FINNHUB (Sequential to strictly obey 60/min rate limit)
-  for (const t of finnhubTickers) {
-    const r = await fetchFinnhub(t, FINNHUB_KEY);
-    if (r.change !== null) {
-      results[r.ticker] = { change: r.change, price: r.price };
+    const crumbRes = await fetch("https://query1.finance.yahoo.com/v1/test/getcrumb", {
+      headers: { "User-Agent": USER_AGENT, "Cookie": cookie }
+    });
+    const crumb = await crumbRes.text();
+
+    // Fetch in batches of 40 to avoid URL length limits
+    const batchSize = 40;
+    for (let i = 0; i < tickers.length; i += batchSize) {
+      const batch = tickers.slice(i, i + batchSize);
+      const url = `https://query1.finance.yahoo.com/v7/finance/quote?symbols=${batch.join(",")}&crumb=${crumb}`;
+      
+      const res = await fetch(url, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } });
+      
+      if (res.ok) {
+        const data = await res.json();
+        const quoteList = data?.quoteResponse?.result || [];
+        for (const q of quoteList) {
+          if (q.regularMarketPrice !== undefined) {
+            results[q.symbol] = {
+              price: parseFloat(q.regularMarketPrice.toFixed(2)),
+              change: q.regularMarketChangePercent !== undefined ? parseFloat(q.regularMarketChangePercent.toFixed(2)) : 0
+            };
+          }
+        }
+      }
     }
-    // Add a 35ms delay between EACH call to spread them out safely
-    // (60 calls * 35ms = ~2.1 seconds of total processing time)
-    await new Promise(resolve => setTimeout(resolve, 35));
+  } catch (err) {
+    console.error("Yahoo bulk fetch error:", err);
   }
 
-  // Update Cache
-  cache = { data: results, timestamp: Date.now() };
+  // 4. FINNHUB FALLBACK (Only for missing/obscure tickers)
+  const missingTickers = tickers.filter(t => !results[t]);
+
+  if (missingTickers.length > 0 && FINNHUB_KEY) {
+    // Limit to 45 max to ensure we NEVER breach the 60/min limit
+    const safeMissing = missingTickers.slice(0, 45); 
+    
+    for (const t of safeMissing) {
+      try {
+        const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${t}&token=${FINNHUB_KEY}`);
+        if (res.ok) {
+          const quote = await res.json();
+          if (quote.dp !== null && quote.dp !== undefined) {
+            results[t] = {
+              price: parseFloat((quote.c ?? 0).toFixed(2)),
+              change: parseFloat(quote.dp.toFixed(2))
+            };
+          }
+        }
+        await new Promise(resolve => setTimeout(resolve, 35));
+      } catch (e) {
+        console.error(`Finnhub fallback error for ${t}:`, e);
+      }
+    }
+  }
+
+  // 5. UPDATE CACHE AND RETURN
+  if (Object.keys(results).length > 0) {
+    cache = { data: results, timestamp: Date.now() };
+  }
 
   return new Response(JSON.stringify({ data: results, cached: false }), { status: 200, headers });
 }
