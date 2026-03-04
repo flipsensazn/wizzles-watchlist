@@ -903,30 +903,25 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
             const marketReturn = (r.defaultKeyStatistics?.['52WeekChange']?.raw || 0) * 100;
 
 // ── Asset Growth Calculation (YoY) ──
-console.log(History for ${ticker}:, r.balanceSheetHistory);
-const history = r.balanceSheetHistory?.balanceSheetStatements;
+// Yahoo nests this data differently depending on the ticker. 
+// We check all common locations: .balanceSheetStatements, .annual, or .all
+const bh = r.balanceSheetHistory;
+const history = bh?.balanceSheetStatements || bh?.annual || bh?.all || [];
+
 let assetGrowth = 0;
 
-// Check if we have at least two years of data to compare
+// Log the structure to your browser console so we can see exactly what Yahoo sent
+console.log(`[Asset Debug] ${ticker} history:`, bh);
+
 if (Array.isArray(history) && history.length >= 2) {
+  // Extract total assets from the most recent and previous periods
   const currentAssets = history[0].totalAssets?.raw;
   const prevAssets = history[1].totalAssets?.raw;
 
-  // Ensure both values exist and aren't zero
-  if (currentAssets && prevAssets) {
+  // Only calculate if both numbers actually exist and aren't zero
+  if (currentAssets && prevAssets && prevAssets !== 0) {
     assetGrowth = ((currentAssets - prevAssets) / prevAssets) * 100;
   }
-} else {
-    // FALLBACK: If annual history is missing, try to find it in the 'all' key 
-    // which some Yahoo API versions use
-    const altHistory = r.balanceSheetHistory?.all;
-    if (Array.isArray(altHistory) && altHistory.length >= 2) {
-        const currentAssets = altHistory[0].totalAssets?.raw;
-        const prevAssets = altHistory[1].totalAssets?.raw;
-        if (currentAssets && prevAssets) {
-            assetGrowth = ((currentAssets - prevAssets) / prevAssets) * 100;
-        }
-    }
 }
             const fcfYield = (fcf / marketCap) * 100;
             const bookToMarket = pb > 0 ? (1 / pb) : 0;
