@@ -889,28 +889,36 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
             const res = await fetch(`/quote?ticker=${ticker}`);
             if (currentFetchId !== fetchIdRef.current) return null;
             const json = await res.json();
+            
+            // Extract the merged data
             const r = json?.quoteSummary?.result?.[0];
+            const fData = json?.fiscalai;
+            
             if (!r) return null;
 
-            // Metrics Extraction
+            // Metrics Extraction (Yahoo)
             const fcf = r.financialData?.freeCashflow?.raw || 0;
             const marketCap = r.price?.marketCap?.raw || 1;
             const roa = (r.financialData?.returnOnAssets?.raw || 0) * 100;
             const pb = r.defaultKeyStatistics?.priceToBook?.raw || 0;
             const marketReturn = (r.defaultKeyStatistics?.['52WeekChange']?.raw || 0) * 100;
 
-            // ── Asset Growth Calculation (YoY) ──
-            const bh = r.balanceSheetHistory;
-            const history = bh?.balanceSheetStatements || bh?.all || [];
-
-            console.log(`[Asset Keys for ${ticker}]:`, history[0] ? Object.keys(history[0]).join(", ") : "No data");
-            console.log(`[Total Assets Check for ${ticker}]:`, history[0]?.totalAssets);
-
+            // ── ASSET GROWTH via Fiscal.ai ──
             let assetGrowth = 0;
+            
+            if (fData && fData.data && fData.data.length >= 2) {
+              // Dynamically find the exact ID Fiscal.ai uses for Total Assets
+              const taMetric = fData.metrics?.find(m => 
+                m.metricName && m.metricName.toLowerCase().includes("total assets")
+              );
+              // Fallback to strict naming convention just in case
+              const taId = taMetric ? taMetric.standardizedMetricId : "balance_sheet_total_assets";
+              
+              // Sort by reportDate to guarantee Index 0 is the newest year
+              const sortedData = [...fData.data].sort((a, b) => new Date(b.reportDate) - new Date(a.reportDate));
 
-            if (Array.isArray(history) && history.length >= 2) {
-              const currentAssets = history[0].totalAssets?.raw || history[0].totalAssets;
-              const prevAssets = history[1].totalAssets?.raw || history[1].totalAssets;
+              const currentAssets = sortedData[0].metricsValues[taId]?.value;
+              const prevAssets = sortedData[1].metricsValues[taId]?.value;
 
               if (typeof currentAssets === 'number' && typeof prevAssets === 'number' && prevAssets !== 0) {
                 assetGrowth = ((currentAssets - prevAssets) / prevAssets) * 100;
@@ -920,6 +928,7 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
             const fcfYield = (fcf / marketCap) * 100;
             const bookToMarket = pb > 0 ? (1 / pb) : 0;
             
+            // Score Calculation
             const score = (fcfYield * 10) + (bookToMarket * 20) + (roa * 2) + (assetGrowth * 1) + (marketReturn * 0.5);
 
             return { ticker, fcfYield, roa, bookToMarket, assetGrowth, marketReturn, score };
