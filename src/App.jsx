@@ -1311,7 +1311,7 @@ useEffect(() => {
                 <span style={{ width: 7, height: 7, borderRadius: "50%", background: x.c, display: "inline-block", opacity: 0.6, boxShadow: `0 0 5px ${x.c}66` }} />{x.l}
               </span>
             ))}
-            <span style={{ marginLeft: "auto" }}>Live via Finnhub + Yahoo · server-cached · auto-refreshes 30s</span>
+            <span style={{ marginLeft: "auto" }}>Live via Finnhub + Yahoo · server-cached · auto-refreshes 15s</span>
           </div>
         </div>
       </div>
