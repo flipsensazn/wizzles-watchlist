@@ -901,21 +901,20 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
             // Market Return (52 Week Price Change)
             const marketReturn = (r.defaultKeyStatistics?.['52WeekChange']?.raw || 0) * 100;
 
-// ── Asset Growth Calculation (YoY) ──
-const bh = r.balanceSheetHistory;
-const history = bh?.balanceSheetStatements || bh?.all || [];
+// Asset Growth Calculation (YoY)
+const history = r.balanceSheetHistory?.balanceSheetStatements || [];
+
+// --- ADD THESE TWO LINES HERE ---
+console.log(`[Asset Keys for ${ticker}]:`, history[0] ? Object.keys(history[0]).join(", ") : "No data");
+console.log(`[Total Assets Check for ${ticker}]:`, history[0]?.totalAssets);
+// --------------------------------
 
 let assetGrowth = 0;
-
-if (Array.isArray(history) && history.length >= 2) {
-  // Try different common paths for the numeric value
-  const currentAssets = history[0].totalAssets?.raw || history[0].totalAssets;
-  const prevAssets = history[1].totalAssets?.raw || history[1].totalAssets;
-
-  // Ensure we have valid numbers before calculating
-  if (typeof currentAssets === 'number' && typeof prevAssets === 'number' && prevAssets !== 0) {
-    assetGrowth = ((currentAssets - prevAssets) / prevAssets) * 100;
-  }
+if (history.length >= 2) {
+  const currentAssets = history[0].totalAssets?.raw || 0;
+  const prevAssets = history[1].totalAssets?.raw || 1;
+  assetGrowth = ((currentAssets - prevAssets) / prevAssets) * 100;
+}
 }
             const fcfYield = (fcf / marketCap) * 100;
             const bookToMarket = pb > 0 ? (1 / pb) : 0;
