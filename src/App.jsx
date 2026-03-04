@@ -900,7 +900,7 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
             const pb = r.defaultKeyStatistics?.priceToBook?.raw || 0;
             
             // Market Return (52 Week Price Change)
-            const marketReturn = (r.defaultKeyStatistics?.52WeekChange?.raw || 0) * 100;
+            const marketReturn = (r.defaultKeyStatistics?.['52WeekChange']?.raw || 0) * 100;
 
             // Asset Growth Calculation (YoY)
             const history = r.balanceSheetHistory?.balanceSheetStatements || [];
