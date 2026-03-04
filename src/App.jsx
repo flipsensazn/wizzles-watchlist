@@ -904,6 +904,16 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
             const marketReturn = (r.defaultKeyStatistics?.['52WeekChange']?.raw || 0) * 100;
 
             // ── ASSET GROWTH via Fiscal.ai ──
+            // Extract the merged data
+            const r = json?.quoteSummary?.result?.[0];
+            const fData = json?.fiscalai;
+            
+            // --- ADD THIS LINE TO DEBUG ---
+            console.log(`[Fiscal.ai Debug for ${ticker}]:`, fData);
+            // ------------------------------
+
+            if (!r) return null;
+            
             let assetGrowth = 0;
             
             if (fData && fData.data && fData.data.length >= 2) {
