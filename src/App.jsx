@@ -33,22 +33,21 @@ async function fetchMarketData() {
 }
 
 // ── QUOTE SUMMARY (for company popup) ────────────────────
-// Hits Yahoo's quoteSummary endpoint — no API key needed.
-// Results are cached in-memory so repeated clicks are instant.
 const quoteCache = {};
 async function fetchQuoteSummary(ticker) {
   if (quoteCache[ticker]) return quoteCache[ticker];
   try {
-    const modules = "assetProfile,summaryDetail,price";
-    const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${modules}`;
+    // ❌ OLD: Directly calling Yahoo (blocked by CORS)
+    // const modules = "assetProfile,summaryDetail,price";
+    // const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${modules}`;
+    
+    // ✅ NEW: Call your Netlify serverless function
+    const url = `/.netlify/functions/quote?ticker=${encodeURIComponent(ticker)}`;
+    
     const res = await fetch(url);
     const json = await res.json();
     const r = json?.quoteSummary?.result?.[0];
     if (!r) return null;
-
-    const profile = r.assetProfile ?? {};
-    const detail  = r.summaryDetail ?? {};
-    const price   = r.price ?? {};
 
     function fmt(n) {
       if (n == null || isNaN(n)) return "—";
