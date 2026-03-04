@@ -903,13 +903,20 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
             const marketReturn = (r.defaultKeyStatistics?.['52WeekChange']?.raw || 0) * 100;
 
             // Asset Growth Calculation (YoY)
-            const history = r.balanceSheetHistory?.balanceSheetStatements || [];
+            const history = r.balanceSheetHistory?.balanceSheetStatements || 
+                            r.balanceSheetHistory?.all || [];
+                
             let assetGrowth = 0;
-            if (history.length >= 2) {
+
+            if (history && history.length >= 2) {
               const currentAssets = history[0].totalAssets?.raw || 0;
-              const prevAssets = history[1].totalAssets?.raw || 1;
+              const prevAssets = history[1].totalAssets?.raw || 0;
+            if (currentAssets > 0 && prevAssets > 0) {
               assetGrowth = ((currentAssets - prevAssets) / prevAssets) * 100;
+            } else {
+              assetGrowth = 0;
             }
+          }
 
             const fcfYield = (fcf / marketCap) * 100;
             const bookToMarket = pb > 0 ? (1 / pb) : 0;
