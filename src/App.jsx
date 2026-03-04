@@ -38,18 +38,34 @@ async function fetchQuoteSummary(ticker) {
   if (quoteCache[ticker]) return quoteCache[ticker];
   try {
     const url = `/.netlify/functions/quote?ticker=${encodeURIComponent(ticker)}`;
-    
     const res = await fetch(url);
     const json = await res.json();
-    const r = json?.quoteSummary?.result?.[0];
-    if (!r) return null;
 
+    // Log the raw payload so we can see exactly what the frontend sees!
+    console.log(`[Quote Fetch] Raw JSON for ${ticker}:`, json);
+
+    // Un-wrap the payload just in case the backend nested it inside a "data" property
+    const payload = json.data ? json.data : json;
+    const r = payload?.quoteSummary?.result?.[0];
+
+    // If we still can't find the result, sound the alarm in the console
+    if (!r) {
+      console.warn(`[Quote Fetch] Could not find result array for ${ticker}. Payload was:`, payload);
+      return null;
+    }
+
+    const profile = r.assetProfile ?? {};
+    const detail  = r.summaryDetail ?? {};
+    const price   = r.price ?? {};
+
+    // A slightly more defensive formatter
     function fmt(n) {
       if (n == null || isNaN(n)) return "—";
-      if (n >= 1e12) return "$" + (n / 1e12).toFixed(2) + "T";
-      if (n >= 1e9)  return "$" + (n / 1e9).toFixed(2) + "B";
-      if (n >= 1e6)  return "$" + (n / 1e6).toFixed(2) + "M";
-      return "$" + n.toLocaleString();
+      const num = Number(n);
+      if (num >= 1e12) return "$" + (num / 1e12).toFixed(2) + "T";
+      if (num >= 1e9)  return "$" + (num / 1e9).toFixed(2) + "B";
+      if (num >= 1e6)  return "$" + (num / 1e6).toFixed(2) + "M";
+      return "$" + num.toLocaleString();
     }
 
     const data = {
@@ -57,18 +73,20 @@ async function fetchQuoteSummary(ticker) {
       sector:      profile.sector || "—",
       industry:    profile.industry || "—",
       description: profile.longBusinessSummary || null,
-      marketCap:   fmt(price.marketCap?.raw),
-      peRatio:     detail.trailingPE?.raw != null ? detail.trailingPE.raw.toFixed(1) : "—",
-      week52Low:   detail.fiftyTwoWeekLow?.raw != null ? "$" + detail.fiftyTwoWeekLow.raw.toFixed(2) : "—",
-      week52High:  detail.fiftyTwoWeekHigh?.raw != null ? "$" + detail.fiftyTwoWeekHigh.raw.toFixed(2) : "—",
-      employees:   profile.fullTimeEmployees ? profile.fullTimeEmployees.toLocaleString() : "—",
+      marketCap:   fmt(price.marketCap?.raw ?? price.marketCap),
+      peRatio:     detail.trailingPE?.raw != null ? Number(detail.trailingPE.raw).toFixed(1) : "—",
+      week52Low:   detail.fiftyTwoWeekLow?.raw != null ? "$" + Number(detail.fiftyTwoWeekLow.raw).toFixed(2) : "—",
+      week52High:  detail.fiftyTwoWeekHigh?.raw != null ? "$" + Number(detail.fiftyTwoWeekHigh.raw).toFixed(2) : "—",
+      employees:   profile.fullTimeEmployees ? Number(profile.fullTimeEmployees).toLocaleString() : "—",
       country:     profile.country || "—",
       website:     profile.website || null,
     };
+
     quoteCache[ticker] = data;
     return data;
   } catch (err) {
-    console.error("Quote fetch error for", ticker, ":", err);
+    // If anything breaks during the mapping process, it will loudly log here
+    console.error(`[Quote Fetch] Error mapping data for ${ticker}:`, err);
     return null;
   }
 }
