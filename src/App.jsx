@@ -202,212 +202,6 @@ function getAllTickers(data = CAPEX_DATA) {
   return [...new Set(data.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))];
 }
 
-// ── STARFIELD CANVAS ──────────────────────────────────────
-// PERF CHANGES vs previous version:
-//  1. Offscreen canvas: nebulae + static (dim) stars are rendered ONCE onto a
-//     separate canvas; each frame just does a single drawImage() for the whole
-//     background — eliminating 4× createRadialGradient + fillRect per frame.
-//  2. Only the small set of "bright" (layer-2) stars are redrawn per frame for
-//     twinkling; the 2/3 majority of dim stars are frozen in the bg canvas.
-//  3. Per-star createRadialGradient glow removed — was the single largest GPU
-//     cost; bright stars are now drawn as plain circles with a slightly larger
-//     soft radius instead.
-//  4. Star count reduced 320 → 200.
-//  5. Page-visibility API: animation loop is paused when the tab is hidden.
-//  6. Resize handler debounced so it doesn't thrash on every pixel.
-function StarField() {
-  const canvasRef = useRef(null);
-
-  useEffect(() => {
-    const canvas = canvasRef.current;
-    if (!canvas) return;
-    const ctx = canvas.getContext("2d");
-    let animId = null;
-    let W = 0, H = 0;
-
-    // Offscreen canvas — redrawn only on mount/resize
-    const bgCanvas = new OffscreenCanvas(1, 1);
-    const bgCtx = bgCanvas.getContext("2d");
-
-    const STAR_COUNT = 200;
-    const stars = [];
-    const shooters = [];
-
-    function rand(a, b) { return a + Math.random() * (b - a); }
-
-    function initStars() {
-      stars.length = 0;
-      for (let i = 0; i < STAR_COUNT; i++) {
-        stars.push({
-          x: Math.random() * W,
-          y: Math.random() * H,
-          r: rand(0.2, 1.8),
-          alpha: rand(0.15, 0.9),
-          twinkleSpeed: rand(0.003, 0.012),
-          twinkleDir: Math.random() > 0.5 ? 1 : -1,
-          layer: Math.floor(Math.random() * 3), // 0=warm-dim, 1=blue-dim, 2=bright-twinkle
-        });
-      }
-    }
-
-    // Render static background: nebulae + layers 0 & 1 stars
-    function buildBackground() {
-      bgCanvas.width = W;
-      bgCanvas.height = H;
-
-      // Deep-space base gradient
-      const bg = bgCtx.createRadialGradient(W * 0.5, H * 0.3, 0, W * 0.5, H * 0.3, W * 0.8);
-      bg.addColorStop(0, "rgba(10,6,30,1)");
-      bg.addColorStop(0.4, "rgba(4,4,20,1)");
-      bg.addColorStop(1, "rgba(1,1,10,1)");
-      bgCtx.fillStyle = bg;
-      bgCtx.fillRect(0, 0, W, H);
-
-      // Nebula 1 — blue/purple
-      const neb1 = bgCtx.createRadialGradient(W * 0.25, H * 0.2, 0, W * 0.25, H * 0.2, W * 0.45);
-      neb1.addColorStop(0, "rgba(59,76,180,0.10)");
-      neb1.addColorStop(0.5, "rgba(80,40,160,0.05)");
-      neb1.addColorStop(1, "rgba(0,0,0,0)");
-      bgCtx.fillStyle = neb1;
-      bgCtx.fillRect(0, 0, W, H);
-
-      // Nebula 2 — teal
-      const neb2 = bgCtx.createRadialGradient(W * 0.78, H * 0.55, 0, W * 0.78, H * 0.55, W * 0.38);
-      neb2.addColorStop(0, "rgba(20,100,120,0.09)");
-      neb2.addColorStop(0.6, "rgba(10,60,90,0.04)");
-      neb2.addColorStop(1, "rgba(0,0,0,0)");
-      bgCtx.fillStyle = neb2;
-      bgCtx.fillRect(0, 0, W, H);
-
-      // Nebula 3 — amber (echoes the $600B gold box)
-      const neb3 = bgCtx.createRadialGradient(W * 0.5, H * 0.1, 0, W * 0.5, H * 0.1, W * 0.3);
-      neb3.addColorStop(0, "rgba(120,80,20,0.07)");
-      neb3.addColorStop(1, "rgba(0,0,0,0)");
-      bgCtx.fillStyle = neb3;
-      bgCtx.fillRect(0, 0, W, H);
-
-      // Bake dim stars (layers 0 & 1) into the bg — never redrawn
-      for (const s of stars) {
-        if (s.layer === 2) continue;
-        bgCtx.beginPath();
-        bgCtx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-        bgCtx.fillStyle = s.layer === 1
-          ? `rgba(180,210,255,${s.alpha})`
-          : `rgba(255,248,230,${s.alpha})`;
-        bgCtx.fill();
-      }
-    }
-
-    function spawnShooter() {
-      shooters.push({
-        x: rand(W * 0.1, W * 0.9), y: rand(0, H * 0.4),
-        vx: rand(4, 9), vy: rand(1.5, 4),
-        len: rand(80, 180), alpha: 1,
-        fade: rand(0.012, 0.025),
-      });
-    }
-
-    function draw() {
-      // Stamp static background in one cheap blit
-      ctx.drawImage(bgCanvas, 0, 0);
-
-      // Twinkle only the bright layer-2 stars (~67 stars at count=200)
-      for (const s of stars) {
-        if (s.layer !== 2) continue;
-        s.alpha += s.twinkleSpeed * s.twinkleDir;
-        if (s.alpha >= 0.95) { s.alpha = 0.95; s.twinkleDir = -1; }
-        if (s.alpha <= 0.10) { s.alpha = 0.10; s.twinkleDir =  1; }
-        // Soft double-circle instead of createRadialGradient — ~10× cheaper
-        if (s.r > 1.2) {
-          ctx.beginPath();
-          ctx.arc(s.x, s.y, s.r * 2.5, 0, Math.PI * 2);
-          ctx.fillStyle = `rgba(160,200,255,${s.alpha * 0.12})`;
-          ctx.fill();
-        }
-        ctx.beginPath();
-        ctx.arc(s.x, s.y, s.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(200,220,255,${s.alpha})`;
-        ctx.fill();
-      }
-
-      // Shooting stars (rare — gradient cost is negligible here)
-      for (let i = shooters.length - 1; i >= 0; i--) {
-        const s = shooters[i];
-        ctx.save();
-        ctx.globalAlpha = s.alpha;
-        const tx = s.x - s.vx * (s.len / 8);
-        const ty = s.y - s.vy * (s.len / 8);
-        const grad = ctx.createLinearGradient(s.x, s.y, tx, ty);
-        grad.addColorStop(0, "rgba(255,255,255,0.95)");
-        grad.addColorStop(0.3, "rgba(180,210,255,0.5)");
-        grad.addColorStop(1, "rgba(100,150,255,0)");
-        ctx.strokeStyle = grad;
-        ctx.lineWidth = 1.5;
-        ctx.beginPath();
-        ctx.moveTo(s.x, s.y);
-        ctx.lineTo(tx, ty);
-        ctx.stroke();
-        ctx.restore();
-        s.x += s.vx; s.y += s.vy; s.alpha -= s.fade;
-        if (s.alpha <= 0 || s.x > W + 100 || s.y > H + 100) shooters.splice(i, 1);
-      }
-
-      animId = requestAnimationFrame(draw);
-    }
-
-    function start() {
-      if (!animId) animId = requestAnimationFrame(draw);
-    }
-    function stop() {
-      if (animId) { cancelAnimationFrame(animId); animId = null; }
-    }
-
-    // Pause when tab hidden — saves CPU/GPU when user switches away
-    function onVisibility() { document.hidden ? stop() : start(); }
-
-    // Debounced resize — avoid thrashing on every pixel during window drag
-    let resizeTimer = null;
-    function onResize() {
-      clearTimeout(resizeTimer);
-      resizeTimer = setTimeout(() => {
-        W = canvas.width = window.innerWidth;
-        H = canvas.height = window.innerHeight;
-        initStars();
-        buildBackground();
-      }, 150);
-    }
-
-    // Initial setup
-    W = canvas.width = window.innerWidth;
-    H = canvas.height = window.innerHeight;
-    initStars();
-    buildBackground();
-    start();
-
-    const shootInterval = setInterval(() => {
-      if (!document.hidden && Math.random() < 0.6) spawnShooter();
-    }, 2800);
-
-    document.addEventListener("visibilitychange", onVisibility);
-    window.addEventListener("resize", onResize);
-
-    return () => {
-      stop();
-      clearInterval(shootInterval);
-      clearTimeout(resizeTimer);
-      document.removeEventListener("visibilitychange", onVisibility);
-      window.removeEventListener("resize", onResize);
-    };
-  }, []);
-
-  return (
-    <canvas ref={canvasRef} style={{
-      position: "fixed", top: 0, left: 0, width: "100%", height: "100%",
-      pointerEvents: "none", zIndex: 0,
-    }} />
-  );
-}
-
 // ── BADGE ─────────────────────────────────────────────────
 // memo: pure display, never needs to re-render
 const Badge = memo(function Badge({ text, color }) {
@@ -1211,17 +1005,16 @@ export default function App() {
   const styles = `
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap');
     * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { background: #04020e; }
+    html, body { background: #121212; }
     ::-webkit-scrollbar { width: 5px; height: 5px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.08); border-radius: 3px; }
     @keyframes scroll-left { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
     @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes pulseDot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(.7); } }
-    @keyframes glowPulse { 0%,100% { box-shadow: 0 0 60px rgba(251,191,36,.12), 0 0 120px rgba(251,191,36,.06); } 50% { box-shadow: 0 0 80px rgba(251,191,36,.2), 0 0 160px rgba(251,191,36,.1); } }
     .ticker-tape { animation: scroll-left 80s linear infinite; white-space: nowrap; display: inline-flex; gap: 24px; }
     .pulse { animation: pulseDot 2s infinite; }
-    .capex-box { animation: glowPulse 4s ease-in-out infinite; }
+    .capex-box { /* animation removed */ }
 
     /* ── MOBILE ───────────────────────────────────────────── */
     @media (max-width: 640px) {
@@ -1236,18 +1029,6 @@ export default function App() {
       .header-controls { gap: 8px !important; }
     }
   `;
-
-  return (
-    <>
-      <style>{styles}</style>
-      <StarField />
-
-      <div style={{
-        position: "relative", zIndex: 1,
-        minHeight: "100vh", color: "#fff",
-        fontFamily: "'DM Mono','Fira Code',monospace",
-      }}>
-
         {/* TICKER TAPE */}
         {tickerEntries.length > 0 && (
           <div style={{ overflow: "hidden", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(4,2,14,0.75)", padding: "6px 0" }}>
