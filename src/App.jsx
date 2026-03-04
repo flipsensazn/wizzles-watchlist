@@ -1029,6 +1029,17 @@ export default function App() {
       .header-controls { gap: 8px !important; }
     }
   `;
+
+  return (
+    <>
+      <style>{styles}</style>
+
+      <div style={{
+        position: "relative", zIndex: 1,
+        minHeight: "100vh", color: "#fff",
+        fontFamily: "'DM Mono','Fira Code',monospace",
+      }}>
+        
         {/* TICKER TAPE */}
         {tickerEntries.length > 0 && (
           <div style={{ overflow: "hidden", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(4,2,14,0.75)", padding: "6px 0" }}>
