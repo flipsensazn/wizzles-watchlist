@@ -19,48 +19,52 @@ async function fetchYahoo(ticker) {
   try {
     const encodedTicker = encodeURIComponent(ticker);
     const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodedTicker}?interval=1d&range=2d`;
-    const res = await fetch(url);
+    
+    // Cloudflare requires explicit headers to look like a browser to Yahoo
+    const res = await fetch(url, {
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+        "Accept": "application/json",
+        "Referer": "https://finance.yahoo.com/"
+      }
+    });
+
+    if (!res.ok) {
+        console.warn(`Yahoo returned status ${res.status} for ${ticker}`);
+        return { ticker, change: null, price: null };
+    }
+
     const data = await res.json();
     const result = data?.chart?.result?.[0];
     if (!result) return { ticker, change: null, price: null };
 
+    // Ensure we filter out nulls in case of missing trade data
     const closes = result.indicators.quote[0].close.filter(v => v !== null);
-    const prev = closes[closes.length - 2];
-    const curr = closes[closes.length - 1];
-
-    if (prev && curr) {
+    
+    if (closes.length >= 2) {
+      const prev = closes[closes.length - 2];
+      const curr = closes[closes.length - 1];
       return {
         ticker,
         change: parseFloat((((curr - prev) / prev) * 100).toFixed(2)),
         price: parseFloat(curr.toFixed(2)),
       };
     }
+    
+    // Fallback: If only one close exists, use the meta previousClose if available
+    const curr = closes[0];
+    const prev = result.meta.previousClose;
+    if (prev && curr) {
+        return {
+            ticker,
+            change: parseFloat((((curr - prev) / prev) * 100).toFixed(2)),
+            price: parseFloat(curr.toFixed(2)),
+        };
+    }
+
     return { ticker, change: null, price: null };
   } catch (err) {
     console.warn(`Yahoo fetch failed for ${ticker}:`, err);
-    return { ticker, change: null, price: null };
-  }
-}
-
-async function fetchFinnhub(ticker, apiKey) {
-  try {
-    const res = await fetch(
-      `https://finnhub.io/api/v1/quote?symbol=${ticker}&token=${apiKey}`
-    );
-    const quote = await res.json();
-    const change = quote.dp;
-    const price = quote.c;
-
-    if (change !== null && change !== undefined && !isNaN(change)) {
-      return {
-        ticker,
-        change: parseFloat(change.toFixed(2)),
-        price: parseFloat((price ?? 0).toFixed(2)),
-      };
-    }
-    return { ticker, change: null, price: null };
-  } catch (err) {
-    console.error(`Finnhub fetch failed for ${ticker}:`, err);
     return { ticker, change: null, price: null };
   }
 }
