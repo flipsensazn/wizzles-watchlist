@@ -903,7 +903,7 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
             const marketReturn = (r.defaultKeyStatistics?.['52WeekChange']?.raw || 0) * 100;
 
 // ── Asset Growth Calculation (YoY) ──
-// Yahoo sometimes nests these in .balanceSheetStatements or just an empty array
+console.log(History for ${ticker}:, r.balanceSheetHistory);
 const history = r.balanceSheetHistory?.balanceSheetStatements;
 let assetGrowth = 0;
 
