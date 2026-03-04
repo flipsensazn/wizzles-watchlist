@@ -903,23 +903,19 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
             const marketReturn = (r.defaultKeyStatistics?.['52WeekChange']?.raw || 0) * 100;
 
 // ── Asset Growth Calculation (YoY) ──
-// Yahoo nests this data differently depending on the ticker. 
-// We check all common locations: .balanceSheetStatements, .annual, or .all
 const bh = r.balanceSheetHistory;
-const history = bh?.balanceSheetStatements || bh?.annual || bh?.all || [];
+// The console shows data is in balanceSheetStatements
+const history = bh?.balanceSheetStatements || [];
 
 let assetGrowth = 0;
 
-// Log the structure to your browser console so we can see exactly what Yahoo sent
-console.log(`[Asset Debug] ${ticker} history:`, bh);
-
 if (Array.isArray(history) && history.length >= 2) {
-  // Extract total assets from the most recent and previous periods
+  // Accessing .raw specifically as required by the Yahoo data structure
   const currentAssets = history[0].totalAssets?.raw;
   const prevAssets = history[1].totalAssets?.raw;
 
-  // Only calculate if both numbers actually exist and aren't zero
-  if (currentAssets && prevAssets && prevAssets !== 0) {
+  // Only calculate if both numbers are present and valid
+  if (currentAssets != null && prevAssets != null && prevAssets !== 0) {
     assetGrowth = ((currentAssets - prevAssets) / prevAssets) * 100;
   }
 }
