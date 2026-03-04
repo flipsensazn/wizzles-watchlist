@@ -877,14 +877,23 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newTicker, setNewTicker] = useState("");
+  // Use a ref to prevent overlapping fetches
+  const fetchIdRef = useRef(0);
 
   useEffect(() => {
+    const currentFetchId = ++fetchIdRef.current;
+    
     async function getFundamentals() {
-      setLoading(true);
+      // Only show the "Full Loading" state if we have no data yet
+      if (data.length === 0) setLoading(true);
+
       const results = await Promise.all(
         scannerPool.map(async (ticker) => {
           try {
             const res = await fetch(`/quote?ticker=${ticker}`);
+            // If the request took too long and a new fetch started, ignore this result
+            if (currentFetchId !== fetchIdRef.current) return null;
+            
             const json = await res.json();
             const r = json?.quoteSummary?.result?.[0];
             if (!r) return null;
@@ -896,19 +905,26 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
 
             const fcfYield = (fcf / marketCap) * 100;
             const bookToMarket = pb > 0 ? (1 / pb) : 0;
-            
-            // SCORE CALCULATION
             const score = (fcfYield * 2) + (roa * 100) + (bookToMarket * 10);
 
-            return { ticker, fcfYield, roa: roa * 100, bookToMarket, score, change: prices[ticker] };
-          } catch { return null; }
+            return { ticker, fcfYield, roa: roa * 100, bookToMarket, score };
+          } catch (err) {
+            console.error(`Error fetching ${ticker}:`, err);
+            return null; 
+          }
         })
       );
-      setData(results.filter(x => x !== null).sort((a, b) => b.score - a.score));
-      setLoading(false);
+
+      // Only update state if this is still the latest fetch request
+      if (currentFetchId === fetchIdRef.current) {
+        const validResults = results.filter(x => x !== null);
+        setData(validResults.sort((a, b) => b.score - a.score));
+        setLoading(false);
+      }
     }
+
     getFundamentals();
-  }, [prices, scannerPool]);
+  }, [scannerPool]); // REMOVED 'prices' from here to stop the loading loop
 
   const addTicker = () => {
     const sym = newTicker.trim().toUpperCase();
@@ -922,11 +938,10 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
     setScannerPool(scannerPool.filter(t => t !== ticker));
   };
 
-  // SCORE COLOR LOGIC
   const getScoreColor = (score) => {
-    if (score > 25) return "#34d399"; // Strong Green
-    if (score > 10) return "#fbbf24"; // Amber/Yellow
-    return "#f87171"; // Red
+    if (score > 25) return "#34d399";
+    if (score > 10) return "#fbbf24";
+    return "#f87171";
   };
 
   return (
@@ -962,23 +977,29 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
           </thead>
           <tbody>
             {loading ? <tr><td colSpan="6" style={{ padding: 20, color: "#475569" }}>Updating fundamentals...</td></tr> : 
-             data.map((stock) => (
-              <tr key={stock.ticker} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
-                <td onClick={(e) => onTickerClick(stock.ticker, e.currentTarget.getBoundingClientRect())} style={{ padding: "12px 8px", cursor: "pointer" }}>
-                  <div style={{ fontWeight: 700, color: "#f1f5f9" }}>{stock.ticker}</div>
-                  <div style={{ fontSize: 10, color: (stock.change >= 0 ? "#34d399" : "#f87171") }}>{stock.change >= 0 ? "+" : ""}{stock.change}%</div>
-                </td>
-                <td style={{ padding: "12px 8px" }}>{stock.fcfYield.toFixed(2)}%</td>
-                <td style={{ padding: "12px 8px" }}>{stock.roa.toFixed(2)}%</td>
-                <td style={{ padding: "12px 8px" }}>{stock.bookToMarket.toFixed(2)}</td>
-                <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(stock.score), textShadow: `0 0 10px ${getScoreColor(stock.score)}44` }}>
-                  {stock.score.toFixed(1)}
-                </td>
-                <td style={{ textAlign: "right" }}>
-                  <button onClick={() => removeTicker(stock.ticker)} style={{ background: "none", border: "none", color: "#334155", cursor: "pointer", fontSize: 16 }}>×</button>
-                </td>
-              </tr>
-            ))}
+             data.map((stock) => {
+              const currentPriceData = prices[stock.ticker];
+              const change = currentPriceData?.change ?? currentPriceData;
+              return (
+                <tr key={stock.ticker} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
+                  <td onClick={(e) => onTickerClick(stock.ticker, e.currentTarget.getBoundingClientRect())} style={{ padding: "12px 8px", cursor: "pointer" }}>
+                    <div style={{ fontWeight: 700, color: "#f1f5f9" }}>{stock.ticker}</div>
+                    <div style={{ fontSize: 10, color: (change >= 0 ? "#34d399" : "#f87171") }}>
+                        {change !== undefined ? `${change >= 0 ? "+" : ""}${change}%` : "—"}
+                    </div>
+                  </td>
+                  <td style={{ padding: "12px 8px" }}>{stock.fcfYield.toFixed(2)}%</td>
+                  <td style={{ padding: "12px 8px" }}>{stock.roa.toFixed(2)}%</td>
+                  <td style={{ padding: "12px 8px" }}>{stock.bookToMarket.toFixed(2)}</td>
+                  <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(stock.score), textShadow: `0 0 10px ${getScoreColor(stock.score)}44` }}>
+                    {stock.score.toFixed(1)}
+                  </td>
+                  <td style={{ textAlign: "right" }}>
+                    <button onClick={() => removeTicker(stock.ticker)} style={{ background: "none", border: "none", color: "#334155", cursor: "pointer", fontSize: 16 }}>×</button>
+                  </td>
+                </tr>
+              );
+             })}
           </tbody>
         </table>
       </div>
