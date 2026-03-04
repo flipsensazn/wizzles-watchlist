@@ -873,7 +873,6 @@ function Watchlist({ prices, capexData }) {
 }
 
 // ── MULTIBAGGER PANEL ─────────────────────────────────────
-// ── MULTIBAGGER PANEL ─────────────────────────────────────
 function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -904,18 +903,17 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
 
 // ── Asset Growth Calculation (YoY) ──
 const bh = r.balanceSheetHistory;
-// The console shows data is in balanceSheetStatements
-const history = bh?.balanceSheetStatements || [];
+const history = bh?.balanceSheetStatements || bh?.all || [];
 
 let assetGrowth = 0;
 
 if (Array.isArray(history) && history.length >= 2) {
-  // Accessing .raw specifically as required by the Yahoo data structure
-  const currentAssets = history[0].totalAssets?.raw;
-  const prevAssets = history[1].totalAssets?.raw;
+  // Try different common paths for the numeric value
+  const currentAssets = history[0].totalAssets?.raw || history[0].totalAssets;
+  const prevAssets = history[1].totalAssets?.raw || history[1].totalAssets;
 
-  // Only calculate if both numbers are present and valid
-  if (currentAssets != null && prevAssets != null && prevAssets !== 0) {
+  // Ensure we have valid numbers before calculating
+  if (typeof currentAssets === 'number' && typeof prevAssets === 'number' && prevAssets !== 0) {
     assetGrowth = ((currentAssets - prevAssets) / prevAssets) * 100;
   }
 }
