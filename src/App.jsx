@@ -902,22 +902,32 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
             // Market Return (52 Week Price Change)
             const marketReturn = (r.defaultKeyStatistics?.['52WeekChange']?.raw || 0) * 100;
 
-            // Asset Growth Calculation (YoY)
-            const history = r.balanceSheetHistory?.balanceSheetStatements || 
-                            r.balanceSheetHistory?.all || [];
-                
-            let assetGrowth = 0;
+// ── Asset Growth Calculation (YoY) ──
+// Yahoo sometimes nests these in .balanceSheetStatements or just an empty array
+const history = r.balanceSheetHistory?.balanceSheetStatements;
+let assetGrowth = 0;
 
-            if (history && history.length >= 2) {
-              const currentAssets = history[0].totalAssets?.raw || 0;
-              const prevAssets = history[1].totalAssets?.raw || 0;
-            if (currentAssets > 0 && prevAssets > 0) {
-              assetGrowth = ((currentAssets - prevAssets) / prevAssets) * 100;
-            } else {
-              assetGrowth = 0;
-            }
-          }
+// Check if we have at least two years of data to compare
+if (Array.isArray(history) && history.length >= 2) {
+  const currentAssets = history[0].totalAssets?.raw;
+  const prevAssets = history[1].totalAssets?.raw;
 
+  // Ensure both values exist and aren't zero
+  if (currentAssets && prevAssets) {
+    assetGrowth = ((currentAssets - prevAssets) / prevAssets) * 100;
+  }
+} else {
+    // FALLBACK: If annual history is missing, try to find it in the 'all' key 
+    // which some Yahoo API versions use
+    const altHistory = r.balanceSheetHistory?.all;
+    if (Array.isArray(altHistory) && altHistory.length >= 2) {
+        const currentAssets = altHistory[0].totalAssets?.raw;
+        const prevAssets = altHistory[1].totalAssets?.raw;
+        if (currentAssets && prevAssets) {
+            assetGrowth = ((currentAssets - prevAssets) / prevAssets) * 100;
+        }
+    }
+}
             const fcfYield = (fcf / marketCap) * 100;
             const bookToMarket = pb > 0 ? (1 / pb) : 0;
             
