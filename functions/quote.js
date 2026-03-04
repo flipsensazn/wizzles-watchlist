@@ -13,6 +13,7 @@ export async function onRequest(context) {
   }
 
   const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+  const FISCALAI_KEY = context.env.FISCALAI_KEY;
 
   try {
     const cookieRes = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": USER_AGENT } });
@@ -24,14 +25,31 @@ export async function onRequest(context) {
     });
     const crumb = await crumbRes.text();
 
-    // ADDED: balanceSheetHistory for Asset Growth
-    const modules = "assetProfile,summaryDetail,price,financialData,defaultKeyStatistics,balanceSheetHistory";
-    const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${modules}&crumb=${crumb}`;
+    // 1. YAHOO FETCH (Removed the broken balanceSheetHistory module)
+    const modules = "assetProfile,summaryDetail,price,financialData,defaultKeyStatistics";
+    const yahooUrl = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${modules}&crumb=${crumb}`;
     
-    const res = await fetch(url, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } });
-    const data = await res.json();
+    const yahooPromise = fetch(yahooUrl, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } })
+      .then(res => res.json());
 
-    return new Response(JSON.stringify(data), { status: 200, headers });
+    // 2. FISCAL.AI FETCH (Standardized Annual Balance Sheet)
+    let fiscalPromise = Promise.resolve(null);
+    if (FISCALAI_KEY) {
+      const fiscalUrl = `https://api.fiscal.ai/v1/company/financials/balance-sheet/standardized?ticker=${ticker}&periodType=annual`;
+      fiscalPromise = fetch(fiscalUrl, {
+        headers: { "X-Api-Key": FISCALAI_KEY }
+      }).then(res => res.ok ? res.json() : null).catch(() => null);
+    }
+
+    // Await both APIs concurrently
+    const [yahooData, fiscalData] = await Promise.all([yahooPromise, fiscalPromise]);
+
+    // Merge into one clean JSON payload
+    return new Response(JSON.stringify({
+      quoteSummary: yahooData.quoteSummary,
+      fiscalai: fiscalData
+    }), { status: 200, headers });
+
   } catch (err) {
     return new Response(JSON.stringify({ error: "Fetch failed" }), { status: 500, headers });
   }
