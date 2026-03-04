@@ -1050,7 +1050,7 @@ useEffect(() => {
       if (!document.hidden) {
         refresh();
       }
-    }, 30000); 
+    }, 15000); 
     return () => clearInterval(id);
   }, [refresh]);
 
