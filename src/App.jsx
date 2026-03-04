@@ -5,8 +5,6 @@ const INDEX_TICKERS = ["^GSPC", "^DJI", "^IXIC"];
 const CRYPTO_TICKERS = ["BTC-USD", "ETH-USD", "XRP-USD"];
 const HYPERSCALER_TICKERS = ["AMZN", "MSFT", "GOOG", "META", "ORCL"];
 
-const [history, setHistory] = useState({});
-
 async function fetchLivePrices(tickers) {
   try {
     const res = await fetch(`/.netlify/functions/prices?tickers=${tickers.join(",")}`);
