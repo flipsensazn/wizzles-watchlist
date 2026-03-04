@@ -890,10 +890,13 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
             if (currentFetchId !== fetchIdRef.current) return null;
             const json = await res.json();
             
-            // Extract the merged data
+            // Extract the merged data ONCE
             const r = json?.quoteSummary?.result?.[0];
             const fData = json?.fiscalai;
             
+            // Debug line placed right after extraction
+            console.log(`[Fiscal.ai Debug for ${ticker}]:`, fData);
+
             if (!r) return null;
 
             // Metrics Extraction (Yahoo)
@@ -904,27 +907,14 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
             const marketReturn = (r.defaultKeyStatistics?.['52WeekChange']?.raw || 0) * 100;
 
             // ── ASSET GROWTH via Fiscal.ai ──
-            // Extract the merged data
-            const r = json?.quoteSummary?.result?.[0];
-            const fData = json?.fiscalai;
-            
-            // --- ADD THIS LINE TO DEBUG ---
-            console.log(`[Fiscal.ai Debug for ${ticker}]:`, fData);
-            // ------------------------------
-
-            if (!r) return null;
-            
             let assetGrowth = 0;
             
             if (fData && fData.data && fData.data.length >= 2) {
-              // Dynamically find the exact ID Fiscal.ai uses for Total Assets
               const taMetric = fData.metrics?.find(m => 
                 m.metricName && m.metricName.toLowerCase().includes("total assets")
               );
-              // Fallback to strict naming convention just in case
               const taId = taMetric ? taMetric.standardizedMetricId : "balance_sheet_total_assets";
               
-              // Sort by reportDate to guarantee Index 0 is the newest year
               const sortedData = [...fData.data].sort((a, b) => new Date(b.reportDate) - new Date(a.reportDate));
 
               const currentAssets = sortedData[0].metricsValues[taId]?.value;
@@ -938,7 +928,6 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
             const fcfYield = (fcf / marketCap) * 100;
             const bookToMarket = pb > 0 ? (1 / pb) : 0;
             
-            // Score Calculation
             const score = (fcfYield * 10) + (bookToMarket * 20) + (roa * 2) + (assetGrowth * 1) + (marketReturn * 0.5);
 
             return { ticker, fcfYield, roa, bookToMarket, assetGrowth, marketReturn, score };
