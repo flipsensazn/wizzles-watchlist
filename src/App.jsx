@@ -1025,20 +1025,6 @@ export default function App() {
         fontFamily: "'DM Mono','Fira Code',monospace",
       }}>
 
-        {/* TICKER TAPE */}
-        {tickerEntries.length > 0 && (
-          <div style={{ overflow: "hidden", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(4,2,14,0.75)", padding: "6px 0" }}>
-            <div className="ticker-tape">
-              {[...tickerEntries, ...tickerEntries].map(([sym, chg], i) => (
-                <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#64748b", fontSize: 11 }}>
-                  <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{sym}</span>
-                  <span style={{ color: chg >= 0 ? "#34d399" : "#f87171" }}>{chg >= 0 ? "▲" : "▼"} {Math.abs(chg).toFixed(2)}%</span>
-                </span>
-              ))}
-            </div>
-          </div>
-        )}
-
         {/* HEADER */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(4,2,14,0.6)", flexWrap: "wrap", gap: 12 }}>
           <div>
