@@ -1,5 +1,5 @@
 let cache = { data: {}, timestamp: 0 };
-const CACHE_TTL = 15000; // 15 seconds
+const CACHE_TTL = 10000; // 10 seconds
 
 export async function onRequest(context) {
   const headers = {
