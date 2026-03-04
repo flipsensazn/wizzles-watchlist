@@ -44,8 +44,8 @@ const CAPEX_DATA = {
         { id: "gpu", label: "GPU & AI Accelerators", badge: null, tickers: ["NVDA","AMD","INTC"],
           materials: ["Cobalt","Tungsten","Silicon Wafer 300mm","HBM DRAM"] },
         { id: "memory", label: "Memory & Storage", badge: "HBM CRITICAL", badgeColor: "#f59e0b",
-          tickers: ["MU", "WDC", "SNDK"],
-          materials: ["HBM3e Stacks", "LPDDR5", "3D NAND Flash", "Silicon Wafer 300mm"] },
+          tickers: ["MU","WDC","SNDK"],
+          materials: ["HBM3e Stacks","LPDDR5","3D NAND Flash","Silicon Wafer 300mm"] },
         { id: "asic", label: "Custom ASICs & TPUs", badge: null, tickers: ["AVGO","MRVL","QCOM"],
           materials: ["Advanced Packaging CoWoS","HBM","EUV Photomasks"] },
         { id: "foundry", label: "Leading-Edge Foundry", badge: "CAPACITY CONSTRAINED", badgeColor: "#f59e0b",
@@ -126,13 +126,12 @@ const CAPEX_DATA = {
         { id: "neuro", label: "Neuromorphic & Edge AI", badge: "EARLY STAGE", badgeColor: "#c084fc",
           tickers: ["GTLB","OSS"], materials: ["Phase-Change Materials","Memristive Oxides","Hafnium Oxide"] },
         { id: "metals", label: "Precious Metals & Commodities", badge: "MACRO HEDGE", badgeColor: "#f59e0b",
-          tickers: ["USAS", "COPX", "SLV", "GLD", "NEM"],
+          tickers: ["USAS","COPX","SLV","GLD","NEM"],
           materials: [
             { name: "Gold", constraint: "Safe haven demand rising", color: "#f59e0b" },
             { name: "Silver", constraint: "Industrial + monetary demand", color: "#94a3b8" },
             { name: "Copper", constraint: "CRITICAL — AI grid buildout demand", color: "#fb923c" },
-  ]
-},
+          ] },
       ],
     },
   ],
@@ -160,23 +159,19 @@ function Sparkline({ data, color, width = 126, height = 44 }) {
       <span style={{ fontSize: 10, color: "#334155" }}>no history</span>
     </div>
   );
-
   const min = Math.min(...data);
   const max = Math.max(...data);
   const range = max - min || 1;
   const pad = 4;
-
   const points = data.map((v, i) => {
     const x = pad + (i / (data.length - 1)) * (width - pad * 2);
     const y = pad + ((max - v) / range) * (height - pad * 2);
     return `${x.toFixed(1)},${y.toFixed(1)}`;
   });
-
   const polyline = points.join(" ");
   const first = points[0].split(",");
   const last = points[points.length - 1].split(",");
   const gradId = `sg${color.replace(/[^a-zA-Z0-9]/g, "")}`;
-
   return (
     <svg width={width} height={height} style={{ display: "block" }}>
       <defs>
@@ -185,26 +180,9 @@ function Sparkline({ data, color, width = 126, height = 44 }) {
           <stop offset="100%" stopColor={color} stopOpacity="0.02" />
         </linearGradient>
       </defs>
-      <polyline
-        points={`${first[0]},${height - pad} ${polyline} ${last[0]},${height - pad}`}
-        fill={`url(#${gradId})`}
-        stroke="none"
-      />
-      <polyline
-        points={polyline}
-        fill="none"
-        stroke={color}
-        strokeWidth="1.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-      <circle
-        cx={last[0]} cy={last[1]}
-        r="2.5"
-        fill={color}
-        stroke="#0f172a"
-        strokeWidth="1.5"
-      />
+      <polyline points={`${first[0]},${height - pad} ${polyline} ${last[0]},${height - pad}`} fill={`url(#${gradId})`} stroke="none" />
+      <polyline points={polyline} fill="none" stroke={color} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx={last[0]} cy={last[1]} r="2.5" fill={color} stroke="#0f172a" strokeWidth="1.5" />
     </svg>
   );
 }
@@ -218,9 +196,8 @@ function MarketStrip({ data, tickers, labels, colors }) {
     if (ticker === "XRP-USD") return "$" + p.toFixed(3);
     return p.toLocaleString("en-US", { maximumFractionDigits: 2 });
   }
-
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: 8, justifyContent: "center", padding: "0 20px" }}>
+    <div className="market-strip" style={{ display: "flex", flexDirection: "column", gap: 8, justifyContent: "center", padding: "0 20px" }}>
       {tickers.map((ticker, i) => {
         const entry = data[ticker];
         const price = entry?.price;
@@ -229,10 +206,8 @@ function MarketStrip({ data, tickers, labels, colors }) {
         return (
           <div key={ticker} style={{
             display: "flex", flexDirection: "column", alignItems: "center",
-            padding: "8px 14px", borderRadius: 10, minWidth: 100,
-            background: "rgba(255,255,255,0.03)",
-            border: `1px solid ${colors[i]}22`,
-            transition: "border-color .2s",
+            padding: "8px 14px", borderRadius: 10, minWidth: 96,
+            background: "rgba(255,255,255,0.03)", border: `1px solid ${colors[i]}22`, transition: "border-color .2s",
           }}
             onMouseEnter={e => e.currentTarget.style.borderColor = colors[i] + "55"}
             onMouseLeave={e => e.currentTarget.style.borderColor = colors[i] + "22"}>
@@ -260,6 +235,7 @@ function TickerChip({ symbol, change, onRemove, history }) {
   const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
   const pos = change >= 0;
   const sparkColor = change === undefined ? "#475569" : change >= 0 ? "#34d399" : "#f87171";
+  const isTouchDevice = window.matchMedia("(hover: none)").matches;
 
   return (
     <div
@@ -274,11 +250,8 @@ function TickerChip({ symbol, change, onRemove, history }) {
       }}>
       <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{symbol}</span>
       {change !== undefined
-        ? <span style={{ fontSize: 11, fontWeight: 600, color: pos ? "#34d399" : "#f87171" }}>
-            {pos ? "+" : ""}{change}%
-          </span>
+        ? <span style={{ fontSize: 11, fontWeight: 600, color: pos ? "#34d399" : "#f87171" }}>{pos ? "+" : ""}{change}%</span>
         : <span style={{ fontSize: 11, color: "#475569" }}>…</span>}
-
       {hovered && onRemove && (
         <button onClick={e => { e.stopPropagation(); onRemove(); }} style={{
           position: "absolute", top: -6, right: -6, width: 16, height: 16,
@@ -288,14 +261,10 @@ function TickerChip({ symbol, change, onRemove, history }) {
           lineHeight: 1, padding: 0, fontFamily: "inherit",
         }}>×</button>
       )}
-
-      {hovered && (
+      {hovered && !isTouchDevice && (
         <div style={{
-          position: "fixed",
-          top: mousePos.y - 120,
-          left: mousePos.x - 75,
-          background: "#0f172a",
-          border: `1px solid ${sparkColor}44`,
+          position: "fixed", top: mousePos.y - 120, left: mousePos.x - 75,
+          background: "#0f172a", border: `1px solid ${sparkColor}44`,
           borderRadius: 10, padding: "10px 12px",
           pointerEvents: "none", zIndex: 2000,
           boxShadow: `0 8px 32px rgba(0,0,0,.6), 0 0 20px ${sparkColor}11`,
@@ -327,11 +296,7 @@ function SubsectorCard({ sub, prices, histories, onAddTicker, onRemoveTicker }) 
   const isHot = sub.badge === "HIGH DEMAND" || sub.badge === "RAPID GROWTH";
 
   function handleAdd() {
-    if (newTicker.trim()) {
-      onAddTicker(newTicker.trim());
-      setNewTicker("");
-      setAddingTicker(false);
-    }
+    if (newTicker.trim()) { onAddTicker(newTicker.trim()); setNewTicker(""); setAddingTicker(false); }
   }
 
   return (
@@ -347,17 +312,14 @@ function SubsectorCard({ sub, prices, histories, onAddTicker, onRemoveTicker }) 
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
         {sub.tickers.map(t => (
-          <TickerChip key={t} symbol={t} change={prices[t]}
-            history={histories?.[t]}
-            onRemove={() => onRemoveTicker(t)} />
+          <TickerChip key={t} symbol={t} change={prices[t]} history={histories?.[t]} onRemove={() => onRemoveTicker(t)} />
         ))}
       </div>
       {sub.materials?.length > 0 && (
         <div>
           <button onClick={() => setOpen(v => !v)} style={{
             background: "none", border: "none", color: "#64748b", fontSize: 11,
-            cursor: "pointer", display: "flex", alignItems: "center", gap: 5,
-            padding: 0, fontFamily: "inherit",
+            cursor: "pointer", display: "flex", alignItems: "center", gap: 5, padding: 0, fontFamily: "inherit",
           }}>
             <span style={{ display: "inline-block", transition: "transform .2s", transform: open ? "rotate(90deg)" : "rotate(0deg)" }}>▶</span>
             Raw Materials ({sub.materials.length})
@@ -389,21 +351,9 @@ function SubsectorCard({ sub, prices, histories, onAddTicker, onRemoveTicker }) 
               onChange={e => setNewTicker(e.target.value.toUpperCase())}
               onKeyDown={e => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") { setAddingTicker(false); setNewTicker(""); } }}
               placeholder="e.g. NVDA"
-              style={{
-                flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.15)",
-                borderRadius: 6, padding: "5px 8px", color: "#e2e8f0", fontSize: 12,
-                fontFamily: "inherit", outline: "none",
-              }} />
-            <button onClick={handleAdd} style={{
-              background: "rgba(96,165,250,0.15)", border: "1px solid rgba(96,165,250,0.3)",
-              color: "#60a5fa", borderRadius: 6, padding: "5px 10px", cursor: "pointer",
-              fontSize: 11, fontFamily: "inherit",
-            }}>✓</button>
-            <button onClick={() => { setAddingTicker(false); setNewTicker(""); }} style={{
-              background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)",
-              color: "#64748b", borderRadius: 6, padding: "5px 10px", cursor: "pointer",
-              fontSize: 11, fontFamily: "inherit",
-            }}>✕</button>
+              style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, padding: "5px 8px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit", outline: "none" }} />
+            <button onClick={handleAdd} style={{ background: "rgba(96,165,250,0.15)", border: "1px solid rgba(96,165,250,0.3)", color: "#60a5fa", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>✓</button>
+            <button onClick={() => { setAddingTicker(false); setNewTicker(""); }} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>✕</button>
           </div>
         )}
       </div>
@@ -451,7 +401,7 @@ function TrackPane({ track, prices, histories, onAddTicker, onRemoveTicker }) {
           {track.subsectors.length} sub-sectors · {track.subsectors.flatMap(s => s.tickers).length} tickers
         </span>
       </div>
-      <div style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(track.subsectors.length, 4)}, minmax(0,1fr))`, gap: 12 }}>
+      <div className="subsector-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(track.subsectors.length, 4)}, minmax(0,1fr))`, gap: 12 }}>
         {track.subsectors.map(sub => (
           <SubsectorCard key={sub.id} sub={sub} prices={prices} histories={histories}
             onAddTicker={(ticker) => onAddTicker(track.id, sub.id, ticker)}
@@ -546,11 +496,7 @@ function HeatMap({ prices, capexData, histories }) {
             )}
           </div>
           <div style={{ fontSize: 10, color: "#475569", marginBottom: 6 }}>{tooltip.track}</div>
-          <Sparkline
-            data={tooltip.history}
-            color={tooltip.change >= 0 ? "#34d399" : "#f87171"}
-            width={131} height={44}
-          />
+          <Sparkline data={tooltip.history} color={tooltip.change >= 0 ? "#34d399" : "#f87171"} width={131} height={44} />
           <div style={{ display: "flex", justifyContent: "space-between", marginTop: 4 }}>
             <span style={{ fontSize: 9, color: "#334155" }}>5D ago</span>
             <span style={{ fontSize: 9, color: "#334155" }}>today</span>
@@ -620,9 +566,7 @@ function DonutChart({ prices, capexData }) {
             <>
               <text x={cx} y={cy - 14} textAnchor="middle" fill={hov.track.color} fontSize="11" fontWeight="600">{hov.track.label.split(" ")[0]}</text>
               <text x={cx} y={cy + 6} textAnchor="middle" fill="#f1f5f9" fontSize="20" fontWeight="800">{hov.track.value}</text>
-              <text x={cx} y={cy + 24} textAnchor="middle" fill={hov.avg >= 0 ? "#34d399" : "#f87171"} fontSize="12">
-                avg {hov.avg >= 0 ? "+" : ""}{hov.avg.toFixed(1)}%
-              </text>
+              <text x={cx} y={cy + 24} textAnchor="middle" fill={hov.avg >= 0 ? "#34d399" : "#f87171"} fontSize="12">avg {hov.avg >= 0 ? "+" : ""}{hov.avg.toFixed(1)}%</text>
               <text x={cx} y={cy + 38} textAnchor="middle" fill="#475569" fontSize="10">{hov.tickerCount} tickers</text>
             </>
           ) : (
@@ -875,6 +819,50 @@ export default function App() {
         linear-gradient(90deg, rgba(255,255,255,.015) 1px, transparent 1px);
       background-size: 40px 40px;
     }
+
+    /* ── MOBILE ───────────────────────────────────────────── */
+    @media (max-width: 640px) {
+
+      /* Track cards: 2 columns */
+      .track-grid { grid-template-columns: repeat(2, minmax(0,1fr)) !important; }
+
+      /* Top node: stack vertically */
+      .top-node-layout {
+        flex-direction: column !important;
+        align-items: center !important;
+        gap: 12px !important;
+      }
+
+      /* Market strips: horizontal pill row */
+      .market-strip {
+        flex-direction: row !important;
+        flex-wrap: wrap !important;
+        justify-content: center !important;
+        padding: 0 8px !important;
+        gap: 8px !important;
+      }
+
+      /* Center box: full width */
+      .top-node-center {
+        width: 100% !important;
+        max-width: 100% !important;
+      }
+
+      /* $600B+ smaller on mobile */
+      .capex-number { font-size: 44px !important; }
+
+      /* Bottom panels: single column */
+      .bottom-grid { grid-template-columns: 1fr !important; }
+
+      /* Subsector pane: 1 column */
+      .subsector-grid { grid-template-columns: 1fr !important; }
+
+      /* Tighter main padding */
+      .main-content { padding: 16px 12px !important; }
+
+      /* Header controls: tighter gaps */
+      .header-controls { gap: 8px !important; }
+    }
   `;
 
   return (
@@ -910,7 +898,7 @@ export default function App() {
               AI Capex Flow Intelligence
             </div>
           </div>
-          <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+          <div className="header-controls" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
             <span className="pulse" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#64748b" }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#34d399", display: "inline-block" }} />
               {gainers} advancing
@@ -935,15 +923,15 @@ export default function App() {
               borderRadius: 8, color: "#64748b", padding: "5px 12px", cursor: "pointer",
               fontSize: 11, fontFamily: "inherit", opacity: refreshing ? 0.5 : 1,
             }}>
-              {refreshing ? "↻ syncing…" : `↻ refresh${lastUpdated ? " · " + lastUpdated : ""}`}
+              {refreshing ? "↻" : `↻${lastUpdated ? " · " + lastUpdated : ""}`}
             </button>
           </div>
         </div>
 
-        <div style={{ maxWidth: 1480, margin: "0 auto", padding: "28px 24px", display: "flex", flexDirection: "column", gap: 24 }}>
+        <div className="main-content" style={{ maxWidth: 1480, margin: "0 auto", padding: "28px 24px", display: "flex", flexDirection: "column", gap: 24 }}>
 
           {/* TOP NODE WITH FLANKING MARKET DATA */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div className="top-node-layout" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
 
             {/* LEFT — Indices */}
             <MarketStrip
@@ -954,7 +942,7 @@ export default function App() {
             />
 
             {/* CENTER — Top node */}
-            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "0 0 auto" }}>
+            <div className="top-node-center" style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "0 0 auto" }}>
               <div style={{
                 width: 480, borderRadius: 20, padding: "24px 28px", textAlign: "center",
                 background: "linear-gradient(135deg,rgba(251,191,36,.12) 0%,rgba(251,191,36,.03) 100%)",
@@ -962,7 +950,7 @@ export default function App() {
                 boxShadow: "0 0 60px rgba(251,191,36,.12),0 0 120px rgba(251,191,36,.06)",
               }}>
                 <div style={{ fontSize: 10, color: "rgba(251,191,36,.6)", letterSpacing: "0.35em", textTransform: "uppercase", marginBottom: 4 }}>Total Investment Flow</div>
-                <div style={{ fontSize: 64, color: "#fbbf24", lineHeight: 1, marginBottom: 4, fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.04em" }}>~$600B+</div>
+                <div className="capex-number" style={{ fontSize: 64, color: "#fbbf24", lineHeight: 1, marginBottom: 4, fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.04em" }}>~$600B+</div>
                 <div style={{ fontSize: 13, color: "#94a3b8", marginBottom: 16 }}>
                   Hyperscaler AI Capex <span style={{ color: "rgba(251,191,36,.7)" }}>(2026 Est.)</span>
                 </div>
@@ -980,20 +968,14 @@ export default function App() {
                       <div key={co} style={{
                         display: "flex", flexDirection: "column", alignItems: "center",
                         padding: "6px 12px", borderRadius: 8, minWidth: 72,
-                        background: "rgba(255,255,255,0.05)",
-                        border: "1px solid rgba(255,255,255,0.12)",
-                        transition: "border-color .2s",
+                        background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.12)", transition: "border-color .2s",
                       }}
                         onMouseEnter={e => e.currentTarget.style.borderColor = "rgba(251,191,36,0.4)"}
                         onMouseLeave={e => e.currentTarget.style.borderColor = "rgba(255,255,255,0.12)"}>
                         <span style={{ fontSize: 10, fontWeight: 800, color: "#fbbf24", letterSpacing: "0.1em", marginBottom: 2 }}>{co}</span>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: "#f1f5f9", fontFamily: "'DM Mono', monospace", marginBottom: 1 }}>
-                          {formatPrice(price)}
-                        </span>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "#f1f5f9", fontFamily: "'DM Mono', monospace", marginBottom: 1 }}>{formatPrice(price)}</span>
                         {change !== undefined && change !== null ? (
-                          <span style={{ fontSize: 10, fontWeight: 600, color: pos ? "#34d399" : "#f87171" }}>
-                            {pos ? "+" : ""}{change.toFixed(2)}%
-                          </span>
+                          <span style={{ fontSize: 10, fontWeight: 600, color: pos ? "#34d399" : "#f87171" }}>{pos ? "+" : ""}{change.toFixed(2)}%</span>
                         ) : (
                           <span style={{ fontSize: 10, color: "#334155" }}>—</span>
                         )}
@@ -1020,7 +1002,7 @@ export default function App() {
           </div>
 
           {/* TRACK CARDS */}
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(0,1fr))", gap: 10, paddingTop: 8 }}>
+          <div className="track-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(0,1fr))", gap: 10, paddingTop: 8 }}>
             {capexData.tracks.map(track => (
               <div key={track.id} style={{ paddingTop: activeTrack === track.id ? 14 : 0 }}>
                 <TrackCard track={track} isActive={activeTrack === track.id}
@@ -1046,7 +1028,7 @@ export default function App() {
               {[
                 { id: "all", label: "⬛ All Panels" },
                 { id: "heatmap", label: "📊 Heat Map" },
-                { id: "donut", label: "🥧 Sector Allocation" },
+                { id: "donut", label: "🥧 Allocation" },
                 { id: "watchlist", label: "👁 Watchlist" },
               ].map(tab => (
                 <button key={tab.id} onClick={() => setBottomTab(tab.id)} style={{
@@ -1058,7 +1040,7 @@ export default function App() {
               ))}
             </div>
             {bottomTab === "all" ? (
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+              <div className="bottom-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
                 <div style={{ gridColumn: "1/-1" }}><HeatMap prices={prices} capexData={capexData} histories={history} /></div>
                 <DonutChart prices={prices} capexData={capexData} />
                 <Watchlist prices={prices} capexData={capexData} />
