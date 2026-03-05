@@ -1254,7 +1254,7 @@ const styles = `
     .ticker-tape { animation: scroll-left 80s linear infinite; white-space: nowrap; display: inline-flex; gap: 24px; }
     .pulse { animation: pulseDot 2s infinite; }
 
-    /* ── CUSTOM DESKTOP GRID ───────────────────────────────── */
+/* ── CUSTOM DESKTOP GRID ───────────────────────────────── */
     .bottom-grid-all {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -1262,11 +1262,24 @@ const styles = `
     }
     .span-2 { grid-column: span 2; }
     .span-1 { grid-column: span 1; }
+    
+    .watchlist-wrapper {
+      position: relative;
+      height: 100%;
+    }
+    .watchlist-inner {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+    }
 
     /* ── TABLET / SMALL DESKTOP ───────────────────────────────── */
     @media (max-width: 1024px) {
       .bottom-grid-all { grid-template-columns: 1fr !important; }
       .span-2, .span-1 { grid-column: 1 / -1 !important; }
+      
+      /* Release the absolute position when stacked into a single column */
+      .watchlist-wrapper { min-height: 450px; }
+      .watchlist-inner { position: relative; height: 100%; }
     }
 
     /* ── MOBILE ───────────────────────────────────────────── */
@@ -1418,7 +1431,7 @@ const styles = `
               onTickerClick={openPopup} />
           )}
 
-          {/* BOTTOM PANELS */}
+         {/* BOTTOM PANELS */}
           <div>
             <div style={{ display: "flex", gap: 4, marginBottom: 18, borderBottom: "1px solid rgba(255,255,255,.04)", paddingBottom: 4, flexWrap: "wrap" }}>
               {[
@@ -1436,20 +1449,28 @@ const styles = `
                 }}>{tab.label}</button>
               ))}
             </div>
+            
             {bottomTab === "all" ? (
-            <div className="bottom-grid-all">
-              <div className="span-2"><HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} /></div>
-              <div className="span-1"><Watchlist prices={prices} capexData={capexData} /></div>
-              <div className="span-1"><DonutChart prices={prices} capexData={capexData} /></div>
-              <div className="span-2">
-                <MultibaggerPanel prices={prices} scannerPool={scannerPool} setScannerPool={setScannerPool} onTickerClick={openPopup} />
+              <div className="bottom-grid-all">
+                <div className="span-2"><HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} /></div>
+                
+                {/* Watchlist constrained to HeatMap height via absolute positioning */}
+                <div className="span-1 watchlist-wrapper">
+                  <div className="watchlist-inner">
+                    <Watchlist prices={prices} capexData={capexData} />
+                  </div>
+                </div>
+
+                <div className="span-1"><DonutChart prices={prices} capexData={capexData} /></div>
+                <div className="span-2">
+                  <MultibaggerPanel prices={prices} scannerPool={scannerPool} setScannerPool={setScannerPool} onTickerClick={openPopup} />
+                </div>
               </div>
-            </div>
-          ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} />
-            : bottomTab === "donut" ? <DonutChart prices={prices} capexData={capexData} />
-            : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={capexData} />
-            : <MultibaggerPanel prices={prices} scannerPool={scannerPool} setScannerPool={setScannerPool} onTickerClick={openPopup} />
-          }
+            ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} />
+              : bottomTab === "donut" ? <DonutChart prices={prices} capexData={capexData} />
+              : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={capexData} />
+              : <MultibaggerPanel prices={prices} scannerPool={scannerPool} setScannerPool={setScannerPool} onTickerClick={openPopup} />
+            }
           </div>
 
           {/* FOOTER */}
