@@ -474,7 +474,9 @@ function MarketStrip({ data, tickers, labels, colors }) {
         const entry = data[ticker];
         const price = entry?.price;
         const change = entry?.change;
+        const session = entry?.session;
         const pos = (change ?? 0) >= 0;
+        const sessionLabel = session === "POST" ? "AH" : session === "PRE" ? "PM" : null;
         
         return (
           <div key={ticker} style={{
@@ -485,8 +487,11 @@ function MarketStrip({ data, tickers, labels, colors }) {
             onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}
             onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.05)"; }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: colors[i], letterSpacing: "0.05em", textTransform: "uppercase" }}>{labels[i]}</span>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span style={{ fontSize: 18, fontWeight: 700, color: "#e2e8f0" }}>{formatPrice(price, ticker)}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {sessionLabel && (
+                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: "#64748b", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, padding: "1px 5px" }}>{sessionLabel}</span>
+              )}
+              <span style={{ fontSize: 18, fontWeight: 700, color: "rgba(255,255,255,0.7)" }}>{formatPrice(price, ticker)}</span>
               {change !== undefined && change !== null ? (
                 <span style={{ fontSize: 14, fontWeight: 700, color: pos ? "#34d399" : "#f87171", display: "flex", alignItems: "center", gap: 4, width: 64, justifyContent: "flex-end" }}>
                   <span style={{ fontSize: 10 }}>{pos ? "▲" : "▼"}</span> {Math.abs(change).toFixed(2)}%
@@ -504,8 +509,10 @@ function MarketStrip({ data, tickers, labels, colors }) {
 const TickerChip = memo(function TickerChip({ symbol, changeData, onRemove, onTickerClick }) {
   const [hovered, setHovered] = useState(false);
   const change = changeData?.change ?? changeData;
+  const session = changeData?.session;
   const pos = (change ?? 0) >= 0;
   const changeColor = change === undefined ? "#475569" : pos ? "#34d399" : "#f87171";
+  const sessionLabel = session === "POST" ? "AH" : session === "PRE" ? "PM" : null;
 
   return (
     <div
@@ -519,6 +526,7 @@ const TickerChip = memo(function TickerChip({ symbol, changeData, onRemove, onTi
       }}>
       <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{symbol}</span>
       {change !== undefined ? <span style={{ fontSize: 11, fontWeight: 600, color: changeColor }}>{pos ? "+" : ""}{change}%</span> : <span style={{ fontSize: 11, color: "#475569" }}>…</span>}
+      {sessionLabel && <span style={{ fontSize: 8, fontWeight: 700, color: "#64748b", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 2, padding: "1px 3px", letterSpacing: "0.05em" }}>{sessionLabel}</span>}
       {/* Hide delete button if onRemove is not provided (User is not Admin) */}
       {hovered && onRemove && (
         <button
@@ -1403,9 +1411,11 @@ export default function App() {
             <div className="ticker-tape">
               {[...tickerEntries, ...tickerEntries].map(([sym, val], i) => {
                 const chg = val?.change ?? val;
+                const sessionLabel = val?.session === "POST" ? "AH" : val?.session === "PRE" ? "PM" : null;
                 return (
-                  <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#64748b", fontSize: 11 }}>
+                  <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "#64748b", fontSize: 11 }}>
                     <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{sym}</span>
+                    {sessionLabel && <span style={{ fontSize: 8, fontWeight: 700, color: "#475569", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 2, padding: "0px 3px" }}>{sessionLabel}</span>}
                     {chg !== undefined && <span style={{ color: chg >= 0 ? "#34d399" : "#f87171" }}>{chg >= 0 ? "▲" : "▼"} {Math.abs(chg).toFixed(2)}%</span>}
                   </span>
                 )
@@ -1458,10 +1468,14 @@ export default function App() {
                   {CAPEX_DATA.companies.map(co => {
                     const entry = marketData[co];
                     const pos = (entry?.change ?? 0) >= 0;
+                    const sessionLabel = entry?.session === "POST" ? "AH" : entry?.session === "PRE" ? "PM" : null;
                     return (
                       <div key={co} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 12px", borderRadius: 10, minWidth: 72, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", transition: "all .2s" }} onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(251,191,36,0.45)"; }} onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.09)"; }}>
-                        <span style={{ fontSize: 10, fontWeight: 800, color: "#fbbf24", letterSpacing: "0.1em", marginBottom: 2 }}>{co}</span>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: "#f1f5f9", marginBottom: 1 }}>{entry?.price ? "$" + entry.price.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: "#fbbf24", letterSpacing: "0.1em" }}>{co}</span>
+                          {sessionLabel && <span style={{ fontSize: 8, fontWeight: 700, color: "#64748b", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 2, padding: "1px 3px" }}>{sessionLabel}</span>}
+                        </div>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: sessionLabel ? "rgba(255,255,255,0.7)" : "#f1f5f9", marginBottom: 1 }}>{entry?.price ? "$" + entry.price.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"}</span>
                         {entry?.change !== undefined && entry?.change !== null ? <span style={{ fontSize: 10, fontWeight: 600, color: pos ? "#34d399" : "#f87171" }}>{pos ? "+" : ""}{entry.change.toFixed(2)}%</span> : <span style={{ fontSize: 10, color: "#334155" }}>—</span>}
                       </div>
                     );
