@@ -1216,12 +1216,17 @@ export default function App() {
     catch {}
   }, [capexData]);
 
-  const refresh = useCallback(async () => {
+const refresh = useCallback(async () => {
     setRefreshing(true);
+    
+    // Merge both the Capex Map tickers AND the Multibagger Scanner tickers
+    const allTickersToFetch = [...new Set([...getAllTickers(capexData), ...scannerPool])];
+
     const [newPrices, newMarket] = await Promise.all([
-      fetchLivePrices(getAllTickers(capexData)),
+      fetchLivePrices(allTickersToFetch),
       fetchMarketData(),
     ]);
+    
     setPrices(prev => ({ ...prev, ...newPrices }));
     setMarketData(prev => {
       const merged = { ...prev };
@@ -1236,7 +1241,7 @@ export default function App() {
     });
     setLastUpdated(new Date().toLocaleTimeString());
     setRefreshing(false);
-  }, [capexData]);
+  }, [capexData, scannerPool]); // <-- Added scannerPool to dependencies
 
   useEffect(() => {
     refresh();
