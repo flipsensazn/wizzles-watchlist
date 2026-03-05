@@ -1664,7 +1664,6 @@ export default function App() {
           </div>
         </div>
       </div>
-    </div>
       {popup && <CompanyPopup ticker={popup.ticker} change={popup.change} anchorRect={popup.rect} onClose={() => setPopup(null)} />}
       {showAdminModal && (
         <AdminModal
