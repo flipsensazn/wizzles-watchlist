@@ -26,24 +26,32 @@ export async function onRequest(context) {
 
     const modules = "assetProfile,summaryDetail,price,financialData,defaultKeyStatistics";
     
-    // Fetch both Quote Summary and 1-Month Chart History simultaneously
+    // Fetch Quote Summary, 1-Month Chart, AND Latest News simultaneously
     const quoteUrl = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${modules}&crumb=${crumb}`;
     const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1mo&interval=1d&crumb=${crumb}`;
+    const newsUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(ticker)}&quotesCount=0&newsCount=1&crumb=${crumb}`;
     
-    const [quoteRes, chartRes] = await Promise.all([
+    const [quoteRes, chartRes, newsRes] = await Promise.all([
       fetch(quoteUrl, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } }),
-      fetch(chartUrl, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } })
+      fetch(chartUrl, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } }),
+      fetch(newsUrl, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } })
     ]);
     
     const quoteData = await quoteRes.json();
     const chartData = await chartRes.json();
+    const newsData = await newsRes.json();
 
     // Merge responses into a single payload
     return new Response(JSON.stringify({
       quoteSummary: quoteData.quoteSummary,
-      chart: chartData.chart
+      chart: chartData.chart,
+      news: newsData?.news?.[0] || null // Extract the single latest news item
     }), { status: 200, headers });
 
+  } catch (err) {
+    return new Response(JSON.stringify({ error: "Fetch failed" }), { status: 500, headers });
+  }
+}
   } catch (err) {
     return new Response(JSON.stringify({ error: "Fetch failed" }), { status: 500, headers });
   }
