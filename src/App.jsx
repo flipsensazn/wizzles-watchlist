@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef, memo } from "react";
+import { useState, useEffect, useCallback, useRef, memo, useMemo } from "react";
 
 // ── MARKET DATA ───────────────────────────────────────────
 const INDEX_TICKERS = ["^GSPC", "^DJI", "^IXIC"];
@@ -13,21 +13,12 @@ const DEFAULT_MULTIBAGGER = [
   "RPD", "AKBA"
 ];
 
-async function fetchLivePrices(tickers) {
+// ── PRICE FETCHING ────────────────────────────────────────
+// Single unified fetch — callers pass ALL tickers they need and split the
+// result themselves. This replaces the old fetchLivePrices + fetchMarketData
+// pair which fired two separate HTTP round trips on every refresh.
+async function fetchAllPrices(tickers) {
   try {
-    const res = await fetch(`/prices?tickers=${tickers.join(",")}`);
-    const json = await res.json();
-    const prices = {};
-    Object.entries(json.data ?? {}).forEach(([ticker, val]) => { prices[ticker] = val; });
-    return prices;
-  } catch (err) {
-    return {};
-  }
-}
-
-async function fetchMarketData() {
-  try {
-    const tickers = [...INDEX_TICKERS, ...CRYPTO_TICKERS, ...HYPERSCALER_TICKERS];
     const res = await fetch(`/prices?tickers=${tickers.join(",")}`);
     const json = await res.json();
     return json.data ?? {};
@@ -36,9 +27,21 @@ async function fetchMarketData() {
   }
 }
 
+// ── SHARED UTILITIES ──────────────────────────────────────
+// Defined first so fetchQuoteSummary (and MultibaggerPanel) can both use it.
+function fmtMarketCap(n) {
+  if (n == null || isNaN(n)) return "—";
+  const num = Number(n);
+  if (num >= 1e12) return "$" + (num / 1e12).toFixed(2) + "T";
+  if (num >= 1e9)  return "$" + (num / 1e9).toFixed(2) + "B";
+  if (num >= 1e6)  return "$" + (num / 1e6).toFixed(2) + "M";
+  return "$" + num.toLocaleString();
+}
+
 // ── QUOTE SUMMARY (for company popup) ────────────────────
 const quoteCache = {};
 const QUOTE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+const QUOTE_CACHE_MAX = 50; // max entries before evicting the oldest
 
 async function fetchQuoteSummary(ticker) {
   const now = Date.now();
@@ -100,22 +103,17 @@ async function fetchQuoteSummary(ticker) {
                     } : null
     };
 
+    // Evict oldest entry if cache is at capacity
+    const cacheKeys = Object.keys(quoteCache);
+    if (cacheKeys.length >= QUOTE_CACHE_MAX) {
+      const oldest = cacheKeys.reduce((a, b) => quoteCache[a].timestamp < quoteCache[b].timestamp ? a : b);
+      delete quoteCache[oldest];
+    }
     quoteCache[ticker] = { data, timestamp: now }; // Store with timestamp
     return data;
   } catch (err) {
     return null;
   }
-}
-
-// ── SHARED UTILITIES ──────────────────────────────────────
-// Shared number formatter used by fetchQuoteSummary and MultibaggerPanel
-function fmtMarketCap(n) {
-  if (n == null || isNaN(n)) return "—";
-  const num = Number(n);
-  if (num >= 1e12) return "$" + (num / 1e12).toFixed(2) + "T";
-  if (num >= 1e9)  return "$" + (num / 1e9).toFixed(2) + "B";
-  if (num >= 1e6)  return "$" + (num / 1e6).toFixed(2) + "M";
-  return "$" + num.toLocaleString();
 }
 
 // ── DEFAULT CAPEX DATA ────────────────────────────────────
@@ -654,6 +652,14 @@ function TrackPane({ track, prices, isAdmin, onAddTicker, onRemoveTicker, onTick
 function HeatMap({ prices, capexData, onTickerClick }) {
   const [tooltip, setTooltip] = useState(null);
 
+  // Memoized: capexData changes rarely — no need to recompute cells on every price tick
+  const trackCells = useMemo(() =>
+    capexData.tracks.map(track => ({
+      track,
+      cells: [...new Set(track.subsectors.flatMap(s => s.tickers))],
+    })).filter(({ cells }) => cells.length > 0),
+  [capexData]);
+
   function getHeatColor(change) {
     if (typeof change !== 'number') return "rgba(255,255,255,0.04)";
     if (change >= 15) return "#064e3b";
@@ -675,9 +681,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
           <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>All tracked tickers · color = 1D performance</p>
         </div>
       </div>
-      {capexData.tracks.map(track => {
-        const cells = [...new Set(track.subsectors.flatMap(s => s.tickers))];
-        if (!cells.length) return null;
+      {trackCells.map(({ track, cells }) => {
         return (
           <div key={track.id} style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 10, color: track.color, letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 7, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
@@ -728,33 +732,47 @@ function HeatMap({ prices, capexData, onTickerClick }) {
 // ── DONUT CHART ───────────────────────────────────────────
 function DonutChart({ prices, capexData }) {
   const [hovered, setHovered] = useState(null);
-  const total = capexData.tracks.reduce((s, t) => s + (t.capex || 0), 0);
+  const total = useMemo(() => capexData.tracks.reduce((s, t) => s + (t.capex || 0), 0), [capexData]);
   const cx = 130, cy = 130, R = 90, r = 52;
-  let cumAngle = -Math.PI / 2;
 
-  const segments = capexData.tracks.map(track => {
-    const frac = (track.capex || 0) / total;
-    const angle = frac * 2 * Math.PI;
-    const startAngle = cumAngle;
-    cumAngle += angle;
-    const x1 = cx + R * Math.cos(startAngle), y1 = cy + R * Math.sin(startAngle);
-    const x2 = cx + R * Math.cos(startAngle + angle), y2 = cy + R * Math.sin(startAngle + angle);
-    const xi1 = cx + r * Math.cos(startAngle), yi1 = cy + r * Math.sin(startAngle);
-    const xi2 = cx + r * Math.cos(startAngle + angle), yi2 = cy + r * Math.sin(startAngle + angle);
-    const large = angle > Math.PI ? 1 : 0;
-    const tickers = [...new Set(track.subsectors.flatMap(s => s.tickers))];
-    const changes = tickers.map(t => prices[t]?.change ?? prices[t]).filter(v => typeof v === 'number');
-    const avg = changes.length ? changes.reduce((a, b) => a + b, 0) / changes.length : 0;
-    return { track, frac, avg, tickerCount: tickers.length, path: `M${x1} ${y1} A${R} ${R} 0 ${large} 1 ${x2} ${y2} L${xi2} ${yi2} A${r} ${r} 0 ${large} 0 ${xi1} ${yi1} Z` };
-  });
+  // Memoized: SVG path geometry only changes when capexData changes, not on every price tick.
+  // avg performance (which uses prices) is kept separate in trackPerf below.
+  const segmentShapes = useMemo(() => {
+    let cumAngle = -Math.PI / 2;
+    return capexData.tracks.map(track => {
+      const frac = (track.capex || 0) / total;
+      const angle = frac * 2 * Math.PI;
+      const startAngle = cumAngle;
+      cumAngle += angle;
+      const x1 = cx + R * Math.cos(startAngle), y1 = cy + R * Math.sin(startAngle);
+      const x2 = cx + R * Math.cos(startAngle + angle), y2 = cy + R * Math.sin(startAngle + angle);
+      const xi1 = cx + r * Math.cos(startAngle), yi1 = cy + r * Math.sin(startAngle);
+      const xi2 = cx + r * Math.cos(startAngle + angle), yi2 = cy + r * Math.sin(startAngle + angle);
+      const large = angle > Math.PI ? 1 : 0;
+      const tickerCount = new Set(track.subsectors.flatMap(s => s.tickers)).size;
+      return { track, frac, tickerCount, path: `M${x1} ${y1} A${R} ${R} 0 ${large} 1 ${x2} ${y2} L${xi2} ${yi2} A${r} ${r} 0 ${large} 0 ${xi1} ${yi1} Z` };
+    });
+  }, [capexData, total]);
+
+  // Memoized: avg performance changes with prices, so depends on both
+  const trackPerf = useMemo(() =>
+    capexData.tracks.map(track => {
+      const tickers = [...new Set(track.subsectors.flatMap(s => s.tickers))];
+      const changes = tickers.map(t => prices[t]?.change ?? prices[t]).filter(v => typeof v === 'number');
+      const avg = changes.length ? changes.reduce((a, b) => a + b, 0) / changes.length : 0;
+      return { ...track, avg };
+    }).sort((a, b) => b.avg - a.avg),
+  [capexData, prices]);
+
+  // Merge avg performance into segments for rendering
+  const segments = useMemo(() =>
+    segmentShapes.map(s => {
+      const perf = trackPerf.find(t => t.id === s.track.id);
+      return { ...s, avg: perf?.avg ?? 0 };
+    }),
+  [segmentShapes, trackPerf]);
 
   const hov = hovered ? segments.find(s => s.track.id === hovered) : null;
-  const trackPerf = capexData.tracks.map(track => {
-    const tickers = [...new Set(track.subsectors.flatMap(s => s.tickers))];
-    const changes = tickers.map(t => prices[t]?.change ?? prices[t]).filter(v => typeof v === 'number');
-    const avg = changes.length ? changes.reduce((a, b) => a + b, 0) / changes.length : 0;
-    return { ...track, avg };
-  }).sort((a, b) => b.avg - a.avg);
 
   return (
     <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20 }}>
@@ -819,14 +837,16 @@ function Watchlist({ prices, capexData, onTickerClick }) {
   const [sortDir, setSortDir] = useState("desc");
   const [filter, setFilter] = useState("all");
 
-  function getSector(ticker) {
+  // Memoized O(1) lookup map — replaces the O(n²) getSector linear search
+  const sectorMap = useMemo(() => {
+    const map = {};
     for (const track of capexData.tracks)
       for (const sub of track.subsectors)
-        if (sub.tickers.includes(ticker)) return track;
-    return null;
-  }
+        for (const t of sub.tickers) map[t] = track;
+    return map;
+  }, [capexData]);
 
-  const enriched = list.map(t => ({ ticker: t, change: prices[t]?.change ?? prices[t], track: getSector(t) }));
+  const enriched = list.map(t => ({ ticker: t, change: prices[t]?.change ?? prices[t], track: sectorMap[t] ?? null }));
   const filtered = filter === "all" ? enriched : filter === "gainers" ? enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) >= 0) : enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) < 0);
   const sorted = [...filtered].sort((a, b) => sortDir === "desc" ? ((typeof b.change === 'number' ? b.change : -999) - (typeof a.change === 'number' ? a.change : -999)) : ((typeof a.change === 'number' ? a.change : 999) - (typeof b.change === 'number' ? b.change : 999)));
   const validChanges = enriched.filter(x => typeof x.change === 'number');
@@ -1181,6 +1201,7 @@ export default function App() {
   
   const [activeTrack, setActiveTrack] = useState(null);
   const [prices, setPrices] = useState({});
+  const pricesRef = useRef({});  // ref so openPopup never needs to be recreated
   const [marketData, setMarketData] = useState({});
   const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -1200,26 +1221,28 @@ export default function App() {
       .catch(e => console.log("Capex fetch failed"));
   }, []);
 
+  // Reads from pricesRef (not prices state) so this callback is stable and
+  // never needs to be recreated when prices update, avoiding refresh() churn.
   const openPopup = useCallback((ticker, rect) => {
-    setPopup(prev => (prev?.ticker === ticker ? null : { ticker, change: prices[ticker]?.change ?? prices[ticker], rect }));
-  }, [prices]);
+    const change = pricesRef.current[ticker]?.change ?? pricesRef.current[ticker];
+    setPopup(prev => (prev?.ticker === ticker ? null : { ticker, change, rect }));
+  }, []); // stable — no deps needed
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
-    const allTickersToFetch = [...new Set([...getAllTickers(capexData), ...scannerPool])];
-    const [newPrices, newMarket] = await Promise.all([
-      fetchLivePrices(allTickersToFetch),
-      fetchMarketData(),
-    ]);
-    setPrices(prev => ({ ...prev, ...newPrices }));
+    const marketTickers = [...INDEX_TICKERS, ...CRYPTO_TICKERS, ...HYPERSCALER_TICKERS];
+    const allTickers = [...new Set([...getAllTickers(capexData), ...scannerPool, ...marketTickers])];
+
+    // Single HTTP round trip — split result into prices vs marketData on the frontend
+    const allData = await fetchAllPrices(allTickers);
+
+    setPrices(prev => { const next = { ...prev, ...allData }; pricesRef.current = next; return next; });
     setMarketData(prev => {
       const merged = { ...prev };
-      Object.entries(newMarket).forEach(([ticker, val]) => {
-        if (val !== null && val !== undefined) {
-          if (typeof val === "object") {
-            if (val.price !== null && val.price !== undefined) merged[ticker] = val;
-          } else { merged[ticker] = val; }
-        }
+      marketTickers.forEach(ticker => {
+        const val = allData[ticker];
+        if (val != null && typeof val === "object" && val.price != null) merged[ticker] = val;
+        else if (val != null) merged[ticker] = val;
       });
       return merged;
     });
@@ -1306,6 +1329,7 @@ export default function App() {
     saveGlobalCapex(newData);
   }
 
+  const allTickerCount = useMemo(() => getAllTickers(capexData).length, [capexData]);
   const gainers = Object.values(prices).filter(v => (v?.change ?? v) > 0).length;
   const losers = Object.values(prices).filter(v => (v?.change ?? v) < 0).length;
   const activeData = capexData.tracks.find(t => t.id === activeTrack);
@@ -1394,7 +1418,7 @@ export default function App() {
             <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#64748b" }}>
               <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f87171", display: "inline-block", boxShadow: "0 0 6px #f87171" }} />{losers} declining
             </span>
-            <span style={{ fontSize: 11, color: "#2d3a52" }}>{getAllTickers(capexData).length} tickers</span>
+            <span style={{ fontSize: 11, color: "#2d3a52" }}>{allTickerCount} tickers</span>
             <button onClick={refresh} disabled={refreshing} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 8, color: "#64748b", padding: "5px 12px", cursor: "pointer", fontSize: 11, fontFamily: "inherit", opacity: refreshing ? 0.5 : 1 }}>
               {refreshing ? "↻" : `↻${lastUpdated ? " · " + lastUpdated : ""}`}
             </button>

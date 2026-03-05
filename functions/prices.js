@@ -12,7 +12,7 @@ export async function onRequest(context) {
   // ── FIX #3: Restrict CORS to your actual domain ──────────────────────────
   const ALLOWED_ORIGIN = env.ALLOWED_ORIGIN || "";
   const origin = request.headers.get("Origin") || "";
-  const corsOrigin = origin === ALLOWED_ORIGIN ? ALLOWED_ORIGIN : ALLOWED_ORIGIN;
+  const corsOrigin = origin === ALLOWED_ORIGIN ? ALLOWED_ORIGIN : "";
 
   const headers = {
     "Access-Control-Allow-Origin": corsOrigin,

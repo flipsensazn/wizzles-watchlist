@@ -6,7 +6,7 @@ export async function onRequest(context) {
   // Set ALLOWED_ORIGIN as a Cloudflare env var, e.g. "https://your-project.pages.dev"
   const ALLOWED_ORIGIN = env.ALLOWED_ORIGIN || "";
   const origin = request.headers.get("Origin") || "";
-  const corsOrigin = origin === ALLOWED_ORIGIN ? ALLOWED_ORIGIN : ALLOWED_ORIGIN;
+  const corsOrigin = origin === ALLOWED_ORIGIN ? ALLOWED_ORIGIN : "";
 
   const headers = {
     "Access-Control-Allow-Origin": corsOrigin,
