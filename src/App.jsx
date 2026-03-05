@@ -1599,7 +1599,6 @@ export default function App() {
               <MarketClock />
               <MarketStrip data={marketData} tickers={["^GSPC","^DJI","^IXIC"]} labels={["S&P 500","DOW","NASDAQ"]} colors={["#60a5fa","#34d399","#c084fc"]} />
             </div>
-            </div>
             <div className="top-node-center" style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "0 0 auto" }}>
               <div style={{ width: 480, borderRadius: 22, padding: "26px 30px", textAlign: "center", background: "linear-gradient(135deg,rgba(251,191,36,.1) 0%,rgba(180,120,10,.04) 50%,rgba(18,18,18,.9) 100%)", border: "1.5px solid rgba(251,191,36,.45)" }}>
                 <div style={{ fontSize: 10, color: "rgba(251,191,36,.5)", letterSpacing: "0.4em", textTransform: "uppercase", marginBottom: 6 }}>Total Investment Flow</div>
@@ -1665,6 +1664,7 @@ export default function App() {
           </div>
         </div>
       </div>
+    </div>
       {popup && <CompanyPopup ticker={popup.ticker} change={popup.change} anchorRect={popup.rect} onClose={() => setPopup(null)} />}
       {showAdminModal && (
         <AdminModal
