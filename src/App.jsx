@@ -1024,6 +1024,19 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
   const [importText, setImportText] = useState("");
   const fetchIdRef = useRef(0);
 
+  // Automatically fetch from Yahoo Screener when the dashboard loads
+  const syncYahooScreener = useCallback(async () => {
+    try {
+      const res = await fetch("/screener");
+      const json = await res.json();
+      if (json.tickers && json.tickers.length > 0) {
+        setScannerPool(json.tickers); 
+      }
+    } catch (e) {
+      console.error("Failed to sync screener", e);
+    }
+  }, [setScannerPool]);
+
   // Calculate fundamentals whenever the pool updates
   useEffect(() => {
     const currentFetchId = ++fetchIdRef.current;
@@ -1040,18 +1053,29 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
 
             // Metrics Extraction
             const fcf = r.financialData?.freeCashflow?.raw || 0;
-            const marketCap = r.price?.marketCap?.raw || 1;
+            const marketCapRaw = r.price?.marketCap?.raw || 1;
             const roa = (r.financialData?.returnOnAssets?.raw || 0) * 100;
             const pb = r.defaultKeyStatistics?.priceToBook?.raw || 0;
-            const marketReturn = (r.defaultKeyStatistics?.['52WeekChange']?.raw || 0) * 100;
+            const pe = r.summaryDetail?.trailingPE?.raw || null;
 
-            const fcfYield = (fcf / marketCap) * 100;
+            const fcfYield = (fcf / marketCapRaw) * 100;
             const bookToMarket = pb > 0 ? (1 / pb) : 0;
             
-            // Score Calculation
-            const score = (fcfYield * 10) + (bookToMarket * 20) + (roa * 2) + (marketReturn * 0.5);
+            // Format Market Cap gracefully
+            function fmt(n) {
+              if (n == null || isNaN(n)) return "—";
+              const num = Number(n);
+              if (num >= 1e12) return "$" + (num / 1e12).toFixed(2) + "T";
+              if (num >= 1e9)  return "$" + (num / 1e9).toFixed(2) + "B";
+              if (num >= 1e6)  return "$" + (num / 1e6).toFixed(2) + "M";
+              return "$" + num.toLocaleString();
+            }
+            const marketCapFmt = fmt(marketCapRaw);
+            
+            // Score Calculation: FCF/P heavily weighted, plus B/M and ROA
+            const score = (fcfYield * 15) + (bookToMarket * 10) + (roa * 2);
 
-            return { ticker, fcfYield, roa, bookToMarket, marketReturn, score };
+            return { ticker, fcfYield, roa, bookToMarket, pe, marketCapFmt, score };
           } catch (err) { 
             console.error(`Error processing ${ticker}:`, err);
             return null; 
@@ -1073,15 +1097,12 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
   };
 
   const handleImport = () => {
-    // Regex to match isolated words of 1-5 capital letters (typical tickers)
     const words = importText.toUpperCase().match(/\b[A-Z]{1,5}\b/g) || [];
-    
-    // Filter out common finance abbreviations that might get caught if a whole table is pasted
     const ignoreList = ["INC", "CORP", "CO", "LTD", "PLC", "LLC", "USD", "EUR", "CAD", "M", "B", "K", "TRUE", "FALSE"];
     const foundTickers = [...new Set(words)].filter(w => !ignoreList.includes(w));
 
     if (foundTickers.length > 0) {
-      setScannerPool(foundTickers); // Overwrite the pool with the fresh import
+      setScannerPool(foundTickers); 
       setShowImport(false);
       setImportText("");
     } else {
@@ -1098,11 +1119,16 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
   };
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, display: "flex", flexDirection: "column", height: "100%" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12, flexShrink: 0 }}>
         <div>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24" }}>Multibagger Blueprint Scanner</h3>
-          <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Prioritizing FCF Yield & Asset Growth</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24" }}>Multibagger Blueprint Scanner</h3>
+            <span style={{ fontSize: 9, background: "rgba(96,165,250,0.15)", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.3)", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>
+              YAHOO LINKED
+            </span>
+          </div>
+          <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Prioritizing FCF Yield, B/M, and ROA</p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
           <button onClick={() => setShowImport(!showImport)} style={{ background: "transparent", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.3)", borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
@@ -1115,9 +1141,8 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
         </div>
       </div>
 
-      {/* Smart Import Dropdown Area */}
       {showImport && (
-        <div style={{ marginBottom: 16, background: "rgba(0,0,0,0.2)", padding: 12, borderRadius: 12, border: "1px dashed rgba(255,255,255,0.1)", animation: "fadeSlideIn .2s ease-out" }}>
+        <div style={{ marginBottom: 16, background: "rgba(0,0,0,0.2)", padding: 12, borderRadius: 12, border: "1px dashed rgba(255,255,255,0.1)", animation: "fadeSlideIn .2s ease-out", flexShrink: 0 }}>
           <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 8 }}>
             Highlight your list of tickers from Yahoo Finance (or Excel), copy them, and paste the raw text below.
           </div>
@@ -1135,31 +1160,41 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
         </div>
       )}
 
-      <div style={{ overflowX: "auto" }}>
+      {/* flex: 1 combined with overflowY: auto allows inner scrolling! */}
+      <div style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingRight: 4 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, textAlign: "left" }}>
           <thead>
-            <tr style={{ color: "#475569", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+            <tr style={{ color: "#475569", borderBottom: "1px solid rgba(255,255,255,0.05)", position: "sticky", top: 0, background: "rgba(24,24,24,0.95)", zIndex: 10 }}>
               <th style={{ padding: "10px 8px" }}>TICKER</th>
-              <th style={{ padding: "10px 8px" }}>FCF YIELD</th>
+              <th style={{ padding: "10px 8px" }}>PRICE</th>
+              <th style={{ padding: "10px 8px" }}>MKT CAP</th>
+              <th style={{ padding: "10px 8px" }}>P/E</th>
+              <th style={{ padding: "10px 8px" }}>FCF YLD</th>
+              <th style={{ padding: "10px 8px" }}>B/M</th>
               <th style={{ padding: "10px 8px" }}>ROA</th>
-              <th style={{ padding: "10px 8px" }}>1Y RET.</th>
-              <th style={{ padding: "10px 8px", textAlign: "right" }}>BLUEPRINT SCORE</th>
+              <th style={{ padding: "10px 8px", textAlign: "right" }}>SCORE</th>
               <th style={{ width: 30 }}></th>
             </tr>
           </thead>
           <tbody>
-            {loading ? <tr><td colSpan="7" style={{ padding: 20, color: "#475569" }}>Scanning fundamentals...</td></tr> : 
+            {loading ? <tr><td colSpan="9" style={{ padding: 20, color: "#475569" }}>Scanning fundamentals...</td></tr> : 
              data.map((stock) => {
-              const change = prices[stock.ticker]?.change ?? prices[stock.ticker];
+              const change = prices[stock.ticker]?.change;
+              const currentPrice = prices[stock.ticker]?.price;
+              const priceStr = currentPrice ? "$" + currentPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
+              
               return (
                 <tr key={stock.ticker} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
                   <td onClick={(e) => onTickerClick(stock.ticker, e.currentTarget.getBoundingClientRect())} style={{ padding: "12px 8px", cursor: "pointer" }}>
                     <div style={{ fontWeight: 700, color: "#f1f5f9" }}>{stock.ticker}</div>
                     <div style={{ fontSize: 9, color: (change >= 0 ? "#34d399" : "#f87171") }}>{change !== undefined ? `${change >= 0 ? "+" : ""}${change}%` : "—"}</div>
                   </td>
-                  <td style={{ padding: "12px 8px", color: stock.fcfYield > 8 ? "#34d399" : "#e2e8f0" }}>{stock.fcfYield.toFixed(2)}%</td>
-                  <td style={{ padding: "12px 8px" }}>{stock.roa.toFixed(1)}%</td>
-                  <td style={{ padding: "12px 8px" }}>{stock.marketReturn.toFixed(1)}%</td>
+                  <td style={{ padding: "12px 8px", color: "#e2e8f0", fontWeight: 600 }}>{priceStr}</td>
+                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{stock.marketCapFmt}</td>
+                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{stock.pe ? stock.pe.toFixed(1) : "—"}</td>
+                  <td style={{ padding: "12px 8px", color: stock.fcfYield > 8 ? "#34d399" : "#cbd5e1" }}>{stock.fcfYield.toFixed(2)}%</td>
+                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{stock.bookToMarket.toFixed(2)}</td>
+                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{stock.roa.toFixed(1)}%</td>
                   <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(stock.score), fontSize: 13 }}>{stock.score.toFixed(1)}</td>
                   <td style={{ textAlign: "right" }}><button onClick={() => removeTicker(stock.ticker)} style={{ background: "none", border: "none", color: "#334155", cursor: "pointer", fontSize: 16 }}>×</button></td>
                 </tr>
@@ -1308,11 +1343,11 @@ const styles = `
     .span-2 { grid-column: span 2; }
     .span-1 { grid-column: span 1; }
     
-    .watchlist-wrapper {
+    .panel-wrapper {
       position: relative;
       height: 100%;
     }
-    .watchlist-inner {
+    .panel-inner {
       position: absolute;
       top: 0; left: 0; right: 0; bottom: 0;
     }
@@ -1323,8 +1358,8 @@ const styles = `
       .span-2, .span-1 { grid-column: 1 / -1 !important; }
       
       /* Release the absolute position when stacked into a single column */
-      .watchlist-wrapper { min-height: 450px; }
-      .watchlist-inner { position: relative; height: 100%; }
+      .panel-wrapper { min-height: 450px; }
+      .panel-inner { position: relative; height: 100%; }
     }
 
     /* ── MOBILE ───────────────────────────────────────────── */
@@ -1500,15 +1535,19 @@ const styles = `
                 <div className="span-2"><HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} /></div>
                 
                 {/* Watchlist constrained to HeatMap height via absolute positioning */}
-                <div className="span-1 watchlist-wrapper">
-                  <div className="watchlist-inner">
+                <div className="span-1 panel-wrapper">
+                  <div className="panel-inner">
                     <Watchlist prices={prices} capexData={capexData} />
                   </div>
                 </div>
 
                 <div className="span-1"><DonutChart prices={prices} capexData={capexData} /></div>
-                <div className="span-2">
-                  <MultibaggerPanel prices={prices} scannerPool={scannerPool} setScannerPool={setScannerPool} onTickerClick={openPopup} />
+                
+                {/* Multibagger constrained to DonutChart height via absolute positioning */}
+                <div className="span-2 panel-wrapper">
+                  <div className="panel-inner">
+                    <MultibaggerPanel prices={prices} scannerPool={scannerPool} setScannerPool={setScannerPool} onTickerClick={openPopup} />
+                  </div>
                 </div>
               </div>
             ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} />
