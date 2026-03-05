@@ -1020,35 +1020,9 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newTicker, setNewTicker] = useState("");
-  const [syncing, setSyncing] = useState(false);
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState("");
   const fetchIdRef = useRef(0);
-
-// Automatically fetch from Yahoo Screener when the dashboard loads
-  const syncYahooScreener = useCallback(async () => {
-    setSyncing(true);
-    try {
-      const res = await fetch("/screener");
-      const json = await res.json();
-      
-      // LOG EVERYTHING SO WE CAN SEE IT!
-      console.log("Screener Sync Results:", json);
-      
-      if (json.tickers && json.tickers.length > 0) {
-        setScannerPool(json.tickers); 
-      } else {
-        alert("Sync finished, but no tickers were found. Check your browser console for details.");
-      }
-    } catch (e) {
-      console.error("Failed to sync screener", e);
-      alert("Network error trying to reach /screener. Check console.");
-    }
-    setSyncing(false);
-  }, [setScannerPool]);
-
-  // Run the sync on initial mount
-  useEffect(() => {
-    syncYahooScreener();
-  }, [syncYahooScreener]);
 
   // Calculate fundamentals whenever the pool updates
   useEffect(() => {
@@ -1098,6 +1072,23 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
     if (sym && !scannerPool.includes(sym)) { setScannerPool([...scannerPool, sym]); setNewTicker(""); }
   };
 
+  const handleImport = () => {
+    // Regex to match isolated words of 1-5 capital letters (typical tickers)
+    const words = importText.toUpperCase().match(/\b[A-Z]{1,5}\b/g) || [];
+    
+    // Filter out common finance abbreviations that might get caught if a whole table is pasted
+    const ignoreList = ["INC", "CORP", "CO", "LTD", "PLC", "LLC", "USD", "EUR", "CAD", "M", "B", "K", "TRUE", "FALSE"];
+    const foundTickers = [...new Set(words)].filter(w => !ignoreList.includes(w));
+
+    if (foundTickers.length > 0) {
+      setScannerPool(foundTickers); // Overwrite the pool with the fresh import
+      setShowImport(false);
+      setImportText("");
+    } else {
+      alert("No valid tickers found. Try copying just the column of symbols from Yahoo.");
+    }
+  };
+
   const removeTicker = (ticker) => { setScannerPool(scannerPool.filter(t => t !== ticker)); };
   
   const getScoreColor = (score) => {
@@ -1110,17 +1101,12 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
     <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24" }}>Multibagger Blueprint Scanner</h3>
-            <span style={{ fontSize: 9, background: "rgba(96,165,250,0.15)", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.3)", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>
-              YAHOO LINKED
-            </span>
-          </div>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24" }}>Multibagger Blueprint Scanner</h3>
           <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Prioritizing FCF Yield & Asset Growth</p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button onClick={syncYahooScreener} disabled={syncing} style={{ background: "transparent", color: "#64748b", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: syncing ? "wait" : "pointer" }}>
-            {syncing ? "Syncing..." : "↻ Sync Screener"}
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button onClick={() => setShowImport(!showImport)} style={{ background: "transparent", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.3)", borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
+            {showImport ? "Close Import" : "⎘ Smart Import"}
           </button>
           <input value={newTicker} onChange={e => setNewTicker(e.target.value.toUpperCase())}
             onKeyDown={e => e.key === "Enter" && addTicker()} placeholder="Add ticker..." 
@@ -1128,6 +1114,27 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
           <button onClick={addTicker} style={{ background: "#fbbf24", color: "#000", borderRadius: 8, padding: "6px 12px", fontWeight: 700, cursor: "pointer", border: "none" }}>+</button>
         </div>
       </div>
+
+      {/* Smart Import Dropdown Area */}
+      {showImport && (
+        <div style={{ marginBottom: 16, background: "rgba(0,0,0,0.2)", padding: 12, borderRadius: 12, border: "1px dashed rgba(255,255,255,0.1)", animation: "fadeSlideIn .2s ease-out" }}>
+          <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 8 }}>
+            Highlight your list of tickers from Yahoo Finance (or Excel), copy them, and paste the raw text below.
+          </div>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <textarea 
+              value={importText} 
+              onChange={e => setImportText(e.target.value)} 
+              placeholder="Paste text here... (e.g. NVDA, MSFT, AAPL)"
+              style={{ flex: 1, height: 60, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: 8, color: "#e2e8f0", fontSize: 12, fontFamily: "monospace", outline: "none", resize: "vertical" }}
+            />
+            <button onClick={handleImport} style={{ background: "#60a5fa", color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>
+              Run Import
+            </button>
+          </div>
+        </div>
+      )}
+
       <div style={{ overflowX: "auto" }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, textAlign: "left" }}>
           <thead>
@@ -1141,7 +1148,7 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
             </tr>
           </thead>
           <tbody>
-            {loading || syncing ? <tr><td colSpan="7" style={{ padding: 20, color: "#475569" }}>{syncing ? "Fetching live screener data..." : "Scanning fundamentals..."}</td></tr> : 
+            {loading ? <tr><td colSpan="7" style={{ padding: 20, color: "#475569" }}>Scanning fundamentals...</td></tr> : 
              data.map((stock) => {
               const change = prices[stock.ticker]?.change ?? prices[stock.ticker];
               return (
