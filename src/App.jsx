@@ -5,13 +5,20 @@ const INDEX_TICKERS = ["^GSPC", "^DJI", "^IXIC"];
 const CRYPTO_TICKERS = ["BTC-USD", "ETH-USD", "XRP-USD"];
 const HYPERSCALER_TICKERS = ["AMZN", "MSFT", "GOOG", "META", "ORCL"];
 
+// The new default Multibagger Scanner list
+const DEFAULT_MULTIBAGGER = [
+  "YELP", "NVRI", "CXM", "SFL", "WWW", "FIVN", "STGW", "ECVT", "CRI", 
+  "TRIP", "OLPX", "LZ", "GLDD", "ARHS", "ACEL", "CRCT", "PGY", "TDAY", 
+  "NABL", "NRDS", "STKL", "UDMY", "GOGO", "YEXT", "EHAB", "AHH", "RIGL", 
+  "RPD", "AKBA"
+];
+
 async function fetchLivePrices(tickers) {
   try {
     const res = await fetch(`/prices?tickers=${tickers.join(",")}`);
     const json = await res.json();
     const prices = {};
     Object.entries(json.data ?? {}).forEach(([ticker, val]) => {
-      // Store the entire object { price, change } so MultibaggerPanel can access the price
       prices[ticker] = val;
     });
     return prices;
@@ -1183,8 +1190,8 @@ export default function App() {
     try {
       const saved = localStorage.getItem("scannerPool");
       const parsed = saved ? JSON.parse(saved) : null;
-      return Array.isArray(parsed) ? parsed : ["VRT", "APLD", "CORZ", "WULF", "LITE", "COHR", "AAOI", "OSS", "GTLB", "IREN"];
-    } catch { return ["VRT", "APLD", "CORZ", "WULF", "LITE", "COHR", "AAOI", "OSS", "GTLB", "IREN"]; }
+      return Array.isArray(parsed) ? parsed : DEFAULT_MULTIBAGGER;
+    } catch { return DEFAULT_MULTIBAGGER; }
   });
 
   useEffect(() => {
@@ -1216,10 +1223,8 @@ export default function App() {
     catch {}
   }, [capexData]);
 
-const refresh = useCallback(async () => {
+  const refresh = useCallback(async () => {
     setRefreshing(true);
-    
-    // Merge both the Capex Map tickers AND the Multibagger Scanner tickers
     const allTickersToFetch = [...new Set([...getAllTickers(capexData), ...scannerPool])];
 
     const [newPrices, newMarket] = await Promise.all([
@@ -1241,7 +1246,7 @@ const refresh = useCallback(async () => {
     });
     setLastUpdated(new Date().toLocaleTimeString());
     setRefreshing(false);
-  }, [capexData, scannerPool]); // <-- Added scannerPool to dependencies
+  }, [capexData, scannerPool]);
 
   useEffect(() => {
     refresh();
@@ -1400,6 +1405,8 @@ const refresh = useCallback(async () => {
                 if (window.confirm("Reset all tickers to defaults?")) {
                   setCapexData(CAPEX_DATA);
                   localStorage.removeItem("capexData");
+                  setScannerPool(DEFAULT_MULTIBAGGER);
+                  localStorage.removeItem("scannerPool");
                 }
               }}
               style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>
