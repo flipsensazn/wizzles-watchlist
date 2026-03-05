@@ -496,7 +496,7 @@ function MarketStrip({ data, tickers, labels, colors }) {
     return p.toLocaleString("en-US", { maximumFractionDigits: 2 });
   }
   return (
-    <div className="market-strip" style={{ display: "flex", flexDirection: "column", gap: 8, justifyContent: "center", padding: "0 20px" }}>
+    <div className="market-strip" style={{ display: "flex", flexDirection: "column", gap: 10, justifyContent: "center", padding: "0 20px" }}>
       {tickers.map((ticker, i) => {
         const entry = data[ticker];
         const price = entry?.price;
@@ -505,7 +505,7 @@ function MarketStrip({ data, tickers, labels, colors }) {
         return (
           <div key={ticker} style={{
             display: "flex", flexDirection: "column", alignItems: "center",
-            padding: "8px 14px", borderRadius: 10, minWidth: 96,
+            padding: "12px 16px", borderRadius: 12, minWidth: 120, // Increased padding & width
             background: "rgba(255,255,255,0.05)",
             border: `1px solid ${colors[i]}28`,
             transition: "border-color .2s, box-shadow .2s",
@@ -513,15 +513,15 @@ function MarketStrip({ data, tickers, labels, colors }) {
           }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = colors[i] + "66"; e.currentTarget.style.boxShadow = `0 0 16px ${colors[i]}22`; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = colors[i] + "28"; e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.3)"; }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: colors[i], letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 3 }}>{labels[i]}</span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9", fontFamily: "'DM Mono', monospace", marginBottom: 2 }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: colors[i], letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>{labels[i]}</span>
+            <span style={{ fontSize: 18, fontWeight: 700, color: "#f1f5f9", fontFamily: "'DM Mono', monospace", marginBottom: 2 }}>
               {formatPrice(price, ticker)}
             </span>
             {change !== undefined && change !== null ? (
-              <span style={{ fontSize: 10, fontWeight: 600, color: pos ? "#34d399" : "#f87171" }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: pos ? "#34d399" : "#f87171" }}>
                 {pos ? "+" : ""}{change.toFixed(2)}%
               </span>
-            ) : <span style={{ fontSize: 10, color: "#334155" }}>—</span>}
+            ) : <span style={{ fontSize: 14, color: "#334155" }}>—</span>}
           </div>
         );
       })}
@@ -1230,7 +1230,7 @@ useEffect(() => {
   const activeData = capexData.tracks.find(t => t.id === activeTrack);
   const tickerEntries = Object.entries(prices);
 
-  const styles = `
+const styles = `
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap');
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { background: #121212; }
@@ -1243,6 +1243,21 @@ useEffect(() => {
     .ticker-tape { animation: scroll-left 80s linear infinite; white-space: nowrap; display: inline-flex; gap: 24px; }
     .pulse { animation: pulseDot 2s infinite; }
 
+    /* ── CUSTOM DESKTOP GRID ───────────────────────────────── */
+    .bottom-grid-all {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    .span-2 { grid-column: span 2; }
+    .span-1 { grid-column: span 1; }
+
+    /* ── TABLET / SMALL DESKTOP ───────────────────────────────── */
+    @media (max-width: 1024px) {
+      .bottom-grid-all { grid-template-columns: 1fr !important; }
+      .span-2, .span-1 { grid-column: 1 / -1 !important; }
+    }
+
     /* ── MOBILE ───────────────────────────────────────────── */
     @media (max-width: 640px) {
       .track-grid { grid-template-columns: repeat(2, minmax(0,1fr)) !important; }
@@ -1250,7 +1265,6 @@ useEffect(() => {
       .market-strip { flex-direction: row !important; flex-wrap: wrap !important; justify-content: center !important; padding: 0 8px !important; gap: 8px !important; }
       .top-node-center { width: 100% !important; max-width: 100% !important; }
       .capex-number { font-size: 44px !important; }
-      .bottom-grid { grid-template-columns: 1fr !important; }
       .subsector-grid { grid-template-columns: 1fr !important; }
       .main-content { padding: 16px 12px !important; }
       .header-controls { gap: 8px !important; }
@@ -1411,28 +1425,20 @@ useEffect(() => {
                 }}>{tab.label}</button>
               ))}
             </div>
-          {bottomTab === "all" ? (
-            <div className="bottom-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-    <div style={{ gridColumn: "1/-1" }}><HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} /></div>
-    <DonutChart prices={prices} capexData={capexData} />
-    <Watchlist prices={prices} capexData={capexData} />
-    <div style={{ gridColumn: "1/-1" }}><MultibaggerPanel 
-  prices={prices} 
-  scannerPool={scannerPool} 
-  setScannerPool={setScannerPool} 
-  onTickerClick={openPopup} 
-/></div>
-  </div>
-) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} />
-  : bottomTab === "donut" ? <DonutChart prices={prices} capexData={capexData} />
-  : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={capexData} />
-  : <MultibaggerPanel 
-      prices={prices} 
-      scannerPool={scannerPool} 
-      setScannerPool={setScannerPool} 
-      onTickerClick={openPopup} 
-    />
-}
+            {bottomTab === "all" ? (
+            <div className="bottom-grid-all">
+              <div className="span-2"><HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} /></div>
+              <div className="span-1"><Watchlist prices={prices} capexData={capexData} /></div>
+              <div className="span-1"><DonutChart prices={prices} capexData={capexData} /></div>
+              <div className="span-2">
+                <MultibaggerPanel prices={prices} scannerPool={scannerPool} setScannerPool={setScannerPool} onTickerClick={openPopup} />
+              </div>
+            </div>
+          ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} />
+            : bottomTab === "donut" ? <DonutChart prices={prices} capexData={capexData} />
+            : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={capexData} />
+            : <MultibaggerPanel prices={prices} scannerPool={scannerPool} setScannerPool={setScannerPool} onTickerClick={openPopup} />
+          }
           </div>
 
           {/* FOOTER */}
