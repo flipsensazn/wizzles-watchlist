@@ -5,7 +5,7 @@ const INDEX_TICKERS = ["^GSPC", "^DJI", "^IXIC"];
 const CRYPTO_TICKERS = ["BTC-USD", "ETH-USD", "XRP-USD"];
 const HYPERSCALER_TICKERS = ["AMZN", "MSFT", "GOOG", "META", "ORCL"];
 
-// The new default Multibagger Scanner list
+// The default Multibagger Scanner list
 const DEFAULT_MULTIBAGGER = [
   "YELP", "NVRI", "CXM", "SFL", "WWW", "FIVN", "STGW", "ECVT", "CRI", 
   "TRIP", "OLPX", "LZ", "GLDD", "ARHS", "ACEL", "CRCT", "PGY", "TDAY", 
@@ -18,12 +18,9 @@ async function fetchLivePrices(tickers) {
     const res = await fetch(`/prices?tickers=${tickers.join(",")}`);
     const json = await res.json();
     const prices = {};
-    Object.entries(json.data ?? {}).forEach(([ticker, val]) => {
-      prices[ticker] = val;
-    });
+    Object.entries(json.data ?? {}).forEach(([ticker, val]) => { prices[ticker] = val; });
     return prices;
   } catch (err) {
-    console.error("Price fetch failed:", err);
     return {};
   }
 }
@@ -47,15 +44,10 @@ async function fetchQuoteSummary(ticker) {
     const url = `/quote?ticker=${encodeURIComponent(ticker)}`;
     const res = await fetch(url);
     const json = await res.json();
-
     const payload = json.data ? json.data : json;
     const r = payload?.quoteSummary?.result?.[0];
     const chartResult = payload?.chart?.result?.[0];
-
-    if (!r) {
-      console.warn(`[Quote Fetch] Could not find result array for ${ticker}.`);
-      return null;
-    }
+    if (!r) return null;
 
     const profile = r.assetProfile ?? {};
     const detail  = r.summaryDetail ?? {};
@@ -70,8 +62,7 @@ async function fetchQuoteSummary(ticker) {
       return "$" + num.toLocaleString();
     }
 
-    let chartPoints = [];
-    let chartDates = [];
+    let chartPoints = [], chartDates = [];
     if (chartResult && chartResult.indicators?.quote?.[0]?.close && chartResult.timestamp) {
       const closes = chartResult.indicators.quote[0].close;
       const timestamps = chartResult.timestamp;
@@ -100,7 +91,7 @@ async function fetchQuoteSummary(ticker) {
       website:      profile.website || null,
       chartData:    chartPoints,
       chartDates:   chartDates,
-      rawPrice:     currentPriceRaw, // <-- Added raw numbers for range calc
+      rawPrice:     currentPriceRaw,
       raw52Low:     detail.fiftyTwoWeekLow?.raw,
       raw52High:    detail.fiftyTwoWeekHigh?.raw,
     };
@@ -108,12 +99,11 @@ async function fetchQuoteSummary(ticker) {
     quoteCache[ticker] = data;
     return data;
   } catch (err) {
-    console.error(`[Quote Fetch] Error mapping data for ${ticker}:`, err);
     return null;
   }
 }
 
-// ── DATA ──────────────────────────────────────────────────
+// ── DEFAULT CAPEX DATA ────────────────────────────────────
 const CAPEX_DATA = {
   companies: ["AMZN", "MSFT", "GOOG", "META", "ORCL"],
   tracks: [
@@ -224,7 +214,7 @@ function getAllTickers(data = CAPEX_DATA) {
   return [...new Set(data.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))];
 }
 
-// ── BADGE ─────────────────────────────────────────────────
+// ── UI COMPONENTS ─────────────────────────────────────────
 const Badge = memo(function Badge({ text, color }) {
   return (
     <span style={{
@@ -235,19 +225,12 @@ const Badge = memo(function Badge({ text, color }) {
   );
 });
 
-// ── MINI CHART (1-Month SVG Sparkline) ────────────────────
 function MiniChart({ data, dates, color }) {
   if (!data || data.length < 2) return null;
-  
-  const min = Math.min(...data);
-  const max = Math.max(...data);
+  const min = Math.min(...data), max = Math.max(...data);
   const padding = (max - min) * 0.1 || 1; 
-  const yMin = min - padding;
-  const yMax = max + padding;
-  const range = yMax - yMin;
-  
-  const width = 160;
-  const height = 120; 
+  const yMin = min - padding, yMax = max + padding, range = yMax - yMin;
+  const width = 160, height = 120; 
   
   const points = data.map((val, i) => {
     const x = (i / (data.length - 1)) * width;
@@ -256,25 +239,7 @@ function MiniChart({ data, dates, color }) {
   }).join(" ");
 
   const cleanColor = color ? color.replace(/[^#0-9a-fA-F]/g, '') : "ffffff";
-
-  const labelCount = 10;
-  const priceLabels = Array.from({ length: labelCount }, (_, i) => {
-    return max - (i * (max - min) / (labelCount - 1));
-  });
-
-  const dateLabels = [];
-  if (dates && dates.length >= 5) {
-    for (let i = 0; i < 5; i++) {
-      const idx = Math.floor(i * (dates.length - 1) / 4);
-      const d = new Date(dates[idx]);
-      if (!isNaN(d.getTime())) {
-        dateLabels.push({
-          text: `${d.getMonth() + 1}/${d.getDate()}`,
-          x: (idx / (dates.length - 1)) * width
-        });
-      }
-    }
-  }
+  const priceLabels = Array.from({ length: 10 }, (_, i) => max - (i * (max - min) / 9));
 
   return (
     <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
@@ -286,37 +251,20 @@ function MiniChart({ data, dates, color }) {
               <stop offset="100%" stopColor={color} stopOpacity="0" />
             </linearGradient>
           </defs>
-          
           {priceLabels.map((val, i) => {
              const yPos = height - ((val - yMin) / (range || 1)) * height;
              return <line key={i} x1="0" y1={yPos} x2={width} y2={yPos} stroke="rgba(255,255,255,0.05)" strokeWidth="1" strokeDasharray="2,2" />
           })}
-
           <polygon fill={`url(#grad-${cleanColor})`} points={`${points} ${width},${height} 0,${height}`} />
           <polyline fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={points} />
         </svg>
-        
         <div style={{ position: 'relative', height: height, width: 45, marginLeft: 8, fontSize: 9, color: "#94a3b8", fontFamily: "monospace" }}>
           {priceLabels.map((val, i) => {
               const yPos = height - ((val - yMin) / (range || 1)) * height;
-              return (
-                <span key={i} style={{ position: 'absolute', top: yPos, transform: 'translateY(-50%)', left: 0 }}>
-                  ${val.toFixed(2)}
-                </span>
-              );
+              return <span key={i} style={{ position: 'absolute', top: yPos, transform: 'translateY(-50%)', left: 0 }}>${val.toFixed(2)}</span>;
           })}
         </div>
       </div>
-
-      {dateLabels.length > 0 && (
-        <div style={{ position: 'relative', width: width, height: 16, marginTop: 8, fontSize: 9, color: "#475569", fontFamily: "monospace" }}>
-          {dateLabels.map((lbl, i) => (
-            <span key={i} style={{ position: 'absolute', left: lbl.x, transform: 'translateX(-50%)' }}>
-              {lbl.text}
-            </span>
-          ))}
-        </div>
-      )}
     </div>
   );
 }
@@ -335,9 +283,7 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
   }, [ticker]);
 
   useEffect(() => {
-    function handler(e) {
-      if (popupRef.current && !popupRef.current.contains(e.target)) onClose();
-    }
+    function handler(e) { if (popupRef.current && !popupRef.current.contains(e.target)) onClose(); }
     const id = setTimeout(() => document.addEventListener("mousedown", handler), 50);
     return () => { clearTimeout(id); document.removeEventListener("mousedown", handler); };
   }, [onClose]);
@@ -348,31 +294,14 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  const POPUP_W = 500;
-  const POPUP_H = 360; 
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  
-  // Initial positioning logic
+  const POPUP_W = 500, POPUP_H = 360; 
+  const vw = window.innerWidth, vh = window.innerHeight;
   let left = anchorRect ? anchorRect.left : vw / 2 - POPUP_W / 2;
   let top  = anchorRect ? anchorRect.top - POPUP_H - 10 : vh / 2 - POPUP_H / 2;
   
-  // 1. If it hits the top of the browser, try flipping it below the clicked item
-  if (top < 10) {
-    top = anchorRect ? anchorRect.bottom + 10 : vh / 2 - POPUP_H / 2;
-  }
-  
-  // 2. NEW: If it hits the bottom of the browser, force it back up into view
-  if (top + POPUP_H > vh - 12) {
-    top = vh - POPUP_H - 12;
-  }
-
-  // 3. NEW: Absolute failsafe for very small screens (never go above top edge)
-  if (top < 12) {
-    top = 12;
-  }
-
-  // 4. Prevent bleeding off the left or right sides
+  if (top < 10) top = anchorRect ? anchorRect.bottom + 10 : vh / 2 - POPUP_H / 2;
+  if (top + POPUP_H > vh - 12) top = vh - POPUP_H - 12;
+  if (top < 12) top = 12;
   if (left + POPUP_W > vw - 12) left = vw - POPUP_W - 12;
   if (left < 12) left = 12;
 
@@ -396,62 +325,38 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
       animation: "fadeSlideIn .18s ease-out",
       overflow: "hidden",
     }}>
-      {/* Header */}
       <div style={{
         display: "flex", alignItems: "flex-start", justifyContent: "space-between",
-        padding: "14px 16px 10px",
-        borderBottom: "1px solid rgba(255,255,255,0.06)",
+        padding: "14px 16px 10px", borderBottom: "1px solid rgba(255,255,255,0.06)",
         background: `linear-gradient(135deg, ${changeColor}12 0%, transparent 100%)`,
       }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
             <span style={{ fontSize: 16, fontWeight: 800, color: "#f1f5f9", letterSpacing: "0.04em" }}>{ticker}</span>
-            {data?.currentPrice && (
-              <span style={{ fontSize: 15, fontWeight: 700, color: "#e2e8f0" }}>{data.currentPrice}</span>
-            )}
+            {data?.currentPrice && <span style={{ fontSize: 15, fontWeight: 700, color: "#e2e8f0" }}>{data.currentPrice}</span>}
             {change !== undefined && (
-              <span style={{
-                fontSize: 11, fontWeight: 700, color: changeColor,
-                background: changeColor + "18", border: `1px solid ${changeColor}44`,
-                borderRadius: 5, padding: "1px 7px",
-              }}>{pos ? "+" : ""}{change}%</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: changeColor, background: changeColor + "18", border: `1px solid ${changeColor}44`, borderRadius: 5, padding: "1px 7px" }}>
+                {pos ? "+" : ""}{change}%
+              </span>
             )}
           </div>
-          {data?.name && data.name !== ticker && (
-            <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.4 }}>{data.name}</div>
-          )}
+          {data?.name && data.name !== ticker && <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.4 }}>{data.name}</div>}
         </div>
-        <button onClick={onClose} style={{
-          background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)",
-          borderRadius: 6, color: "#64748b", width: 24, height: 24,
-          cursor: "pointer", fontSize: 14, lineHeight: 1,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          flexShrink: 0, fontFamily: "inherit",
-        }}>×</button>
+        <button onClick={onClose} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "#64748b", width: 24, height: 24, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit" }}>×</button>
       </div>
 
-      {/* Body */}
       <div style={{ padding: "12px 16px 14px" }}>
         {loading ? (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 80, color: "#475569", fontSize: 12 }}>
-            Loading…
-          </div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 80, color: "#475569", fontSize: 12 }}>Loading…</div>
         ) : !data ? (
-          <div style={{ color: "#475569", fontSize: 12, textAlign: "center", padding: "20px 0" }}>
-            No data available for {ticker}
-          </div>
+          <div style={{ color: "#475569", fontSize: 12, textAlign: "center", padding: "20px 0" }}>No data available for {ticker}</div>
         ) : (
           <div style={{ display: "flex", gap: 20 }}>
-            {/* LEFT COLUMN: Data Stats */}
             <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
               {(data.sector !== "—" || data.industry !== "—") && (
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-                  {data.sector !== "—" && (
-                    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: "rgba(96,165,250,0.12)", border: "1px solid rgba(96,165,250,0.25)", color: "#60a5fa" }}>{data.sector}</span>
-                  )}
-                  {data.industry !== "—" && (
-                    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#94a3b8" }}>{data.industry}</span>
-                  )}
+                  {data.sector !== "—" && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: "rgba(96,165,250,0.12)", border: "1px solid rgba(96,165,250,0.25)", color: "#60a5fa" }}>{data.sector}</span>}
+                  {data.industry !== "—" && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#94a3b8" }}>{data.industry}</span>}
                 </div>
               )}
 
@@ -472,58 +377,32 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
               </div>
 
               {data.description && (
-                <div style={{
-                  fontSize: 10.5, color: "#94a3b8", lineHeight: 1.55,
-                  borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 10,
-                  overflowY: "auto", maxHeight: 130, paddingRight: 6 
-                }}>
+                <div style={{ fontSize: 10.5, color: "#94a3b8", lineHeight: 1.55, borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 10, overflowY: "auto", maxHeight: 130, paddingRight: 6 }}>
                   {data.description}
                 </div>
               )}
-
               {data.website && (
-                <a href={data.website} target="_blank" rel="noopener noreferrer" style={{
-                  display: "inline-block", marginTop: "auto", paddingTop: 8, fontSize: 10, color: "#60a5fa",
-                  textDecoration: "none", opacity: 0.7,
-                }}
-                  onMouseEnter={e => e.currentTarget.style.opacity = "1"}
-                  onMouseLeave={e => e.currentTarget.style.opacity = "0.7"}>
+                <a href={data.website} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", marginTop: "auto", paddingTop: 8, fontSize: 10, color: "#60a5fa", textDecoration: "none", opacity: 0.7 }} onMouseEnter={e => e.currentTarget.style.opacity = "1"} onMouseLeave={e => e.currentTarget.style.opacity = "0.7"}>
                   {data.website.replace(/^https?:\/\//, "")} ↗
                 </a>
               )}
             </div>
 
-            {/* RIGHT COLUMN: Charts & Trackers */}
             <div style={{ width: 220, display: "flex", flexDirection: "column", flexShrink: 0 }}>
-              
-              {/* 1-Month Trend Header */}
               {data.chartData && data.chartData.length > 0 && (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                  <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                    1-Month Trend
-                  </div>
+                  <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase" }}>1-Month Trend</div>
                   {monthChangePct !== null && (
-                    <div style={{ 
-                      fontSize: 10, fontWeight: 700, color: chartColor, 
-                      background: chartColor + "15", padding: "1px 6px", 
-                      borderRadius: 4, border: `1px solid ${chartColor}44` 
-                    }}>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: chartColor, background: chartColor + "15", padding: "1px 6px", borderRadius: 4, border: `1px solid ${chartColor}44` }}>
                       {monthChangePct >= 0 ? "+" : ""}{monthChangePct.toFixed(2)}%
                     </div>
                   )}
                 </div>
               )}
-
-              {/* Grouped Container */}
               <div style={{ marginTop: "auto", marginBottom: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
-                
                 {data.chartData && data.chartData.length > 0 && (
-                  <div>
-                    <MiniChart data={data.chartData} dates={data.chartDates} color={chartColor} />
-                  </div>
+                  <div><MiniChart data={data.chartData} dates={data.chartDates} color={chartColor} /></div>
                 )}
-
-                {/* 52-Week Range Bar */}
                 {data.raw52Low != null && data.raw52High != null && data.rawPrice != null && (
                   <div>
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#475569", marginBottom: 6, fontFamily: "monospace" }}>
@@ -532,24 +411,12 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
                       <span>{data.week52High}</span>
                     </div>
                     <div style={{ position: "relative", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2 }}>
-                      <div style={{ 
-                        position: "absolute", 
-                        left: `${Math.max(0, Math.min(100, (data.raw52High - data.raw52Low) > 0 ? ((data.rawPrice - data.raw52Low) / (data.raw52High - data.raw52Low)) * 100 : 50))}%`, 
-                        top: "50%", 
-                        transform: "translate(-50%, -50%)", 
-                        width: 8, 
-                        height: 8, 
-                        borderRadius: "50%", 
-                        background: chartColor,
-                        boxShadow: `0 0 8px ${chartColor}88`
-                      }} />
+                      <div style={{ position: "absolute", left: `${Math.max(0, Math.min(100, (data.raw52High - data.raw52Low) > 0 ? ((data.rawPrice - data.raw52Low) / (data.raw52High - data.raw52Low)) * 100 : 50))}%`, top: "50%", transform: "translate(-50%, -50%)", width: 8, height: 8, borderRadius: "50%", background: chartColor, boxShadow: `0 0 8px ${chartColor}88` }} />
                     </div>
                   </div>
                 )}
-
               </div>
             </div>
-
           </div>
         )}
       </div>
@@ -561,14 +428,8 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
 function MarketStrip({ data, tickers, labels, colors }) {
   function formatPrice(p, ticker) {
     if (p === null || p === undefined) return "—";
-    
-    // useGrouping: false explicitly removes the commas
-    if (ticker === "BTC-USD" || ticker === "ETH-USD") {
-      return p.toLocaleString("en-US", { maximumFractionDigits: 0, useGrouping: false });
-    }
-    if (ticker === "XRP-USD") {
-      return p.toFixed(3);
-    }
+    if (ticker === "BTC-USD" || ticker === "ETH-USD") return p.toLocaleString("en-US", { maximumFractionDigits: 0, useGrouping: false });
+    if (ticker === "XRP-USD") return p.toFixed(3);
     return p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false });
   }
   
@@ -584,35 +445,19 @@ function MarketStrip({ data, tickers, labels, colors }) {
           <div key={ticker} style={{
             display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
             padding: "10px 14px", borderRadius: 6, minWidth: 230,
-            background: "rgba(255,255,255,0.02)",
-            border: `1px solid rgba(255,255,255,0.05)`,
-            transition: "background .2s, border-color .2s",
+            background: "rgba(255,255,255,0.02)", border: `1px solid rgba(255,255,255,0.05)`, transition: "background .2s, border-color .2s",
           }}
             onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}
             onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.05)"; }}>
-            
-            <span style={{ fontSize: 14, fontWeight: 700, color: colors[i], letterSpacing: "0.05em", textTransform: "uppercase" }}>
-              {labels[i]}
-            </span>
-            
+            <span style={{ fontSize: 14, fontWeight: 700, color: colors[i], letterSpacing: "0.05em", textTransform: "uppercase" }}>{labels[i]}</span>
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              {/* Increased font size to 18px */}
-              <span style={{ fontSize: 18, fontWeight: 700, color: "#e2e8f0" }}>
-                {formatPrice(price, ticker)}
-              </span>
-              
+              <span style={{ fontSize: 18, fontWeight: 700, color: "#e2e8f0" }}>{formatPrice(price, ticker)}</span>
               {change !== undefined && change !== null ? (
-                <span style={{ 
-                  fontSize: 14, fontWeight: 700, color: pos ? "#34d399" : "#f87171", 
-                  display: "flex", alignItems: "center", gap: 4, width: 64, justifyContent: "flex-end" 
-                }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: pos ? "#34d399" : "#f87171", display: "flex", alignItems: "center", gap: 4, width: 64, justifyContent: "flex-end" }}>
                   <span style={{ fontSize: 10 }}>{pos ? "▲" : "▼"}</span> {Math.abs(change).toFixed(2)}%
                 </span>
-              ) : (
-                <span style={{ fontSize: 14, color: "#475569", width: 64, textAlign: "right" }}>—</span>
-              )}
+              ) : <span style={{ fontSize: 14, color: "#475569", width: 64, textAlign: "right" }}>—</span>}
             </div>
-
           </div>
         );
       })}
@@ -629,21 +474,17 @@ const TickerChip = memo(function TickerChip({ symbol, changeData, onRemove, onTi
 
   return (
     <div
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => setHovered(false)}
+      onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
       onClick={e => { e.stopPropagation(); onTickerClick?.(symbol, e.currentTarget.getBoundingClientRect()); }}
       style={{
         display: "flex", alignItems: "center", gap: 6, padding: "5px 10px",
         background: hovered ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.05)",
         border: `1px solid ${hovered ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.10)"}`,
-        borderRadius: 8, cursor: "pointer",
-        transition: "background .15s, border-color .15s",
-        position: "relative",
+        borderRadius: 8, cursor: "pointer", transition: "background .15s, border-color .15s", position: "relative",
       }}>
       <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{symbol}</span>
-      {change !== undefined
-        ? <span style={{ fontSize: 11, fontWeight: 600, color: changeColor }}>{pos ? "+" : ""}{change}%</span>
-        : <span style={{ fontSize: 11, color: "#475569" }}>…</span>}
+      {change !== undefined ? <span style={{ fontSize: 11, fontWeight: 600, color: changeColor }}>{pos ? "+" : ""}{change}%</span> : <span style={{ fontSize: 11, color: "#475569" }}>…</span>}
+      {/* Hide delete button if onRemove is not provided (User is not Admin) */}
       {hovered && onRemove && (
         <button
           onClick={e => { e.stopPropagation(); onRemove(); }}
@@ -660,7 +501,7 @@ const TickerChip = memo(function TickerChip({ symbol, changeData, onRemove, onTi
 });
 
 // ── SUBSECTOR CARD ────────────────────────────────────────
-function SubsectorCard({ sub, prices, onAddTicker, onRemoveTicker, onTickerClick }) {
+function SubsectorCard({ sub, prices, isAdmin, onAddTicker, onRemoveTicker, onTickerClick }) {
   const [open, setOpen] = useState(false);
   const [addingTicker, setAddingTicker] = useState(false);
   const [newTicker, setNewTicker] = useState("");
@@ -673,11 +514,8 @@ function SubsectorCard({ sub, prices, onAddTicker, onRemoveTicker, onTickerClick
 
   return (
     <div style={{
-      borderRadius: 12,
-      border: `1px solid ${isBottleneck ? "rgba(239,68,68,.35)" : isHot ? "rgba(245,158,11,.25)" : "rgba(255,255,255,0.07)"}`,
-      background: isBottleneck ? "rgba(239,68,68,0.06)" : "rgba(255,255,255,0.03)",
-      padding: 14, display: "flex", flexDirection: "column", gap: 10,
-      boxShadow: isBottleneck ? "0 0 20px rgba(239,68,68,0.08)" : "0 2px 16px rgba(0,0,0,0.25)",
+      borderRadius: 12, border: `1px solid ${isBottleneck ? "rgba(239,68,68,.35)" : isHot ? "rgba(245,158,11,.25)" : "rgba(255,255,255,0.07)"}`,
+      background: isBottleneck ? "rgba(239,68,68,0.06)" : "rgba(255,255,255,0.03)", padding: 14, display: "flex", flexDirection: "column", gap: 10,
     }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
         <span style={{ fontSize: 12, fontWeight: 600, color: "#cbd5e1", lineHeight: 1.4 }}>{sub.label}</span>
@@ -685,17 +523,15 @@ function SubsectorCard({ sub, prices, onAddTicker, onRemoveTicker, onTickerClick
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
         {sub.tickers.map(t => (
-          <TickerChip key={t} symbol={t} changeData={prices[t]} onRemove={() => onRemoveTicker(t)} onTickerClick={onTickerClick} />
+          <TickerChip key={t} symbol={t} changeData={prices[t]} 
+            onRemove={isAdmin ? () => onRemoveTicker(t) : undefined} 
+            onTickerClick={onTickerClick} />
         ))}
       </div>
       {sub.materials?.length > 0 && (
         <div>
-          <button onClick={() => setOpen(v => !v)} style={{
-            background: "none", border: "none", color: "#64748b", fontSize: 11,
-            cursor: "pointer", display: "flex", alignItems: "center", gap: 5, padding: 0, fontFamily: "inherit",
-          }}>
-            <span style={{ display: "inline-block", transition: "transform .2s", transform: open ? "rotate(90deg)" : "rotate(0deg)" }}>▶</span>
-            Raw Materials ({sub.materials.length})
+          <button onClick={() => setOpen(v => !v)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, padding: 0, fontFamily: "inherit" }}>
+            <span style={{ display: "inline-block", transition: "transform .2s", transform: open ? "rotate(90deg)" : "rotate(0deg)" }}>▶</span> Raw Materials ({sub.materials.length})
           </button>
           {open && (
             <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
@@ -707,27 +543,23 @@ function SubsectorCard({ sub, prices, onAddTicker, onRemoveTicker, onTickerClick
           )}
         </div>
       )}
+      
+      {/* ADD TICKER CONTROLS - ONLY SHOW IF ADMIN IS LOGGED IN */}
       <div style={{ marginTop: 2 }}>
-        {!addingTicker ? (
-          <button onClick={() => setAddingTicker(true)} style={{
-            background: "none", border: "1px dashed rgba(255,255,255,0.1)",
-            borderRadius: 6, color: "#334155", fontSize: 11, padding: "4px 10px",
-            cursor: "pointer", width: "100%", fontFamily: "inherit", transition: "all .15s",
-          }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.25)"; e.currentTarget.style.color = "#64748b"; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "#334155"; }}>
-            + add ticker
-          </button>
-        ) : (
-          <div style={{ display: "flex", gap: 6 }}>
-            <input autoFocus value={newTicker}
-              onChange={e => setNewTicker(e.target.value.toUpperCase())}
-              onKeyDown={e => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") { setAddingTicker(false); setNewTicker(""); } }}
-              placeholder="e.g. NVDA"
-              style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, padding: "5px 8px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit", outline: "none" }} />
-            <button onClick={handleAdd} style={{ background: "rgba(96,165,250,0.15)", border: "1px solid rgba(96,165,250,0.3)", color: "#60a5fa", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>✓</button>
-            <button onClick={() => { setAddingTicker(false); setNewTicker(""); }} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>✕</button>
-          </div>
+        {isAdmin && (
+          !addingTicker ? (
+            <button onClick={() => setAddingTicker(true)} style={{
+              background: "none", border: "1px dashed rgba(255,255,255,0.1)", borderRadius: 6, color: "#334155", fontSize: 11, padding: "4px 10px", cursor: "pointer", width: "100%", fontFamily: "inherit", transition: "all .15s",
+            }} onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.25)"; e.currentTarget.style.color = "#64748b"; }} onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "#334155"; }}>
+              + add ticker
+            </button>
+          ) : (
+            <div style={{ display: "flex", gap: 6 }}>
+              <input autoFocus value={newTicker} onChange={e => setNewTicker(e.target.value.toUpperCase())} onKeyDown={e => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") { setAddingTicker(false); setNewTicker(""); } }} placeholder="e.g. NVDA" style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, padding: "5px 8px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit", outline: "none" }} />
+              <button onClick={handleAdd} style={{ background: "rgba(96,165,250,0.15)", border: "1px solid rgba(96,165,250,0.3)", color: "#60a5fa", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>✓</button>
+              <button onClick={() => { setAddingTicker(false); setNewTicker(""); }} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>✕</button>
+            </div>
+          )
         )}
       </div>
     </div>
@@ -738,26 +570,12 @@ function SubsectorCard({ sub, prices, onAddTicker, onRemoveTicker, onTickerClick
 const TrackCard = memo(function TrackCard({ track, isActive, onClick }) {
   return (
     <div onClick={onClick} style={{
-      position: "relative", borderRadius: 14, padding: "14px 12px", minHeight: 120,
-      cursor: "pointer", userSelect: "none",
-      background: isActive
-        ? `linear-gradient(135deg,${track.borderColor}28 0%,rgba(18,18,18,.95) 100%)`
-        : "rgba(255,255,255,0.03)",
-      border: `1px solid ${isActive ? track.borderColor : "rgba(255,255,255,0.09)"}`,
-      boxShadow: isActive ? `0 0 28px ${track.borderColor}44, 0 4px 20px rgba(0,0,0,0.5)` : "0 2px 12px rgba(0,0,0,0.3)",
-      display: "flex", flexDirection: "column", gap: 8,
-      transition: "all .2s",
-    }}
-      onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.borderColor = `${track.color}44`; e.currentTarget.style.boxShadow = `0 0 16px ${track.color}22`; } }}
-      onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.09)"; e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.3)"; } }}>
+      position: "relative", borderRadius: 14, padding: "14px 12px", minHeight: 120, cursor: "pointer", userSelect: "none",
+      background: isActive ? `linear-gradient(135deg,${track.borderColor}28 0%,rgba(18,18,18,.95) 100%)` : "rgba(255,255,255,0.03)",
+      border: `1px solid ${isActive ? track.borderColor : "rgba(255,255,255,0.09)"}`, display: "flex", flexDirection: "column", gap: 8, transition: "all .2s",
+    }} onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.borderColor = `${track.color}44`; } }} onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.09)"; } }}>
       {isActive && (
-        <div style={{
-          position: "absolute", top: -11, left: "50%", transform: "translateX(-50%)",
-          background: `linear-gradient(90deg, ${track.borderColor}, ${track.color})`,
-          color: "#000", fontSize: 9, fontWeight: 800,
-          padding: "2px 10px", borderRadius: 20, letterSpacing: "0.2em", whiteSpace: "nowrap",
-          boxShadow: `0 0 12px ${track.color}88`,
-        }}>YOUR FOCUS</div>
+        <div style={{ position: "absolute", top: -11, left: "50%", transform: "translateX(-50%)", background: `linear-gradient(90deg, ${track.borderColor}, ${track.color})`, color: "#000", fontSize: 9, fontWeight: 800, padding: "2px 10px", borderRadius: 20, letterSpacing: "0.2em", whiteSpace: "nowrap" }}>YOUR FOCUS</div>
       )}
       <div style={{ fontSize: 12, fontWeight: 700, color: isActive ? track.color : "#e2e8f0", lineHeight: 1.3 }}>{track.label}</div>
       <div style={{ fontSize: 11, color: isActive ? track.color : "#94a3b8" }}>{track.value}</div>
@@ -769,13 +587,10 @@ const TrackCard = memo(function TrackCard({ track, isActive, onClick }) {
 });
 
 // ── TRACK PANE ────────────────────────────────────────────
-function TrackPane({ track, prices, onAddTicker, onRemoveTicker, onTickerClick }) {
+function TrackPane({ track, prices, isAdmin, onAddTicker, onRemoveTicker, onTickerClick }) {
   return (
     <div style={{
-      borderRadius: 18, border: `1px solid ${track.borderColor}44`,
-      background: "rgba(24,24,24,0.92)",
-      boxShadow: `0 0 60px ${track.borderColor}18, 0 8px 40px rgba(0,0,0,0.6)`,
-      padding: 22, marginTop: 8, animation: "fadeSlideIn .25s ease-out",
+      borderRadius: 18, border: `1px solid ${track.borderColor}44`, background: "rgba(24,24,24,0.92)", padding: 22, marginTop: 8, animation: "fadeSlideIn .25s ease-out",
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -788,7 +603,7 @@ function TrackPane({ track, prices, onAddTicker, onRemoveTicker, onTickerClick }
       </div>
       <div className="subsector-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(track.subsectors.length, 4)}, minmax(0,1fr))`, gap: 12 }}>
         {track.subsectors.map(sub => (
-          <SubsectorCard key={sub.id} sub={sub} prices={prices}
+          <SubsectorCard key={sub.id} sub={sub} prices={prices} isAdmin={isAdmin}
             onAddTicker={(ticker) => onAddTicker(track.id, sub.id, ticker)}
             onRemoveTicker={(ticker) => onRemoveTicker(track.id, sub.id, ticker)}
             onTickerClick={onTickerClick} />
@@ -816,19 +631,11 @@ function HeatMap({ prices, capexData, onTickerClick }) {
   }
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, boxShadow: "0 4px 30px rgba(0,0,0,0.4)" }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
         <div>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Portfolio Heat Map</h3>
           <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>All tracked tickers · color = 1D performance</p>
-        </div>
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-          {[{ label: "+15%", c: "#064e3b" }, { label: "+4%", c: "#047857" }, { label: "0%", c: "#10b981" }, { label: "-4%", c: "#dc2626" }, { label: "-8%", c: "#7f1d1d" }].map((x, i) => (
-            <div key={i} style={{ display: "flex", alignItems: "center", gap: 4 }}>
-              <div style={{ width: 12, height: 12, borderRadius: 3, background: x.c }} />
-              <span style={{ fontSize: 10, color: "#475569" }}>{x.label}</span>
-            </div>
-          ))}
         </div>
       </div>
       {capexData.tracks.map(track => {
@@ -837,19 +644,18 @@ function HeatMap({ prices, capexData, onTickerClick }) {
         return (
           <div key={track.id} style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 10, color: track.color, letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 7, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
-              <div style={{ width: 6, height: 6, borderRadius: "50%", background: track.color, boxShadow: `0 0 6px ${track.color}`, flexShrink: 0 }} />
+              <div style={{ width: 6, height: 6, borderRadius: "50%", background: track.color, flexShrink: 0 }} />
               {track.label}
               <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg,${track.color}44,transparent)` }} />
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {cells.map(ticker => {
                 const change = prices[ticker]?.change ?? prices[ticker];
-                const currentPrice = prices[ticker]?.price; // <-- Extract the live price
+                const currentPrice = prices[ticker]?.price; 
                 const bg = getHeatColor(change);
                 const pos = change === undefined || change >= 0;
                 return (
                   <div key={ticker}
-                    // Pass the price into the tooltip state
                     onMouseEnter={e => setTooltip({ ticker, change, price: currentPrice, track: track.label, rect: e.currentTarget.getBoundingClientRect() })}
                     onMouseLeave={() => setTooltip(null)}
                     onClick={e => { e.stopPropagation(); onTickerClick?.(ticker, e.currentTarget.getBoundingClientRect()); }}
@@ -870,33 +676,11 @@ function HeatMap({ prices, capexData, onTickerClick }) {
         );
       })}
       
-      {/* Tooltip Overlay */}
       {tooltip && (
-        <div style={{
-          position: "fixed",
-          top: tooltip.rect.top - 52,
-          left: tooltip.rect.left,
-          background: "rgba(18,18,18,0.95)",
-          border: `1px solid ${(tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171"}44`,
-          borderRadius: 8, padding: "7px 12px",
-          pointerEvents: "none", zIndex: 1000,
-          boxShadow: "0 4px 20px rgba(0,0,0,.7)",
-          display: "flex", alignItems: "center", gap: 10,
-        }}>
+        <div style={{ position: "fixed", top: tooltip.rect.top - 52, left: tooltip.rect.left, background: "rgba(18,18,18,0.95)", border: `1px solid ${(tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171"}44`, borderRadius: 8, padding: "7px 12px", pointerEvents: "none", zIndex: 1000, display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{tooltip.ticker}</span>
-          
-          {/* Newly Added Price Display */}
-          {tooltip.price !== undefined && (
-            <span style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0" }}>
-              ${tooltip.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-            </span>
-          )}
-          
-          {tooltip.change !== undefined && (
-            <span style={{ fontSize: 12, fontWeight: 700, color: (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171" }}>
-              {typeof tooltip.change === 'number' ? (tooltip.change >= 0 ? "+" : "") + tooltip.change + "%" : "—"}
-            </span>
-          )}
+          {tooltip.price !== undefined && <span style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0" }}>${tooltip.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+          {tooltip.change !== undefined && <span style={{ fontSize: 12, fontWeight: 700, color: (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171" }}>{typeof tooltip.change === 'number' ? (tooltip.change >= 0 ? "+" : "") + tooltip.change + "%" : "—"}</span>}
           <span style={{ fontSize: 10, color: "#475569" }}>{tooltip.track}</span>
         </div>
       )}
@@ -924,10 +708,7 @@ function DonutChart({ prices, capexData }) {
     const tickers = [...new Set(track.subsectors.flatMap(s => s.tickers))];
     const changes = tickers.map(t => prices[t]?.change ?? prices[t]).filter(v => typeof v === 'number');
     const avg = changes.length ? changes.reduce((a, b) => a + b, 0) / changes.length : 0;
-    return {
-      track, frac, avg, tickerCount: tickers.length,
-      path: `M${x1} ${y1} A${R} ${R} 0 ${large} 1 ${x2} ${y2} L${xi2} ${yi2} A${r} ${r} 0 ${large} 0 ${xi1} ${yi1} Z`,
-    };
+    return { track, frac, avg, tickerCount: tickers.length, path: `M${x1} ${y1} A${R} ${R} 0 ${large} 1 ${x2} ${y2} L${xi2} ${yi2} A${r} ${r} 0 ${large} 0 ${xi1} ${yi1} Z` };
   });
 
   const hov = hovered ? segments.find(s => s.track.id === hovered) : null;
@@ -939,7 +720,7 @@ function DonutChart({ prices, capexData }) {
   }).sort((a, b) => b.avg - a.avg);
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, boxShadow: "0 4px 30px rgba(0,0,0,0.4)" }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20 }}>
       <div style={{ marginBottom: 16 }}>
         <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Sector Allocation</h3>
         <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Capex weight · hover to inspect avg performance</p>
@@ -949,12 +730,8 @@ function DonutChart({ prices, capexData }) {
           {segments.map(seg => {
             const isHov = hovered === seg.track.id;
             return (
-              <g key={seg.track.id}
-                onMouseEnter={() => setHovered(seg.track.id)}
-                onMouseLeave={() => setHovered(null)}
-                style={{ transformOrigin: `${cx}px ${cy}px`, transform: `scale(${isHov ? 1.06 : 1})`, transition: "transform .2s", cursor: "pointer" }}>
-                <path d={seg.path} fill={isHov ? seg.track.color : seg.track.borderColor}
-                  opacity={isHov ? 1 : hovered ? 0.35 : 0.82} stroke="rgba(24,24,24,0.8)" strokeWidth="2.5" />
+              <g key={seg.track.id} onMouseEnter={() => setHovered(seg.track.id)} onMouseLeave={() => setHovered(null)} style={{ transformOrigin: `${cx}px ${cy}px`, transform: `scale(${isHov ? 1.06 : 1})`, transition: "transform .2s", cursor: "pointer" }}>
+                <path d={seg.path} fill={isHov ? seg.track.color : seg.track.borderColor} opacity={isHov ? 1 : hovered ? 0.35 : 0.82} stroke="rgba(24,24,24,0.8)" strokeWidth="2.5" />
               </g>
             );
           })}
@@ -976,24 +753,19 @@ function DonutChart({ prices, capexData }) {
         </svg>
         <div style={{ flex: 1, minWidth: 200, display: "flex", flexDirection: "column", gap: 10 }}>
           {trackPerf.map(track => (
-            <div key={track.id}
-              onMouseEnter={() => setHovered(track.id)}
-              onMouseLeave={() => setHovered(null)}
-              style={{ cursor: "default", opacity: hovered && hovered !== track.id ? 0.35 : 1, transition: "opacity .2s" }}>
+            <div key={track.id} onMouseEnter={() => setHovered(track.id)} onMouseLeave={() => setHovered(null)} style={{ cursor: "default", opacity: hovered && hovered !== track.id ? 0.35 : 1, transition: "opacity .2s" }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: track.color, boxShadow: `0 0 6px ${track.color}88` }} />
+                  <div style={{ width: 8, height: 8, borderRadius: "50%", background: track.color }} />
                   <span style={{ fontSize: 11, color: "#cbd5e1", fontWeight: 600 }}>{track.label}</span>
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
                   <span style={{ fontSize: 10, color: "#475569" }}>${track.capex}B</span>
-                  <span style={{ fontSize: 11, fontWeight: 700, color: track.avg >= 0 ? "#34d399" : "#f87171", minWidth: 46, textAlign: "right" }}>
-                    {track.avg >= 0 ? "+" : ""}{track.avg.toFixed(1)}%
-                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: track.avg >= 0 ? "#34d399" : "#f87171", minWidth: 46, textAlign: "right" }}>{track.avg >= 0 ? "+" : ""}{track.avg.toFixed(1)}%</span>
                 </div>
               </div>
               <div style={{ height: 4, borderRadius: 4, background: "rgba(255,255,255,0.05)", overflow: "hidden" }}>
-                <div style={{ height: "100%", borderRadius: 4, width: `${(track.capex / total) * 100}%`, background: `linear-gradient(90deg,${track.borderColor},${track.color})`, transition: "width .6s cubic-bezier(.4,0,.2,1)", boxShadow: `0 0 8px ${track.color}44` }} />
+                <div style={{ height: "100%", borderRadius: 4, width: `${(track.capex / total) * 100}%`, background: `linear-gradient(90deg,${track.borderColor},${track.color})`, transition: "width .6s cubic-bezier(.4,0,.2,1)" }} />
               </div>
             </div>
           ))}
@@ -1005,9 +777,7 @@ function DonutChart({ prices, capexData }) {
 
 // ── WATCHLIST ─────────────────────────────────────────────
 function Watchlist({ prices, capexData }) {
-  const [list, setList] = useState(() => {
-    return [...new Set(capexData.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))];
-  });
+  const [list, setList] = useState(() => [...new Set(capexData.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))]);
   const [input, setInput] = useState("");
   const [sortDir, setSortDir] = useState("desc");
   const [filter, setFilter] = useState("all");
@@ -1020,13 +790,8 @@ function Watchlist({ prices, capexData }) {
   }
 
   const enriched = list.map(t => ({ ticker: t, change: prices[t]?.change ?? prices[t], track: getSector(t) }));
-  const filtered = filter === "all" ? enriched : filter === "gainers"
-    ? enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) >= 0)
-    : enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) < 0);
-  const sorted = [...filtered].sort((a, b) => sortDir === "desc"
-    ? ((typeof b.change === 'number' ? b.change : -999) - (typeof a.change === 'number' ? a.change : -999))
-    : ((typeof a.change === 'number' ? a.change : 999) - (typeof b.change === 'number' ? b.change : 999)));
-  
+  const filtered = filter === "all" ? enriched : filter === "gainers" ? enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) >= 0) : enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) < 0);
+  const sorted = [...filtered].sort((a, b) => sortDir === "desc" ? ((typeof b.change === 'number' ? b.change : -999) - (typeof a.change === 'number' ? a.change : -999)) : ((typeof a.change === 'number' ? a.change : 999) - (typeof b.change === 'number' ? b.change : 999)));
   const validChanges = enriched.filter(x => typeof x.change === 'number');
   const avg = validChanges.reduce((s, x) => s + x.change, 0) / (validChanges.length || 1);
   const maxAbs = Math.max(...enriched.map(x => Math.abs(typeof x.change === 'number' ? x.change : 0)), 1);
@@ -1038,52 +803,27 @@ function Watchlist({ prices, capexData }) {
   }
 
   return (
-    <div style={{ 
-      borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", 
-      background: "rgba(24,24,24,0.7)", padding: 20, 
-      display: "flex", flexDirection: "column", gap: 14, 
-      boxShadow: "0 4px 30px rgba(0,0,0,0.4)",
-      height: "100%" 
-    }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, display: "flex", flexDirection: "column", gap: 14, height: "100%" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <div>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Watchlist</h3>
           <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Track positions · add any ticker</p>
         </div>
         <div style={{ display: "flex", gap: 12, fontSize: 12 }}>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ color: "#34d399", fontWeight: 700 }}>{enriched.filter(x => (typeof x.change === 'number' ? x.change : -1) >= 0).length}</div>
-            <div style={{ color: "#475569", fontSize: 10 }}>UP</div>
-          </div>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ color: "#f87171", fontWeight: 700 }}>{enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) < 0).length}</div>
-            <div style={{ color: "#475569", fontSize: 10 }}>DOWN</div>
-          </div>
-          <div style={{ textAlign: "center" }}>
-            <div style={{ color: avg >= 0 ? "#34d399" : "#f87171", fontWeight: 700 }}>{avg >= 0 ? "+" : ""}{avg.toFixed(2)}%</div>
-            <div style={{ color: "#475569", fontSize: 10 }}>AVG</div>
-          </div>
+          <div style={{ textAlign: "center" }}><div style={{ color: "#34d399", fontWeight: 700 }}>{enriched.filter(x => (typeof x.change === 'number' ? x.change : -1) >= 0).length}</div><div style={{ color: "#475569", fontSize: 10 }}>UP</div></div>
+          <div style={{ textAlign: "center" }}><div style={{ color: "#f87171", fontWeight: 700 }}>{enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) < 0).length}</div><div style={{ color: "#475569", fontSize: 10 }}>DOWN</div></div>
+          <div style={{ textAlign: "center" }}><div style={{ color: avg >= 0 ? "#34d399" : "#f87171", fontWeight: 700 }}>{avg >= 0 ? "+" : ""}{avg.toFixed(2)}%</div><div style={{ color: "#475569", fontSize: 10 }}>AVG</div></div>
         </div>
       </div>
       <div style={{ display: "flex", gap: 8 }}>
-        <input value={input} onChange={e => setInput(e.target.value.toUpperCase())}
-          onKeyDown={e => e.key === "Enter" && add()}
-          placeholder="Add ticker… e.g. NVDA"
-          style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "7px 12px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit", outline: "none" }} />
+        <input value={input} onChange={e => setInput(e.target.value.toUpperCase())} onKeyDown={e => e.key === "Enter" && add()} placeholder="Add ticker… e.g. NVDA" style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "7px 12px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit", outline: "none" }} />
         <button onClick={add} style={{ background: "rgba(96,165,250,0.12)", border: "1px solid rgba(96,165,250,0.25)", color: "#60a5fa", borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>+ Add</button>
       </div>
       <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
         {["all", "gainers", "losers"].map(f => (
-          <button key={f} onClick={() => setFilter(f)} style={{
-            background: filter === f ? "rgba(255,255,255,0.08)" : "transparent",
-            border: `1px solid ${filter === f ? "rgba(255,255,255,0.15)" : "transparent"}`,
-            color: filter === f ? "#e2e8f0" : "#475569",
-            borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit", textTransform: "capitalize",
-          }}>{f}</button>
+          <button key={f} onClick={() => setFilter(f)} style={{ background: filter === f ? "rgba(255,255,255,0.08)" : "transparent", border: `1px solid ${filter === f ? "rgba(255,255,255,0.15)" : "transparent"}`, color: filter === f ? "#e2e8f0" : "#475569", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit", textTransform: "capitalize" }}>{f}</button>
         ))}
-        <button onClick={() => setSortDir(d => d === "desc" ? "asc" : "desc")} style={{ marginLeft: "auto", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>
-          Sort {sortDir === "desc" ? "↓" : "↑"}
-        </button>
+        <button onClick={() => setSortDir(d => d === "desc" ? "asc" : "desc")} style={{ marginLeft: "auto", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>Sort {sortDir === "desc" ? "↓" : "↑"}</button>
       </div>
       
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, overflowY: "auto", minHeight: 0, paddingRight: 4 }}>
@@ -1091,37 +831,19 @@ function Watchlist({ prices, capexData }) {
           const pos = (typeof item.change === 'number' ? item.change : 0) >= 0;
           const barW = typeof item.change === 'number' ? Math.abs(item.change) / maxAbs * 100 : 0;
           return (
-            <div key={item.ticker} style={{ borderRadius: 8, padding: "10px 10px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background .15s" }}
-              onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
-              onMouseLeave={e => e.currentTarget.style.background = ""}>
+            <div key={item.ticker} style={{ borderRadius: 8, padding: "10px 10px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background .15s" }} onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"} onMouseLeave={e => e.currentTarget.style.background = ""}>
               <span style={{ fontSize: 10, color: "#334155", width: 16, textAlign: "right" }}>{idx + 1}</span>
               <div style={{ flex: "0 0 auto", minWidth: 60 }}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{item.ticker}</div>
                 {item.track && <div style={{ fontSize: 9, color: item.track.color, marginTop: 1 }}>{item.track.label.split(" ").slice(0, 2).join(" ")}</div>}
               </div>
               <div style={{ flex: 1, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.04)", overflow: "hidden" }}>
-                {typeof item.change === 'number' && (
-                  <div style={{ height: "100%", borderRadius: 2, width: `${barW}%`, background: pos ? "linear-gradient(90deg,#065f46,#34d399)" : "linear-gradient(90deg,#7f1d1d,#ef4444)", transition: "width .4s ease" }} />
-                )}
+                {typeof item.change === 'number' && <div style={{ height: "100%", borderRadius: 2, width: `${barW}%`, background: pos ? "linear-gradient(90deg,#065f46,#34d399)" : "linear-gradient(90deg,#7f1d1d,#ef4444)", transition: "width .4s ease" }} />}
               </div>
-              
-              {/* UP/DOWN ARROWS APPLIED HERE */}
-              <div style={{ 
-                display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4,
-                fontSize: 13, fontWeight: 700, minWidth: 68, textAlign: "right", 
-                color: typeof item.change !== 'number' ? "#334155" : pos ? "#34d399" : "#f87171" 
-              }}>
-                {typeof item.change !== 'number' ? "—" : (
-                  <>
-                    <span style={{ fontSize: 10 }}>{pos ? "▲" : "▼"}</span>
-                    {Math.abs(item.change).toFixed(2)}%
-                  </>
-                )}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, fontSize: 13, fontWeight: 700, minWidth: 68, textAlign: "right", color: typeof item.change !== 'number' ? "#334155" : pos ? "#34d399" : "#f87171" }}>
+                {typeof item.change !== 'number' ? "—" : <><span style={{ fontSize: 10 }}>{pos ? "▲" : "▼"}</span>{Math.abs(item.change).toFixed(2)}%</>}
               </div>
-
-              <button onClick={() => setList(l => l.filter(x => x !== item.ticker))} style={{ background: "none", border: "none", color: "#1e293b", cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1, transition: "color .15s", fontFamily: "inherit" }}
-                onMouseEnter={e => e.currentTarget.style.color = "#ef4444"}
-                onMouseLeave={e => e.currentTarget.style.color = "#1e293b"}>×</button>
+              <button onClick={() => setList(l => l.filter(x => x !== item.ticker))} style={{ background: "none", border: "none", color: "#1e293b", cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1, transition: "color .15s", fontFamily: "inherit" }} onMouseEnter={e => e.currentTarget.style.color = "#ef4444"} onMouseLeave={e => e.currentTarget.style.color = "#1e293b"}>×</button>
             </div>
           );
         })}
@@ -1130,46 +852,14 @@ function Watchlist({ prices, capexData }) {
   );
 }
 
-// ── SMALL-CAP SCANNER (Shared Globally) ─────────────────────────────────────
-function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick, forceRefresh }) {
+// ── MULTIBAGGER PANEL ─────────────────────────────────────
+function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTickerClick }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newTicker, setNewTicker] = useState("");
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState("");
-  const [isAdmin, setIsAdmin] = useState(false);
-  const [adminPassword, setAdminPassword] = useState("");
   const fetchIdRef = useRef(0);
-
-  // Prompts user for the password to unlock editing features
-  const handleUnlock = () => {
-    const pwd = prompt("Enter Admin Password to update the global scanner:");
-    if (pwd) {
-      setAdminPassword(pwd);
-      setIsAdmin(true);
-    }
-  };
-
-  // Core function to send updates to the global database
-  const saveGlobalList = async (newList) => {
-    try {
-      const res = await fetch("/scanner", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tickers: newList, password: adminPassword })
-      });
-      const json = await res.json();
-      if (res.ok) {
-        setScannerPool(newList);
-        forceRefresh(); // Immediately grab live prices for the new data
-      } else {
-        alert(json.error || "Update failed.");
-        if (res.status === 401) { setIsAdmin(false); setAdminPassword(""); } // Boot out on wrong pass
-      }
-    } catch (e) {
-      alert("Network error. Could not save to database.");
-    }
-  };
 
   useEffect(() => {
     const currentFetchId = ++fetchIdRef.current;
@@ -1205,9 +895,7 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick, 
             const score = (fcfYield * 15) + (bookToMarket * 10) + (roa * 2);
 
             return { ticker, fcfYield, roa, bookToMarket, pe, marketCapFmt, score };
-          } catch (err) { 
-            return null; 
-          }
+          } catch (err) { return null; }
         })
       );
       
@@ -1221,27 +909,17 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick, 
 
   const addTicker = () => {
     const sym = newTicker.trim().toUpperCase();
-    if (sym && !scannerPool.includes(sym)) {
-      saveGlobalList([...scannerPool, sym]);
-      setNewTicker("");
-    }
+    if (sym && !scannerPool.includes(sym)) { onSaveScanner([...scannerPool, sym]); setNewTicker(""); }
   };
 
   const handleImport = () => {
     const words = importText.toUpperCase().match(/\b[A-Z]{1,5}\b/g) || [];
     const ignoreList = ["INC", "CORP", "CO", "LTD", "PLC", "LLC", "USD", "EUR", "CAD", "M", "B", "K", "TRUE", "FALSE"];
     const foundTickers = [...new Set(words)].filter(w => !ignoreList.includes(w));
-
-    if (foundTickers.length > 0) {
-      saveGlobalList(foundTickers);
-      setShowImport(false);
-      setImportText("");
-    } else {
-      alert("No valid tickers found.");
-    }
+    if (foundTickers.length > 0) { onSaveScanner(foundTickers); setShowImport(false); setImportText(""); } else { alert("No valid tickers found."); }
   };
 
-  const removeTicker = (ticker) => { saveGlobalList(scannerPool.filter(t => t !== ticker)); };
+  const removeTicker = (ticker) => { onSaveScanner(scannerPool.filter(t => t !== ticker)); };
   
   const getScoreColor = (score) => {
     if (score > 40) return "#34d399"; 
@@ -1255,21 +933,9 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick, 
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24" }}>Small-cap Scanner</h3>
-            {/* The Lock/Unlock UI */}
-            {!isAdmin ? (
-              <button onClick={handleUnlock} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 12 }} title="Admin Login">
-                🔒
-              </button>
-            ) : (
-              <span style={{ fontSize: 9, background: "rgba(52,211,153,0.1)", color: "#34d399", border: "1px solid rgba(52,211,153,0.3)", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>
-                🔓 LIVE EDITING ACTIVE
-              </span>
-            )}
           </div>
           <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Prioritizing FCF Yield, B/M, and ROA</p>
         </div>
-        
-        {/* Only show import/add tools if unlocked */}
         {isAdmin && (
           <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
             <button onClick={() => setShowImport(!showImport)} style={{ background: "transparent", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.3)", borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
@@ -1285,15 +951,10 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick, 
 
       {showImport && isAdmin && (
         <div style={{ marginBottom: 16, background: "rgba(0,0,0,0.2)", padding: 12, borderRadius: 12, border: "1px dashed rgba(255,255,255,0.1)", animation: "fadeSlideIn .2s ease-out", flexShrink: 0 }}>
-          <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 8 }}>
-            Paste raw tickers below to instantly update the dashboard for all users globally.
-          </div>
+          <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 8 }}>Paste raw tickers below to instantly update the dashboard globally.</div>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-            <textarea value={importText} onChange={e => setImportText(e.target.value)} placeholder="e.g. NVDA, MSFT, AAPL"
-              style={{ flex: 1, height: 60, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: 8, color: "#e2e8f0", fontSize: 12, fontFamily: "monospace", outline: "none", resize: "vertical" }} />
-            <button onClick={handleImport} style={{ background: "#60a5fa", color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>
-              Update Global
-            </button>
+            <textarea value={importText} onChange={e => setImportText(e.target.value)} placeholder="e.g. NVDA, MSFT, AAPL" style={{ flex: 1, height: 60, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: 8, color: "#e2e8f0", fontSize: 12, fontFamily: "monospace", outline: "none", resize: "vertical" }} />
+            <button onClick={handleImport} style={{ background: "#60a5fa", color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>Update Global</button>
           </div>
         </div>
       )}
@@ -1333,11 +994,7 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick, 
                   <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{typeof stock.bookToMarket === 'number' && !isNaN(stock.bookToMarket) ? stock.bookToMarket.toFixed(2) : "—"}</td>
                   <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{typeof stock.roa === 'number' && !isNaN(stock.roa) ? stock.roa.toFixed(1) + "%" : "—"}</td>
                   <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(stock.score), fontSize: 13 }}>{typeof stock.score === 'number' && !isNaN(stock.score) ? stock.score.toFixed(1) : "—"}</td>
-                  
-                  {/* Only show the delete button if logged in as Admin */}
-                  {isAdmin && (
-                    <td style={{ textAlign: "right" }}><button onClick={() => removeTicker(stock.ticker)} style={{ background: "none", border: "none", color: "#334155", cursor: "pointer", fontSize: 16 }}>×</button></td>
-                  )}
+                  {isAdmin && <td style={{ textAlign: "right" }}><button onClick={() => removeTicker(stock.ticker)} style={{ background: "none", border: "none", color: "#334155", cursor: "pointer", fontSize: 16 }}>×</button></td>}
                 </tr>
               );
             })}
@@ -1351,24 +1008,11 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick, 
 // ── ROOT APP ──────────────────────────────────────────────
 export default function App() {
   
-  // Start with default, but immediately override with Global DB on load
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminPassword, setAdminPassword] = useState("");
+
   const [scannerPool, setScannerPool] = useState(DEFAULT_MULTIBAGGER);
-
-  // Fetch the shared list from Cloudflare KV the exact moment the page loads
-  useEffect(() => {
-    fetch("/scanner")
-      .then(res => res.json())
-      .then(data => { if (data.tickers) setScannerPool(data.tickers); })
-      .catch(e => console.log("Failed to load global scanner. Using defaults."));
-  }, []);
-
-  const [capexData, setCapexData] = useState(() => {
-    try {
-      const saved = localStorage.getItem("capexData");
-      const parsed = saved ? JSON.parse(saved) : null;
-      return (parsed && Array.isArray(parsed.tracks)) ? parsed : CAPEX_DATA;
-    } catch { return CAPEX_DATA; }
-  });
+  const [capexData, setCapexData] = useState(CAPEX_DATA);
   
   const [activeTrack, setActiveTrack] = useState(null);
   const [prices, setPrices] = useState({});
@@ -1378,26 +1022,30 @@ export default function App() {
   const [bottomTab, setBottomTab] = useState("all");
   const [popup, setPopup] = useState(null); 
 
+  // Mount: Fetch Global Data for both panels
+  useEffect(() => {
+    fetch("/scanner")
+      .then(res => res.json())
+      .then(data => { if (data.tickers) setScannerPool(data.tickers); })
+      .catch(e => console.log("Scanner fetch failed"));
+
+    fetch("/capex")
+      .then(res => res.json())
+      .then(data => { if (data.capexData) setCapexData(data.capexData); })
+      .catch(e => console.log("Capex fetch failed"));
+  }, []);
+
   const openPopup = useCallback((ticker, rect) => {
     setPopup(prev => (prev?.ticker === ticker ? null : { ticker, change: prices[ticker]?.change ?? prices[ticker], rect }));
   }, [prices]);
 
-  useEffect(() => {
-    try { localStorage.setItem("capexData", JSON.stringify(capexData)); }
-    catch {}
-  }, [capexData]);
-
   const refresh = useCallback(async () => {
     setRefreshing(true);
-    
-    // Uses the live state of scannerPool
     const allTickersToFetch = [...new Set([...getAllTickers(capexData), ...scannerPool])];
-
     const [newPrices, newMarket] = await Promise.all([
       fetchLivePrices(allTickersToFetch),
       fetchMarketData(),
     ]);
-    
     setPrices(prev => ({ ...prev, ...newPrices }));
     setMarketData(prev => {
       const merged = { ...prev };
@@ -1413,23 +1061,60 @@ export default function App() {
     setLastUpdated(new Date().toLocaleTimeString());
     setRefreshing(false);
   }, [capexData, scannerPool]);
-  
+
   useEffect(() => {
     refresh();
-    const id = setInterval(() => {
-      if (!document.hidden) {
-        refresh();
-      }
-    }, 15000); 
+    const id = setInterval(() => { if (!document.hidden) refresh(); }, 15000); 
     return () => clearInterval(id);
   }, [refresh]);
+
+  const handleUnlock = () => {
+    const pwd = prompt("Enter Admin Password to unlock global editing:");
+    if (pwd) {
+      setAdminPassword(pwd);
+      setIsAdmin(true);
+    }
+  };
+
+  // Admin save functions for the KV Databases
+  const saveGlobalScanner = async (newList) => {
+    try {
+      const res = await fetch("/scanner", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tickers: newList, password: adminPassword })
+      });
+      if (res.ok) { setScannerPool(newList); refresh(); } 
+      else {
+        const json = await res.json();
+        alert(json.error || "Update failed.");
+        if (res.status === 401) { setIsAdmin(false); setAdminPassword(""); }
+      }
+    } catch (e) { alert("Network error."); }
+  };
+
+  const saveGlobalCapex = async (newData) => {
+    try {
+      const res = await fetch("/capex", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ capexData: newData, password: adminPassword })
+      });
+      if (res.ok) { setCapexData(newData); refresh(); } 
+      else {
+        const json = await res.json();
+        alert(json.error || "Update failed.");
+        if (res.status === 401) { setIsAdmin(false); setAdminPassword(""); }
+      }
+    } catch (e) { alert("Network error."); }
+  };
 
   function addTickerToSubsector(trackId, subsectorId, ticker) {
     const sym = ticker.trim().toUpperCase();
     if (!sym) return;
-    setCapexData(prev => ({
-      ...prev,
-      tracks: prev.tracks.map(track =>
+    const newData = {
+      ...capexData,
+      tracks: capexData.tracks.map(track =>
         track.id !== trackId ? track : {
           ...track,
           subsectors: track.subsectors.map(sub =>
@@ -1440,16 +1125,14 @@ export default function App() {
           ),
         }
       ),
-    }));
-    fetchLivePrices([sym]).then(newPrices => {
-      setPrices(prev => ({ ...prev, ...newPrices }));
-    });
+    };
+    saveGlobalCapex(newData);
   }
 
   function removeTickerFromSubsector(trackId, subsectorId, ticker) {
-    setCapexData(prev => ({
-      ...prev,
-      tracks: prev.tracks.map(track =>
+    const newData = {
+      ...capexData,
+      tracks: capexData.tracks.map(track =>
         track.id !== trackId ? track : {
           ...track,
           subsectors: track.subsectors.map(sub =>
@@ -1460,7 +1143,8 @@ export default function App() {
           ),
         }
       ),
-    }));
+    };
+    saveGlobalCapex(newData);
   }
 
   const gainers = Object.values(prices).filter(v => (v?.change ?? v) > 0).length;
@@ -1468,74 +1152,31 @@ export default function App() {
   const activeData = capexData.tracks.find(t => t.id === activeTrack);
   const tickerEntries = Object.entries(prices);
 
-const styles = `
-    /* Bring in clean SaaS UI font and CNBC-style condensed data font */
+  const styles = `
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Condensed:wght@400;500;600;700&display=swap');
-    
-    * { 
-      box-sizing: border-box; 
-      margin: 0; 
-      padding: 0; 
-      box-shadow: none !important; 
-    }
-    
-    html, body { 
-      background: #0E1117; 
-      font-family: 'Inter', sans-serif;
-    }
-
-    /* Force the CNBC-style condensed font for numbers, tables, and tickers */
-    table, .market-strip span, .ticker-tape, .capex-number {
-      font-family: 'Roboto Condensed', sans-serif !important;
-      letter-spacing: 0.02em; /* Slight spacing for clear readability */
-    }
-
-    div[style*="border-radius: 12px"],
-    div[style*="border-radius: 14px"], 
-    div[style*="border-radius: 18px"],
-    div[style*="border-radius: 22px"] {
-        border-radius: 6px !important;
-    }
-
+    * { box-sizing: border-box; margin: 0; padding: 0; box-shadow: none !important; }
+    html, body { background: #0E1117; font-family: 'Inter', sans-serif; }
+    table, .market-strip span, .ticker-tape, .capex-number { font-family: 'Roboto Condensed', sans-serif !important; letter-spacing: 0.02em; }
+    div[style*="border-radius: 12px"], div[style*="border-radius: 14px"], div[style*="border-radius: 18px"], div[style*="border-radius: 22px"] { border-radius: 6px !important; }
     ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 4px; }
-    
     @keyframes scroll-left { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
     @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes pulseDot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(.7); } }
-    
     .ticker-tape { animation: scroll-left 80s linear infinite; white-space: nowrap; display: inline-flex; gap: 24px; }
     .pulse { animation: pulseDot 2s infinite; }
-
-    /* ── CUSTOM DESKTOP GRID ───────────────────────────────── */
-    .bottom-grid-all {
-      display: grid;
-      grid-template-columns: repeat(3, 1fr);
-      gap: 16px;
-    }
+    .bottom-grid-all { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
     .span-2 { grid-column: span 2; }
     .span-1 { grid-column: span 1; }
-    
-    .panel-wrapper {
-      position: relative;
-      height: 100%;
-    }
-    .panel-inner {
-      position: absolute;
-      top: 0; left: 0; right: 0; bottom: 0;
-    }
-
-    /* ── TABLET / SMALL DESKTOP ───────────────────────────────── */
+    .panel-wrapper { position: relative; height: 100%; }
+    .panel-inner { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
     @media (max-width: 1024px) {
       .bottom-grid-all { grid-template-columns: 1fr !important; }
       .span-2, .span-1 { grid-column: 1 / -1 !important; }
-      
       .panel-wrapper { min-height: 450px; }
       .panel-inner { position: relative; height: 100%; }
     }
-
-    /* ── MOBILE ───────────────────────────────────────────── */
     @media (max-width: 640px) {
       .track-grid { grid-template-columns: repeat(2, minmax(0,1fr)) !important; }
       .top-node-layout { flex-direction: column !important; align-items: stretch !important; gap: 12px !important; }
@@ -1551,13 +1192,9 @@ const styles = `
   return (
     <>
       <style>{styles}</style>
-
-      <div style={{
-        position: "relative", zIndex: 1,
-        minHeight: "100vh", color: "#fff",
-        fontFamily: "'DM Mono','Fira Code',monospace",
-      }}>
-
+      <div style={{ position: "relative", zIndex: 1, minHeight: "100vh", color: "#fff" }}>
+        
+        {/* TICKER TAPE */}
         {tickerEntries.length > 0 && (
           <div style={{ overflow: "hidden", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(18,18,18,0.75)", padding: "6px 0" }}>
             <div className="ticker-tape">
@@ -1574,84 +1211,56 @@ const styles = `
           </div>
         )}
 
+        {/* HEADER */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <div style={{ fontSize: 10, color: "#2d3a52", letterSpacing: "0.35em", textTransform: "uppercase", marginBottom: 3 }}>
-              HOW ~$600B+ IN HYPERSCALER CAPEX FLOWS THROUGH AI INFRASTRUCTURE TRACKS
-            </div>
-            <div style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", fontFamily: "'Syne',sans-serif", letterSpacing: "-0.01em" }}>
-              AI Capex Flow Intelligence
-            </div>
+            <div style={{ fontSize: 10, color: "#2d3a52", letterSpacing: "0.35em", textTransform: "uppercase", marginBottom: 3 }}>HOW ~$600B+ IN HYPERSCALER CAPEX FLOWS THROUGH AI INFRASTRUCTURE TRACKS</div>
+            <div style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", letterSpacing: "-0.01em" }}>AI Capex Flow Intelligence</div>
           </div>
           <div className="header-controls" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+            
+            {/* NEW GLOBAL ADMIN LOGIN */}
+            {!isAdmin ? (
+              <button onClick={handleUnlock} style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", color: "#64748b", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>
+                🔒 Login
+              </button>
+            ) : (
+              <span style={{ fontSize: 10, background: "rgba(52,211,153,0.1)", color: "#34d399", border: "1px solid rgba(52,211,153,0.3)", padding: "4px 10px", borderRadius: 6, fontWeight: 700 }}>
+                🔓 EDITING ACTIVE
+              </span>
+            )}
+
             <span className="pulse" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#64748b" }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#34d399", display: "inline-block", boxShadow: "0 0 6px #34d399" }} />
-              {gainers} advancing
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#34d399", display: "inline-block", boxShadow: "0 0 6px #34d399" }} />{gainers} advancing
             </span>
             <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#64748b" }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f87171", display: "inline-block", boxShadow: "0 0 6px #f87171" }} />
-              {losers} declining
+              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f87171", display: "inline-block", boxShadow: "0 0 6px #f87171" }} />{losers} declining
             </span>
             <span style={{ fontSize: 11, color: "#2d3a52" }}>{getAllTickers(capexData).length} tickers</span>
-            <button
-              onClick={() => {
-                if (window.confirm("Reset all tickers to defaults?")) {
-                  setCapexData(CAPEX_DATA);
-                  localStorage.removeItem("capexData");
-                  setScannerPool(DEFAULT_MULTIBAGGER);
-                  localStorage.removeItem("scannerPool");
-                }
-              }}
-              style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>
-              ↺ reset
-            </button>
-            <button onClick={refresh} disabled={refreshing} style={{
-              background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)",
-              borderRadius: 8, color: "#64748b", padding: "5px 12px", cursor: "pointer",
-              fontSize: 11, fontFamily: "inherit", opacity: refreshing ? 0.5 : 1,
-            }}>
+            <button onClick={refresh} disabled={refreshing} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 8, color: "#64748b", padding: "5px 12px", cursor: "pointer", fontSize: 11, fontFamily: "inherit", opacity: refreshing ? 0.5 : 1 }}>
               {refreshing ? "↻" : `↻${lastUpdated ? " · " + lastUpdated : ""}`}
             </button>
           </div>
         </div>
 
         <div className="main-content" style={{ maxWidth: 1480, margin: "0 auto", padding: "32px 28px", display: "flex", flexDirection: "column", gap: 28 }}>
-
+          
           <div className="top-node-layout" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
             <MarketStrip data={marketData} tickers={["^GSPC","^DJI","^IXIC"]} labels={["S&P 500","DOW","NASDAQ"]} colors={["#60a5fa","#34d399","#c084fc"]} />
-
             <div className="top-node-center" style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "0 0 auto" }}>
-              <div style={{
-                width: 480, borderRadius: 22, padding: "26px 30px", textAlign: "center",
-                background: "linear-gradient(135deg,rgba(251,191,36,.1) 0%,rgba(180,120,10,.04) 50%,rgba(18,18,18,.9) 100%)",
-                border: "1.5px solid rgba(251,191,36,.45)",
-              }}>
+              <div style={{ width: 480, borderRadius: 22, padding: "26px 30px", textAlign: "center", background: "linear-gradient(135deg,rgba(251,191,36,.1) 0%,rgba(180,120,10,.04) 50%,rgba(18,18,18,.9) 100%)", border: "1.5px solid rgba(251,191,36,.45)" }}>
                 <div style={{ fontSize: 10, color: "rgba(251,191,36,.5)", letterSpacing: "0.4em", textTransform: "uppercase", marginBottom: 6 }}>Total Investment Flow</div>
-                <div className="capex-number" style={{ fontSize: 64, color: "#fbbf24", lineHeight: 1, marginBottom: 6, fontFamily: "'Bebas Neue', sans-serif", letterSpacing: "0.04em", textShadow: "0 0 40px rgba(251,191,36,0.5)" }}>~$600B+</div>
-                <div style={{ fontSize: 13, color: "#64748b", marginBottom: 18 }}>
-                  Hyperscaler AI Capex <span style={{ color: "rgba(251,191,36,.6)" }}>(2026 Est.)</span>
-                </div>
+                <div className="capex-number" style={{ fontSize: 64, color: "#fbbf24", lineHeight: 1, marginBottom: 6, letterSpacing: "0.04em" }}>~$600B+</div>
+                <div style={{ fontSize: 13, color: "#64748b", marginBottom: 18 }}>Hyperscaler AI Capex <span style={{ color: "rgba(251,191,36,.6)" }}>(2026 Est.)</span></div>
                 <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
                   {CAPEX_DATA.companies.map(co => {
                     const entry = marketData[co];
-                    const price = entry?.price;
-                    const change = entry?.change;
-                    const pos = (change ?? 0) >= 0;
-                    const priceStr = price ? "$" + price.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—";
+                    const pos = (entry?.change ?? 0) >= 0;
                     return (
-                      <div key={co} style={{
-                        display: "flex", flexDirection: "column", alignItems: "center",
-                        padding: "6px 12px", borderRadius: 10, minWidth: 72,
-                        background: "rgba(255,255,255,0.04)",
-                        border: "1px solid rgba(255,255,255,0.09)", transition: "all .2s",
-                      }}
-                        onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(251,191,36,0.45)"; e.currentTarget.style.boxShadow = "0 0 12px rgba(251,191,36,0.15)"; }}
-                        onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.09)"; e.currentTarget.style.boxShadow = "none"; }}>
+                      <div key={co} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 12px", borderRadius: 10, minWidth: 72, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", transition: "all .2s" }} onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(251,191,36,0.45)"; }} onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.09)"; }}>
                         <span style={{ fontSize: 10, fontWeight: 800, color: "#fbbf24", letterSpacing: "0.1em", marginBottom: 2 }}>{co}</span>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: "#f1f5f9", fontFamily: "'DM Mono', monospace", marginBottom: 1 }}>{priceStr}</span>
-                        {change !== undefined && change !== null
-                          ? <span style={{ fontSize: 10, fontWeight: 600, color: pos ? "#34d399" : "#f87171" }}>{pos ? "+" : ""}{change.toFixed(2)}%</span>
-                          : <span style={{ fontSize: 10, color: "#334155" }}>—</span>}
+                        <span style={{ fontSize: 12, fontWeight: 700, color: "#f1f5f9", marginBottom: 1 }}>{entry?.price ? "$" + entry.price.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"}</span>
+                        {entry?.change !== undefined && entry?.change !== null ? <span style={{ fontSize: 10, fontWeight: 600, color: pos ? "#34d399" : "#f87171" }}>{pos ? "+" : ""}{entry.change.toFixed(2)}%</span> : <span style={{ fontSize: 10, color: "#334155" }}>—</span>}
                       </div>
                     );
                   })}
@@ -1659,94 +1268,47 @@ const styles = `
               </div>
               <div style={{ width: 1, height: 28, background: "linear-gradient(to bottom,rgba(251,191,36,.5),transparent)" }} />
               <div style={{ position: "relative", width: "100%", height: 1, background: "linear-gradient(90deg,transparent 5%,rgba(255,255,255,.06) 20%,rgba(255,255,255,.06) 80%,transparent 95%)" }}>
-                {capexData.tracks.map((_, i, arr) => (
-                  <div key={i} style={{ position: "absolute", top: 0, left: `${(i / (arr.length - 1)) * 70 + 15}%`, width: 1, height: 18, background: "linear-gradient(to bottom,rgba(255,255,255,.12),transparent)" }} />
-                ))}
+                {capexData.tracks.map((_, i, arr) => <div key={i} style={{ position: "absolute", top: 0, left: `${(i / (arr.length - 1)) * 70 + 15}%`, width: 1, height: 18, background: "linear-gradient(to bottom,rgba(255,255,255,.12),transparent)" }} />)}
               </div>
             </div>
-
             <MarketStrip data={marketData} tickers={["BTC-USD","ETH-USD","XRP-USD"]} labels={["BTC","ETH","XRP"]} colors={["#f59e0b","#60a5fa","#34d399"]} />
           </div>
 
           <div className="track-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(0,1fr))", gap: 10, paddingTop: 8 }}>
             {capexData.tracks.map(track => (
               <div key={track.id} style={{ paddingTop: activeTrack === track.id ? 14 : 0 }}>
-                <TrackCard track={track} isActive={activeTrack === track.id}
-                  onClick={() => setActiveTrack(p => p === track.id ? null : track.id)} />
+                <TrackCard track={track} isActive={activeTrack === track.id} onClick={() => setActiveTrack(p => p === track.id ? null : track.id)} />
               </div>
             ))}
           </div>
 
           {activeData && (
-            <TrackPane track={activeData} prices={prices}
-              onAddTicker={addTickerToSubsector}
-              onRemoveTicker={removeTickerFromSubsector}
-              onTickerClick={openPopup} />
+            <TrackPane track={activeData} prices={prices} isAdmin={isAdmin} onAddTicker={addTickerToSubsector} onRemoveTicker={removeTickerFromSubsector} onTickerClick={openPopup} />
           )}
 
           <div>
             <div style={{ display: "flex", gap: 4, marginBottom: 18, borderBottom: "1px solid rgba(255,255,255,.04)", paddingBottom: 4, flexWrap: "wrap" }}>
-              {[
-                { id: "all", label: "⬛ All Panels" },
-                { id: "heatmap", label: "📊 Heat Map" },
-                { id: "donut", label: "🥧 Allocation" },
-                { id: "watchlist", label: "👁 Watchlist" },
-                { id: "multibagger", label: "🚀 Multibagger" },
-              ].map(tab => (
-                <button key={tab.id} onClick={() => setBottomTab(tab.id)} style={{
-                  background: bottomTab === tab.id ? "rgba(255,255,255,.06)" : "transparent",
-                  border: `1px solid ${bottomTab === tab.id ? "rgba(255,255,255,.1)" : "transparent"}`,
-                  color: bottomTab === tab.id ? "#e2e8f0" : "#334155",
-                  borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "inherit", transition: "all .2s",
-                }}>{tab.label}</button>
+              {[{ id: "all", label: "⬛ All Panels" }, { id: "heatmap", label: "📊 Heat Map" }, { id: "donut", label: "🥧 Allocation" }, { id: "watchlist", label: "👁 Watchlist" }, { id: "multibagger", label: "🚀 Multibagger" }].map(tab => (
+                <button key={tab.id} onClick={() => setBottomTab(tab.id)} style={{ background: bottomTab === tab.id ? "rgba(255,255,255,.06)" : "transparent", border: `1px solid ${bottomTab === tab.id ? "rgba(255,255,255,.1)" : "transparent"}`, color: bottomTab === tab.id ? "#e2e8f0" : "#334155", borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "inherit", transition: "all .2s" }}>{tab.label}</button>
               ))}
             </div>
             
             {bottomTab === "all" ? (
               <div className="bottom-grid-all">
                 <div className="span-2"><HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} /></div>
-                
-                <div className="span-1 panel-wrapper">
-                  <div className="panel-inner">
-                    <Watchlist prices={prices} capexData={capexData} />
-                  </div>
-                </div>
-
+                <div className="span-1 panel-wrapper"><div className="panel-inner"><Watchlist prices={prices} capexData={capexData} /></div></div>
                 <div className="span-1"><DonutChart prices={prices} capexData={capexData} /></div>
-                
-                <div className="span-2 panel-wrapper">
-                  <div className="panel-inner">
-                    <MultibaggerPanel prices={prices} scannerPool={scannerPool} setScannerPool={setScannerPool} onTickerClick={openPopup} forceRefresh={refresh} />
-                  </div>
-                </div>
+                <div className="span-2 panel-wrapper"><div className="panel-inner"><MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} /></div></div>
               </div>
             ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} />
               : bottomTab === "donut" ? <DonutChart prices={prices} capexData={capexData} />
               : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={capexData} />
-              : <MultibaggerPanel prices={prices} scannerPool={scannerPool} setScannerPool={setScannerPool} onTickerClick={openPopup} />
+              : <MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} />
             }
-          </div>
-
-          <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 10, color: "#475569", borderTop: "1px solid rgba(255,255,255,.03)", paddingTop: 16, flexWrap: "wrap" }}>
-            <span style={{ color: "#64748b", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" }}>Legend:</span>
-            {[{ c: "#ef4444", l: "Extreme Bottleneck" }, { c: "#f59e0b", l: "Constrained" }, { c: "#34d399", l: "Rapid Growth" }, { c: "#60a5fa", l: "Emerging" }, { c: "#f472b6", l: "Speculative" }].map(x => (
-              <span key={x.l} style={{ display: "flex", alignItems: "center", gap: 5, color: "#94a3b8" }}>
-                <span style={{ width: 7, height: 7, borderRadius: "50%", background: x.c, display: "inline-block", opacity: 0.6, boxShadow: `0 0 5px ${x.c}66` }} />{x.l}
-              </span>
-            ))}
-            <span style={{ marginLeft: "auto" }}>Live via Finnhub + Yahoo · server-cached · auto-refreshes 15s</span>
           </div>
         </div>
       </div>
-
-      {popup && (
-        <CompanyPopup
-          ticker={popup.ticker}
-          change={popup.change}
-          anchorRect={popup.rect}
-          onClose={() => setPopup(null)}
-        />
-      )}
+      {popup && <CompanyPopup ticker={popup.ticker} change={popup.change} anchorRect={popup.rect} onClose={() => setPopup(null)} />}
     </>
   );
 }
