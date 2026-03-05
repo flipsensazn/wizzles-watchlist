@@ -450,7 +450,7 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
                 <div style={{
                   fontSize: 10.5, color: "#94a3b8", lineHeight: 1.55,
                   borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 10,
-                  display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden",
+                  overflowY: "auto", maxHeight: 130, paddingRight: 6 // <-- Swapped clamping for a scrollbar
                 }}>
                   {data.description}
                 </div>
@@ -751,11 +751,13 @@ function HeatMap({ prices, capexData, onTickerClick }) {
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {cells.map(ticker => {
                 const change = prices[ticker]?.change ?? prices[ticker];
+                const currentPrice = prices[ticker]?.price; // <-- Extract the live price
                 const bg = getHeatColor(change);
                 const pos = change === undefined || change >= 0;
                 return (
                   <div key={ticker}
-                    onMouseEnter={e => setTooltip({ ticker, change, track: track.label, rect: e.currentTarget.getBoundingClientRect() })}
+                    // Pass the price into the tooltip state
+                    onMouseEnter={e => setTooltip({ ticker, change, price: currentPrice, track: track.label, rect: e.currentTarget.getBoundingClientRect() })}
                     onMouseLeave={() => setTooltip(null)}
                     onClick={e => { e.stopPropagation(); onTickerClick?.(ticker, e.currentTarget.getBoundingClientRect()); }}
                     style={{ background: bg, borderRadius: 8, padding: "8px 12px", border: `1px solid ${bg === "rgba(255,255,255,0.04)" ? "rgba(255,255,255,0.06)" : bg}`, minWidth: 60, textAlign: "center", cursor: "pointer", transition: "filter .15s, transform .15s" }}
@@ -774,6 +776,8 @@ function HeatMap({ prices, capexData, onTickerClick }) {
           </div>
         );
       })}
+      
+      {/* Tooltip Overlay */}
       {tooltip && (
         <div style={{
           position: "fixed",
@@ -787,6 +791,14 @@ function HeatMap({ prices, capexData, onTickerClick }) {
           display: "flex", alignItems: "center", gap: 10,
         }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{tooltip.ticker}</span>
+          
+          {/* Newly Added Price Display */}
+          {tooltip.price !== undefined && (
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0" }}>
+              ${tooltip.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          )}
+          
           {tooltip.change !== undefined && (
             <span style={{ fontSize: 12, fontWeight: 700, color: (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171" }}>
               {typeof tooltip.change === 'number' ? (tooltip.change >= 0 ? "+" : "") + tooltip.change + "%" : "—"}
