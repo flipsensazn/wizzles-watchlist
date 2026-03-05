@@ -561,11 +561,15 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
 function MarketStrip({ data, tickers, labels, colors }) {
   function formatPrice(p, ticker) {
     if (p === null || p === undefined) return "—";
-    // Removed the "$" symbol for crypto tickers
-    if (ticker === "BTC-USD") return p.toLocaleString("en-US", { maximumFractionDigits: 0 });
-    if (ticker === "ETH-USD") return p.toLocaleString("en-US", { maximumFractionDigits: 0 });
-    if (ticker === "XRP-USD") return p.toFixed(3);
-    return p.toLocaleString("en-US", { maximumFractionDigits: 2 });
+    
+    // useGrouping: false explicitly removes the commas
+    if (ticker === "BTC-USD" || ticker === "ETH-USD") {
+      return p.toLocaleString("en-US", { maximumFractionDigits: 0, useGrouping: false });
+    }
+    if (ticker === "XRP-USD") {
+      return p.toFixed(3);
+    }
+    return p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false });
   }
   
   return (
@@ -587,12 +591,13 @@ function MarketStrip({ data, tickers, labels, colors }) {
             onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}
             onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.05)"; }}>
             
-            <span style={{ fontSize: 13, fontWeight: 700, color: colors[i], letterSpacing: "0.05em", textTransform: "uppercase" }}>
+            <span style={{ fontSize: 14, fontWeight: 700, color: colors[i], letterSpacing: "0.05em", textTransform: "uppercase" }}>
               {labels[i]}
             </span>
             
             <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0" }}>
+              {/* Increased font size to 18px */}
+              <span style={{ fontSize: 18, fontWeight: 700, color: "#e2e8f0" }}>
                 {formatPrice(price, ticker)}
               </span>
               
@@ -1099,9 +1104,21 @@ function Watchlist({ prices, capexData }) {
                   <div style={{ height: "100%", borderRadius: 2, width: `${barW}%`, background: pos ? "linear-gradient(90deg,#065f46,#34d399)" : "linear-gradient(90deg,#7f1d1d,#ef4444)", transition: "width .4s ease" }} />
                 )}
               </div>
-              <div style={{ fontSize: 12, fontWeight: 700, minWidth: 54, textAlign: "right", fontFamily: "monospace", color: typeof item.change !== 'number' ? "#334155" : pos ? "#34d399" : "#f87171" }}>
-                {typeof item.change !== 'number' ? "—" : (pos ? "+" : "") + item.change + "%"}
+              
+              {/* UP/DOWN ARROWS APPLIED HERE */}
+              <div style={{ 
+                display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4,
+                fontSize: 13, fontWeight: 700, minWidth: 68, textAlign: "right", 
+                color: typeof item.change !== 'number' ? "#334155" : pos ? "#34d399" : "#f87171" 
+              }}>
+                {typeof item.change !== 'number' ? "—" : (
+                  <>
+                    <span style={{ fontSize: 10 }}>{pos ? "▲" : "▼"}</span>
+                    {Math.abs(item.change).toFixed(2)}%
+                  </>
+                )}
               </div>
+
               <button onClick={() => setList(l => l.filter(x => x !== item.ticker))} style={{ background: "none", border: "none", color: "#1e293b", cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1, transition: "color .15s", fontFamily: "inherit" }}
                 onMouseEnter={e => e.currentTarget.style.color = "#ef4444"}
                 onMouseLeave={e => e.currentTarget.style.color = "#1e293b"}>×</button>
