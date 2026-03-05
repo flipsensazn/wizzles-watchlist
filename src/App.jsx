@@ -1254,14 +1254,12 @@ export default function App() {
             {bottomTab === "all" ? (
               <div className="bottom-grid-all">
                 <div className="span-2"><HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} /></div>
-                {/* ADDED onTickerClick TO WATCHLIST BELOW */}
                 <div className="span-1 panel-wrapper"><div className="panel-inner"><Watchlist prices={prices} capexData={capexData} onTickerClick={openPopup} /></div></div>
                 <div className="span-1"><DonutChart prices={prices} capexData={capexData} /></div>
                 <div className="span-2 panel-wrapper"><div className="panel-inner"><MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} /></div></div>
               </div>
             ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} />
               : bottomTab === "donut" ? <DonutChart prices={prices} capexData={capexData} />
-              {/* ADDED onTickerClick TO WATCHLIST BELOW */}
               : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={capexData} onTickerClick={openPopup} />
               : <MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} />
             }
