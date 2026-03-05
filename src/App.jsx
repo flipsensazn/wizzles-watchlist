@@ -1023,17 +1023,24 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
   const [syncing, setSyncing] = useState(false);
   const fetchIdRef = useRef(0);
 
-  // Automatically fetch from Yahoo Screener when the dashboard loads
+// Automatically fetch from Yahoo Screener when the dashboard loads
   const syncYahooScreener = useCallback(async () => {
     setSyncing(true);
     try {
       const res = await fetch("/screener");
       const json = await res.json();
+      
+      // LOG EVERYTHING SO WE CAN SEE IT!
+      console.log("Screener Sync Results:", json);
+      
       if (json.tickers && json.tickers.length > 0) {
-        setScannerPool(json.tickers); // Overwrite panel with live Yahoo data
+        setScannerPool(json.tickers); 
+      } else {
+        alert("Sync finished, but no tickers were found. Check your browser console for details.");
       }
     } catch (e) {
       console.error("Failed to sync screener", e);
+      alert("Network error trying to reach /screener. Check console.");
     }
     setSyncing(false);
   }, [setScannerPool]);
