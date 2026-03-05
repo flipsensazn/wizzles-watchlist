@@ -1208,6 +1208,26 @@ export default function App() {
   const [bottomTab, setBottomTab] = useState("all");
   const [popup, setPopup] = useState(null); 
 
+  // ── FAST PREFETCH: load the 11 visible market tickers immediately on mount.
+  // This is intentionally separate from refresh() so it fires right away,
+  // before the /scanner and /capex KV fetches complete and before the full
+  // ~100-ticker refresh() call returns. Users see the top-of-page strip
+  // populated within ~1-2 seconds instead of waiting for the full batch.
+  useEffect(() => {
+    const marketTickers = [...INDEX_TICKERS, ...CRYPTO_TICKERS, ...HYPERSCALER_TICKERS];
+    fetchAllPrices(marketTickers).then(data => {
+      setMarketData(prev => {
+        const merged = { ...prev };
+        marketTickers.forEach(ticker => {
+          const val = data[ticker];
+          if (val != null) merged[ticker] = val;
+        });
+        return merged;
+      });
+      setPrices(prev => { const next = { ...prev, ...data }; pricesRef.current = next; return next; });
+    });
+  }, []); // runs once on mount only
+
   // Mount: Fetch Global Data for both panels
   useEffect(() => {
     fetch("/scanner")
