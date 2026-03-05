@@ -64,11 +64,18 @@ async function fetchQuoteSummary(ticker) {
       return "$" + num.toLocaleString();
     }
 
-    // Parse 1-Month Chart Data
+   // Parse 1-Month Chart Data & Dates
     let chartPoints = [];
-    if (chartResult && chartResult.indicators?.quote?.[0]?.close) {
+    let chartDates = [];
+    if (chartResult && chartResult.indicators?.quote?.[0]?.close && chartResult.timestamp) {
       const closes = chartResult.indicators.quote[0].close;
-      chartPoints = closes.filter(c => c !== null); // Filter out any empty trading days
+      const timestamps = chartResult.timestamp;
+      for (let i = 0; i < closes.length; i++) {
+        if (closes[i] !== null) {
+          chartPoints.push(closes[i]);
+          chartDates.push(timestamps[i] * 1000); // Convert Unix seconds to milliseconds
+        }
+      }
     }
 
     const currentPriceRaw = price.regularMarketPrice?.raw ?? price.regularMarketPrice;
@@ -87,6 +94,7 @@ async function fetchQuoteSummary(ticker) {
       country:      profile.country || "—",
       website:      profile.website || null,
       chartData:    chartPoints,
+      chartDates:   chartDates, // <-- Added dates here
     };
 
     quoteCache[ticker] = data;
@@ -220,7 +228,7 @@ const Badge = memo(function Badge({ text, color }) {
 });
 
 // ── MINI CHART (1-Month SVG Sparkline) ────────────────────
-function MiniChart({ data, color }) {
+function MiniChart({ data, dates, color }) {
   if (!data || data.length < 2) return null;
   
   const min = Math.min(...data);
@@ -231,7 +239,7 @@ function MiniChart({ data, color }) {
   const range = yMax - yMin;
   
   const width = 160;
-  const height = 65;
+  const height = 120; // Chart height
   
   const points = data.map((val, i) => {
     const x = (i / (data.length - 1)) * width;
@@ -239,19 +247,72 @@ function MiniChart({ data, color }) {
     return `${x},${y}`;
   }).join(" ");
 
-  const cleanColor = color.replace(/[^#0-9a-fA-F]/g, ''); // Fix gradient ID string
+  const cleanColor = color.replace(/[^#0-9a-fA-F]/g, '');
+
+  // Generate 10 evenly spaced price labels
+  const labelCount = 10;
+  const priceLabels = Array.from({ length: labelCount }, (_, i) => {
+    return max - (i * (max - min) / (labelCount - 1));
+  });
+
+  // Generate 5 evenly spaced date labels (MM/DD)
+  const dateLabels = [];
+  if (dates && dates.length >= 5) {
+    for (let i = 0; i < 5; i++) {
+      const idx = Math.floor(i * (dates.length - 1) / 4);
+      const d = new Date(dates[idx]);
+      dateLabels.push({
+        text: `${d.getMonth() + 1}/${d.getDate()}`,
+        x: (idx / (dates.length - 1)) * width
+      });
+    }
+  }
 
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: "visible", display: "block" }}>
-      <defs>
-        <linearGradient id={`grad-${cleanColor}`} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <polygon fill={`url(#grad-${cleanColor})`} points={`${points} ${width},${height} 0,${height}`} />
-      <polyline fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={points} />
-    </svg>
+    <div style={{ position: 'relative', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ display: 'flex', alignItems: 'center' }}>
+        <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: "visible", display: "block" }}>
+          <defs>
+            <linearGradient id={`grad-${cleanColor}`} x1="0" x2="0" y1="0" y2="1">
+              <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+              <stop offset="100%" stopColor={color} stopOpacity="0" />
+            </linearGradient>
+          </defs>
+          
+          {/* Horizontal Grid Lines */}
+          {priceLabels.map((val, i) => {
+             const yPos = height - ((val - yMin) / range) * height;
+             return <line key={i} x1="0" y1={yPos} x2={width} y2={yPos} stroke="rgba(255,255,255,0.05)" strokeWidth="1" strokeDasharray="2,2" />
+          })}
+
+          <polygon fill={`url(#grad-${cleanColor})`} points={`${points} ${width},${height} 0,${height}`} />
+          <polyline fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={points} />
+        </svg>
+        
+        {/* Right-side Price Axis */}
+        <div style={{ position: 'relative', height: height, width: 45, marginLeft: 8, fontSize: 9, color: "#94a3b8", fontFamily: "monospace" }}>
+          {priceLabels.map((val, i) => {
+              const yPos = height - ((val - yMin) / range) * height;
+              return (
+                <span key={i} style={{ position: 'absolute', top: yPos, transform: 'translateY(-50%)', left: 0 }}>
+                  ${val.toFixed(2)}
+                </span>
+              );
+          })}
+        </div>
+      </div>
+
+      {/* Bottom Date Axis */}
+      {dateLabels.length > 0 && (
+        <div style={{ position: 'relative', width: width, height: 16, marginTop: 8, fontSize: 9, color: "#475569", fontFamily: "monospace" }}>
+          {dateLabels.map((lbl, i) => (
+            <span key={i} style={{ position: 'absolute', left: lbl.x, transform: 'translateX(-50%)' }}>
+              {lbl.text}
+            </span>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 
@@ -282,9 +343,8 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  // Increased width to fit the chart
   const POPUP_W = 500;
-  const POPUP_H = 260; 
+  const POPUP_H = 340; 
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   let left = anchorRect ? anchorRect.left : vw / 2 - POPUP_W / 2;
@@ -293,6 +353,13 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
   if (top < 10) top = anchorRect ? anchorRect.bottom + 10 : vh / 2 - POPUP_H / 2;
   if (left + POPUP_W > vw - 12) left = vw - POPUP_W - 12;
   if (left < 12) left = 12;
+
+  let chartColor = changeColor;
+  if (data?.chartData && data.chartData.length >= 2) {
+      const firstPrice = data.chartData[0];
+      const lastPrice = data.chartData[data.chartData.length - 1];
+      chartColor = lastPrice >= firstPrice ? "#34d399" : "#f87171";
+  }
 
   return (
     <div ref={popupRef} style={{
@@ -404,16 +471,11 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
 
             {/* RIGHT COLUMN: 1-Month Chart */}
             {data.chartData && data.chartData.length > 0 && (
-              <div style={{ width: 160, display: "flex", flexDirection: "column", flexShrink: 0 }}>
-                <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10, textAlign: "right" }}>1-Month Trend</div>
+              <div style={{ width: 220, display: "flex", flexDirection: "column", flexShrink: 0 }}>
+                <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10, textAlign: "left" }}>1-Month Trend</div>
                 
                 <div style={{ marginTop: "auto", marginBottom: "auto" }}>
-                  <MiniChart data={data.chartData} color={changeColor} />
-                </div>
-                
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#475569", marginTop: 6 }}>
-                  <span>30D Ago</span>
-                  <span>Today</span>
+                  <MiniChart data={data.chartData} dates={data.chartDates} color={chartColor} />
                 </div>
               </div>
             )}
