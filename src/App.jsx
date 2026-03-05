@@ -7,12 +7,12 @@ const HYPERSCALER_TICKERS = ["AMZN", "MSFT", "GOOG", "META", "ORCL"];
 
 async function fetchLivePrices(tickers) {
   try {
-    // CLOUDFLARE UPDATE: Route changed to /prices
     const res = await fetch(`/prices?tickers=${tickers.join(",")}`);
     const json = await res.json();
     const prices = {};
     Object.entries(json.data ?? {}).forEach(([ticker, val]) => {
-      prices[ticker] = val?.change ?? val;
+      // FIX: Store the entire object { price, change } so MultibaggerPanel can access the price
+      prices[ticker] = val;
     });
     return prices;
   } catch (err) {
@@ -24,7 +24,6 @@ async function fetchLivePrices(tickers) {
 async function fetchMarketData() {
   try {
     const tickers = [...INDEX_TICKERS, ...CRYPTO_TICKERS, ...HYPERSCALER_TICKERS];
-    // CLOUDFLARE UPDATE: Route changed to /prices
     const res = await fetch(`/prices?tickers=${tickers.join(",")}`);
     const json = await res.json();
     return json.data ?? {};
@@ -64,7 +63,6 @@ async function fetchQuoteSummary(ticker) {
       return "$" + num.toLocaleString();
     }
 
-   // Parse 1-Month Chart Data & Dates
     let chartPoints = [];
     let chartDates = [];
     if (chartResult && chartResult.indicators?.quote?.[0]?.close && chartResult.timestamp) {
@@ -73,7 +71,7 @@ async function fetchQuoteSummary(ticker) {
       for (let i = 0; i < closes.length; i++) {
         if (closes[i] !== null) {
           chartPoints.push(closes[i]);
-          chartDates.push(timestamps[i] * 1000); // Convert Unix seconds to milliseconds
+          chartDates.push(timestamps[i] * 1000); 
         }
       }
     }
@@ -94,7 +92,7 @@ async function fetchQuoteSummary(ticker) {
       country:      profile.country || "—",
       website:      profile.website || null,
       chartData:    chartPoints,
-      chartDates:   chartDates, // <-- Added dates here
+      chartDates:   chartDates,
     };
 
     quoteCache[ticker] = data;
@@ -233,38 +231,38 @@ function MiniChart({ data, dates, color }) {
   
   const min = Math.min(...data);
   const max = Math.max(...data);
-  const padding = (max - min) * 0.1 || 1; // 10% vertical padding
+  const padding = (max - min) * 0.1 || 1; 
   const yMin = min - padding;
   const yMax = max + padding;
   const range = yMax - yMin;
   
   const width = 160;
-  const height = 120; // Chart height
+  const height = 120; 
   
   const points = data.map((val, i) => {
     const x = (i / (data.length - 1)) * width;
-    const y = height - ((val - yMin) / range) * height;
+    const y = height - ((val - yMin) / (range || 1)) * height;
     return `${x},${y}`;
   }).join(" ");
 
-  const cleanColor = color.replace(/[^#0-9a-fA-F]/g, '');
+  const cleanColor = color ? color.replace(/[^#0-9a-fA-F]/g, '') : "ffffff";
 
-  // Generate 10 evenly spaced price labels
   const labelCount = 10;
   const priceLabels = Array.from({ length: labelCount }, (_, i) => {
     return max - (i * (max - min) / (labelCount - 1));
   });
 
-  // Generate 5 evenly spaced date labels (MM/DD)
   const dateLabels = [];
   if (dates && dates.length >= 5) {
     for (let i = 0; i < 5; i++) {
       const idx = Math.floor(i * (dates.length - 1) / 4);
       const d = new Date(dates[idx]);
-      dateLabels.push({
-        text: `${d.getMonth() + 1}/${d.getDate()}`,
-        x: (idx / (dates.length - 1)) * width
-      });
+      if (!isNaN(d.getTime())) {
+        dateLabels.push({
+          text: `${d.getMonth() + 1}/${d.getDate()}`,
+          x: (idx / (dates.length - 1)) * width
+        });
+      }
     }
   }
 
@@ -279,9 +277,8 @@ function MiniChart({ data, dates, color }) {
             </linearGradient>
           </defs>
           
-          {/* Horizontal Grid Lines */}
           {priceLabels.map((val, i) => {
-             const yPos = height - ((val - yMin) / range) * height;
+             const yPos = height - ((val - yMin) / (range || 1)) * height;
              return <line key={i} x1="0" y1={yPos} x2={width} y2={yPos} stroke="rgba(255,255,255,0.05)" strokeWidth="1" strokeDasharray="2,2" />
           })}
 
@@ -289,10 +286,9 @@ function MiniChart({ data, dates, color }) {
           <polyline fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={points} />
         </svg>
         
-        {/* Right-side Price Axis */}
         <div style={{ position: 'relative', height: height, width: 45, marginLeft: 8, fontSize: 9, color: "#94a3b8", fontFamily: "monospace" }}>
           {priceLabels.map((val, i) => {
-              const yPos = height - ((val - yMin) / range) * height;
+              const yPos = height - ((val - yMin) / (range || 1)) * height;
               return (
                 <span key={i} style={{ position: 'absolute', top: yPos, transform: 'translateY(-50%)', left: 0 }}>
                   ${val.toFixed(2)}
@@ -302,7 +298,6 @@ function MiniChart({ data, dates, color }) {
         </div>
       </div>
 
-      {/* Bottom Date Axis */}
       {dateLabels.length > 0 && (
         <div style={{ position: 'relative', width: width, height: 16, marginTop: 8, fontSize: 9, color: "#475569", fontFamily: "monospace" }}>
           {dateLabels.map((lbl, i) => (
@@ -372,7 +367,6 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
       animation: "fadeSlideIn .18s ease-out",
       overflow: "hidden",
     }}>
-      {/* Header */}
       <div style={{
         display: "flex", alignItems: "flex-start", justifyContent: "space-between",
         padding: "14px 16px 10px",
@@ -406,7 +400,6 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
         }}>×</button>
       </div>
 
-      {/* Body */}
       <div style={{ padding: "12px 16px 14px" }}>
         {loading ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 80, color: "#475569", fontSize: 12 }}>
@@ -418,7 +411,6 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
           </div>
         ) : (
           <div style={{ display: "flex", gap: 20 }}>
-            {/* LEFT COLUMN: Data Stats */}
             <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
               {(data.sector !== "—" || data.industry !== "—") && (
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
@@ -469,7 +461,6 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
               )}
             </div>
 
-            {/* RIGHT COLUMN: 1-Month Chart */}
             {data.chartData && data.chartData.length > 0 && (
               <div style={{ width: 220, display: "flex", flexDirection: "column", flexShrink: 0 }}>
                 <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10, textAlign: "left" }}>1-Month Trend</div>
@@ -505,7 +496,7 @@ function MarketStrip({ data, tickers, labels, colors }) {
         return (
           <div key={ticker} style={{
             display: "flex", flexDirection: "column", alignItems: "center",
-            padding: "12px 16px", borderRadius: 12, minWidth: 120, // Increased padding & width
+            padding: "12px 16px", borderRadius: 12, minWidth: 120,
             background: "rgba(255,255,255,0.05)",
             border: `1px solid ${colors[i]}28`,
             transition: "border-color .2s, box-shadow .2s",
@@ -530,8 +521,9 @@ function MarketStrip({ data, tickers, labels, colors }) {
 }
 
 // ── TICKER CHIP ───────────────────────────────────────────
-const TickerChip = memo(function TickerChip({ symbol, change, onRemove, onTickerClick }) {
+const TickerChip = memo(function TickerChip({ symbol, changeObj, onRemove, onTickerClick }) {
   const [hovered, setHovered] = useState(false);
+  const change = changeObj?.change ?? changeObj;
   const pos = (change ?? 0) >= 0;
   const changeColor = change === undefined ? "#475569" : pos ? "#34d399" : "#f87171";
 
@@ -593,7 +585,7 @@ function SubsectorCard({ sub, prices, onAddTicker, onRemoveTicker, onTickerClick
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
         {sub.tickers.map(t => (
-          <TickerChip key={t} symbol={t} change={prices[t]} onRemove={() => onRemoveTicker(t)} onTickerClick={onTickerClick} />
+          <TickerChip key={t} symbol={t} changeData={prices[t]} onRemove={() => onRemoveTicker(t)} onTickerClick={onTickerClick} />
         ))}
       </div>
       {sub.materials?.length > 0 && (
@@ -711,7 +703,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
   const [tooltip, setTooltip] = useState(null);
 
   function getHeatColor(change) {
-    if (change === undefined) return "rgba(255,255,255,0.04)";
+    if (typeof change !== 'number') return "rgba(255,255,255,0.04)";
     if (change >= 15) return "#064e3b";
     if (change >= 8)  return "#065f46";
     if (change >= 4)  return "#047857";
@@ -751,7 +743,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {cells.map(ticker => {
-                const change = prices[ticker];
+                const change = prices[ticker]?.change ?? prices[ticker];
                 const bg = getHeatColor(change);
                 const pos = change === undefined || change >= 0;
                 return (
@@ -765,7 +757,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
                     <div style={{ fontSize: 12, fontWeight: 700, color: "#f1f5f9" }}>{ticker}</div>
                     {change !== undefined && (
                       <div style={{ fontSize: 10, fontWeight: 600, color: pos ? "#a7f3d0" : "#fca5a5", marginTop: 2 }}>
-                        {change >= 0 ? "+" : ""}{change}%
+                        {typeof change === 'number' ? (change >= 0 ? "+" : "") + change + "%" : "—"}
                       </div>
                     )}
                   </div>
@@ -790,7 +782,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
           <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{tooltip.ticker}</span>
           {tooltip.change !== undefined && (
             <span style={{ fontSize: 12, fontWeight: 700, color: (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171" }}>
-              {(tooltip.change ?? 0) >= 0 ? "+" : ""}{tooltip.change}%
+              {typeof tooltip.change === 'number' ? (tooltip.change >= 0 ? "+" : "") + tooltip.change + "%" : "—"}
             </span>
           )}
           <span style={{ fontSize: 10, color: "#475569" }}>{tooltip.track}</span>
@@ -818,7 +810,7 @@ function DonutChart({ prices, capexData }) {
     const xi2 = cx + r * Math.cos(startAngle + angle), yi2 = cy + r * Math.sin(startAngle + angle);
     const large = angle > Math.PI ? 1 : 0;
     const tickers = [...new Set(track.subsectors.flatMap(s => s.tickers))];
-    const changes = tickers.map(t => prices[t]).filter(v => v !== undefined);
+    const changes = tickers.map(t => prices[t]?.change ?? prices[t]).filter(v => typeof v === 'number');
     const avg = changes.length ? changes.reduce((a, b) => a + b, 0) / changes.length : 0;
     return {
       track, frac, avg, tickerCount: tickers.length,
@@ -829,7 +821,7 @@ function DonutChart({ prices, capexData }) {
   const hov = hovered ? segments.find(s => s.track.id === hovered) : null;
   const trackPerf = capexData.tracks.map(track => {
     const tickers = [...new Set(track.subsectors.flatMap(s => s.tickers))];
-    const changes = tickers.map(t => prices[t]).filter(v => v !== undefined);
+    const changes = tickers.map(t => prices[t]?.change ?? prices[t]).filter(v => typeof v === 'number');
     const avg = changes.length ? changes.reduce((a, b) => a + b, 0) / changes.length : 0;
     return { ...track, avg };
   }).sort((a, b) => b.avg - a.avg);
@@ -901,7 +893,6 @@ function DonutChart({ prices, capexData }) {
 
 // ── WATCHLIST ─────────────────────────────────────────────
 function Watchlist({ prices, capexData }) {
-  // Automatically load all tracked tickers into the Watchlist by default
   const [list, setList] = useState(() => {
     return [...new Set(capexData.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))];
   });
@@ -916,16 +907,17 @@ function Watchlist({ prices, capexData }) {
     return null;
   }
 
-  const enriched = list.map(t => ({ ticker: t, change: prices[t], track: getSector(t) }));
+  const enriched = list.map(t => ({ ticker: t, change: prices[t]?.change ?? prices[t], track: getSector(t) }));
   const filtered = filter === "all" ? enriched : filter === "gainers"
-    ? enriched.filter(x => (x.change ?? 0) >= 0)
-    : enriched.filter(x => (x.change ?? 0) < 0);
+    ? enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) >= 0)
+    : enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) < 0);
   const sorted = [...filtered].sort((a, b) => sortDir === "desc"
-    ? ((b.change ?? -999) - (a.change ?? -999))
-    : ((a.change ?? 999) - (b.change ?? 999)));
-  const avg = enriched.filter(x => x.change !== undefined).reduce((s, x) => s + x.change, 0)
-    / (enriched.filter(x => x.change !== undefined).length || 1);
-  const maxAbs = Math.max(...enriched.map(x => Math.abs(x.change ?? 0)), 1);
+    ? ((typeof b.change === 'number' ? b.change : -999) - (typeof a.change === 'number' ? a.change : -999))
+    : ((typeof a.change === 'number' ? a.change : 999) - (typeof b.change === 'number' ? b.change : 999)));
+  
+  const validChanges = enriched.filter(x => typeof x.change === 'number');
+  const avg = validChanges.reduce((s, x) => s + x.change, 0) / (validChanges.length || 1);
+  const maxAbs = Math.max(...enriched.map(x => Math.abs(typeof x.change === 'number' ? x.change : 0)), 1);
 
   function add() {
     const sym = input.trim().toUpperCase();
@@ -933,13 +925,13 @@ function Watchlist({ prices, capexData }) {
     setInput("");
   }
 
-return (
+  return (
     <div style={{ 
       borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", 
       background: "rgba(24,24,24,0.7)", padding: 20, 
       display: "flex", flexDirection: "column", gap: 14, 
       boxShadow: "0 4px 30px rgba(0,0,0,0.4)",
-      height: "100%" // Force panel to stretch to grid cell height
+      height: "100%" 
     }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <div>
@@ -948,11 +940,11 @@ return (
         </div>
         <div style={{ display: "flex", gap: 12, fontSize: 12 }}>
           <div style={{ textAlign: "center" }}>
-            <div style={{ color: "#34d399", fontWeight: 700 }}>{enriched.filter(x => (x.change ?? -1) >= 0).length}</div>
+            <div style={{ color: "#34d399", fontWeight: 700 }}>{enriched.filter(x => (typeof x.change === 'number' ? x.change : -1) >= 0).length}</div>
             <div style={{ color: "#475569", fontSize: 10 }}>UP</div>
           </div>
           <div style={{ textAlign: "center" }}>
-            <div style={{ color: "#f87171", fontWeight: 700 }}>{enriched.filter(x => (x.change ?? 0) < 0).length}</div>
+            <div style={{ color: "#f87171", fontWeight: 700 }}>{enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) < 0).length}</div>
             <div style={{ color: "#475569", fontSize: 10 }}>DOWN</div>
           </div>
           <div style={{ textAlign: "center" }}>
@@ -982,11 +974,10 @@ return (
         </button>
       </div>
       
-      {/* Flex: 1 allows the scrollable area to take up all remaining vertical space */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, overflowY: "auto", minHeight: 0, paddingRight: 4 }}>
         {sorted.map((item, idx) => {
-          const pos = (item.change ?? 0) >= 0;
-          const barW = item.change !== undefined ? Math.abs(item.change) / maxAbs * 100 : 0;
+          const pos = (typeof item.change === 'number' ? item.change : 0) >= 0;
+          const barW = typeof item.change === 'number' ? Math.abs(item.change) / maxAbs * 100 : 0;
           return (
             <div key={item.ticker} style={{ borderRadius: 8, padding: "10px 10px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background .15s" }}
               onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
@@ -997,12 +988,12 @@ return (
                 {item.track && <div style={{ fontSize: 9, color: item.track.color, marginTop: 1 }}>{item.track.label.split(" ").slice(0, 2).join(" ")}</div>}
               </div>
               <div style={{ flex: 1, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.04)", overflow: "hidden" }}>
-                {item.change !== undefined && (
+                {typeof item.change === 'number' && (
                   <div style={{ height: "100%", borderRadius: 2, width: `${barW}%`, background: pos ? "linear-gradient(90deg,#065f46,#34d399)" : "linear-gradient(90deg,#7f1d1d,#ef4444)", transition: "width .4s ease" }} />
                 )}
               </div>
-              <div style={{ fontSize: 12, fontWeight: 700, minWidth: 54, textAlign: "right", fontFamily: "monospace", color: item.change === undefined ? "#334155" : pos ? "#34d399" : "#f87171" }}>
-                {item.change === undefined ? "—" : (pos ? "+" : "") + item.change + "%"}
+              <div style={{ fontSize: 12, fontWeight: 700, minWidth: 54, textAlign: "right", fontFamily: "monospace", color: typeof item.change !== 'number' ? "#334155" : pos ? "#34d399" : "#f87171" }}>
+                {typeof item.change !== 'number' ? "—" : (pos ? "+" : "") + item.change + "%"}
               </div>
               <button onClick={() => setList(l => l.filter(x => x !== item.ticker))} style={{ background: "none", border: "none", color: "#1e293b", cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1, transition: "color .15s", fontFamily: "inherit" }}
                 onMouseEnter={e => e.currentTarget.style.color = "#ef4444"}
@@ -1024,20 +1015,6 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
   const [importText, setImportText] = useState("");
   const fetchIdRef = useRef(0);
 
-  // Automatically fetch from Yahoo Screener when the dashboard loads
-  const syncYahooScreener = useCallback(async () => {
-    try {
-      const res = await fetch("/screener");
-      const json = await res.json();
-      if (json.tickers && json.tickers.length > 0) {
-        setScannerPool(json.tickers); 
-      }
-    } catch (e) {
-      console.error("Failed to sync screener", e);
-    }
-  }, [setScannerPool]);
-
-  // Calculate fundamentals whenever the pool updates
   useEffect(() => {
     const currentFetchId = ++fetchIdRef.current;
     async function getFundamentals() {
@@ -1051,7 +1028,6 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
             const r = json?.quoteSummary?.result?.[0];
             if (!r) return null;
 
-            // Metrics Extraction
             const fcf = r.financialData?.freeCashflow?.raw || 0;
             const marketCapRaw = r.price?.marketCap?.raw || 1;
             const roa = (r.financialData?.returnOnAssets?.raw || 0) * 100;
@@ -1061,7 +1037,6 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
             const fcfYield = (fcf / marketCapRaw) * 100;
             const bookToMarket = pb > 0 ? (1 / pb) : 0;
             
-            // Format Market Cap gracefully
             function fmt(n) {
               if (n == null || isNaN(n)) return "—";
               const num = Number(n);
@@ -1072,7 +1047,6 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
             }
             const marketCapFmt = fmt(marketCapRaw);
             
-            // Score Calculation: FCF/P heavily weighted, plus B/M and ROA
             const score = (fcfYield * 15) + (bookToMarket * 10) + (roa * 2);
 
             return { ticker, fcfYield, roa, bookToMarket, pe, marketCapFmt, score };
@@ -1113,9 +1087,9 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
   const removeTicker = (ticker) => { setScannerPool(scannerPool.filter(t => t !== ticker)); };
   
   const getScoreColor = (score) => {
-    if (score > 40) return "#34d399"; // Elite
-    if (score > 15) return "#fbbf24"; // Good
-    return "#f87171"; // Poor
+    if (score > 40) return "#34d399"; 
+    if (score > 15) return "#fbbf24"; 
+    return "#f87171"; 
   };
 
   return (
@@ -1160,7 +1134,6 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
         </div>
       )}
 
-      {/* flex: 1 combined with overflowY: auto allows inner scrolling! */}
       <div style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingRight: 4 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, textAlign: "left" }}>
           <thead>
@@ -1180,22 +1153,22 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
             {loading ? <tr><td colSpan="9" style={{ padding: 20, color: "#475569" }}>Scanning fundamentals...</td></tr> : 
              data.map((stock) => {
               const change = prices[stock.ticker]?.change;
-              const currentPrice = prices[stock.ticker]?.price;
-              const priceStr = currentPrice ? "$" + currentPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
+              const currentPrice = Number(prices[stock.ticker]?.price);
+              const priceStr = !isNaN(currentPrice) && currentPrice !== 0 ? "$" + currentPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
               
               return (
                 <tr key={stock.ticker} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
                   <td onClick={(e) => onTickerClick(stock.ticker, e.currentTarget.getBoundingClientRect())} style={{ padding: "12px 8px", cursor: "pointer" }}>
                     <div style={{ fontWeight: 700, color: "#f1f5f9" }}>{stock.ticker}</div>
-                    <div style={{ fontSize: 9, color: (change >= 0 ? "#34d399" : "#f87171") }}>{change !== undefined ? `${change >= 0 ? "+" : ""}${change}%` : "—"}</div>
+                    <div style={{ fontSize: 9, color: (change >= 0 ? "#34d399" : "#f87171") }}>{typeof change === 'number' ? `${change >= 0 ? "+" : ""}${change}%` : "—"}</div>
                   </td>
                   <td style={{ padding: "12px 8px", color: "#e2e8f0", fontWeight: 600 }}>{priceStr}</td>
                   <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{stock.marketCapFmt}</td>
-                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{stock.pe ? stock.pe.toFixed(1) : "—"}</td>
-                  <td style={{ padding: "12px 8px", color: stock.fcfYield > 8 ? "#34d399" : "#cbd5e1" }}>{stock.fcfYield.toFixed(2)}%</td>
-                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{stock.bookToMarket.toFixed(2)}</td>
-                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{stock.roa.toFixed(1)}%</td>
-                  <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(stock.score), fontSize: 13 }}>{stock.score.toFixed(1)}</td>
+                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{typeof stock.pe === 'number' ? stock.pe.toFixed(1) : "—"}</td>
+                  <td style={{ padding: "12px 8px", color: stock.fcfYield > 8 ? "#34d399" : "#cbd5e1" }}>{typeof stock.fcfYield === 'number' && !isNaN(stock.fcfYield) ? stock.fcfYield.toFixed(2) + "%" : "—"}</td>
+                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{typeof stock.bookToMarket === 'number' && !isNaN(stock.bookToMarket) ? stock.bookToMarket.toFixed(2) : "—"}</td>
+                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{typeof stock.roa === 'number' && !isNaN(stock.roa) ? stock.roa.toFixed(1) + "%" : "—"}</td>
+                  <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(stock.score), fontSize: 13 }}>{typeof stock.score === 'number' && !isNaN(stock.score) ? stock.score.toFixed(1) : "—"}</td>
                   <td style={{ textAlign: "right" }}><button onClick={() => removeTicker(stock.ticker)} style={{ background: "none", border: "none", color: "#334155", cursor: "pointer", fontSize: 16 }}>×</button></td>
                 </tr>
               );
@@ -1210,23 +1183,27 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
 // ── ROOT APP ──────────────────────────────────────────────
 export default function App() {
   const [scannerPool, setScannerPool] = useState(() => {
-  try {
-    const saved = localStorage.getItem("scannerPool");
-    // Default pool if nothing is saved
-    return saved ? JSON.parse(saved) : ["VRT", "APLD", "CORZ", "WULF", "LITE", "COHR", "AAOI", "OSS", "GTLB", "IREN"];
-  } catch { return ["VRT", "APLD", "CORZ", "WULF", "LITE", "COHR", "AAOI", "OSS", "GTLB", "IREN"]; }
-});
+    try {
+      const saved = localStorage.getItem("scannerPool");
+      const parsed = saved ? JSON.parse(saved) : null;
+      // FIX: Guard against corrupted string/null local storage that crashes .map()
+      return Array.isArray(parsed) ? parsed : ["VRT", "APLD", "CORZ", "WULF", "LITE", "COHR", "AAOI", "OSS", "GTLB", "IREN"];
+    } catch { return ["VRT", "APLD", "CORZ", "WULF", "LITE", "COHR", "AAOI", "OSS", "GTLB", "IREN"]; }
+  });
 
-// Save to localStorage whenever the pool changes
-useEffect(() => {
-  localStorage.setItem("scannerPool", JSON.stringify(scannerPool));
-}, [scannerPool]);
+  useEffect(() => {
+    localStorage.setItem("scannerPool", JSON.stringify(scannerPool));
+  }, [scannerPool]);
+
   const [capexData, setCapexData] = useState(() => {
     try {
       const saved = localStorage.getItem("capexData");
-      return saved ? JSON.parse(saved) : CAPEX_DATA;
+      const parsed = saved ? JSON.parse(saved) : null;
+      // FIX: Guard against corrupted local storage
+      return (parsed && Array.isArray(parsed.tracks)) ? parsed : CAPEX_DATA;
     } catch { return CAPEX_DATA; }
   });
+  
   const [activeTrack, setActiveTrack] = useState(null);
   const [prices, setPrices] = useState({});
   const [marketData, setMarketData] = useState({});
@@ -1236,7 +1213,7 @@ useEffect(() => {
   const [popup, setPopup] = useState(null); 
 
   const openPopup = useCallback((ticker, rect) => {
-    setPopup(prev => (prev?.ticker === ticker ? null : { ticker, change: prices[ticker], rect }));
+    setPopup(prev => (prev?.ticker === ticker ? null : { ticker, change: prices[ticker]?.change ?? prices[ticker], rect }));
   }, [prices]);
 
   useEffect(() => {
@@ -1269,7 +1246,6 @@ useEffect(() => {
   useEffect(() => {
     refresh();
     const id = setInterval(() => {
-      // ONLY refresh if the tab is actively being viewed
       if (!document.hidden) {
         refresh();
       }
@@ -1316,12 +1292,12 @@ useEffect(() => {
     }));
   }
 
-  const gainers = Object.values(prices).filter(v => v > 0).length;
-  const losers = Object.values(prices).filter(v => v < 0).length;
+  const gainers = Object.values(prices).filter(v => (v?.change ?? v) > 0).length;
+  const losers = Object.values(prices).filter(v => (v?.change ?? v) < 0).length;
   const activeData = capexData.tracks.find(t => t.id === activeTrack);
   const tickerEntries = Object.entries(prices);
 
-const styles = `
+  const styles = `
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap');
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { background: #121212; }
@@ -1334,7 +1310,7 @@ const styles = `
     .ticker-tape { animation: scroll-left 80s linear infinite; white-space: nowrap; display: inline-flex; gap: 24px; }
     .pulse { animation: pulseDot 2s infinite; }
 
-/* ── CUSTOM DESKTOP GRID ───────────────────────────────── */
+    /* ── CUSTOM DESKTOP GRID ───────────────────────────────── */
     .bottom-grid-all {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -1389,12 +1365,15 @@ const styles = `
         {tickerEntries.length > 0 && (
           <div style={{ overflow: "hidden", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(18,18,18,0.75)", padding: "6px 0" }}>
             <div className="ticker-tape">
-              {[...tickerEntries, ...tickerEntries].map(([sym, chg], i) => (
-                <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#64748b", fontSize: 11 }}>
-                  <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{sym}</span>
-                  <span style={{ color: chg >= 0 ? "#34d399" : "#f87171" }}>{chg >= 0 ? "▲" : "▼"} {Math.abs(chg).toFixed(2)}%</span>
-                </span>
-              ))}
+              {[...tickerEntries, ...tickerEntries].map(([sym, val], i) => {
+                const chg = val?.change ?? val;
+                return (
+                  <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#64748b", fontSize: 11 }}>
+                    <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{sym}</span>
+                    {chg !== undefined && <span style={{ color: chg >= 0 ? "#34d399" : "#f87171" }}>{chg >= 0 ? "▲" : "▼"} {Math.abs(chg).toFixed(2)}%</span>}
+                  </span>
+                )
+              })}
             </div>
           </div>
         )}
@@ -1498,86 +1477,4 @@ const styles = `
             {capexData.tracks.map(track => (
               <div key={track.id} style={{ paddingTop: activeTrack === track.id ? 14 : 0 }}>
                 <TrackCard track={track} isActive={activeTrack === track.id}
-                  onClick={() => setActiveTrack(p => p === track.id ? null : track.id)} />
-              </div>
-            ))}
-          </div>
-
-          {/* EXPANDED PANE */}
-          {activeData && (
-            <TrackPane track={activeData} prices={prices}
-              onAddTicker={addTickerToSubsector}
-              onRemoveTicker={removeTickerFromSubsector}
-              onTickerClick={openPopup} />
-          )}
-
-         {/* BOTTOM PANELS */}
-          <div>
-            <div style={{ display: "flex", gap: 4, marginBottom: 18, borderBottom: "1px solid rgba(255,255,255,.04)", paddingBottom: 4, flexWrap: "wrap" }}>
-              {[
-                { id: "all", label: "⬛ All Panels" },
-                { id: "heatmap", label: "📊 Heat Map" },
-                { id: "donut", label: "🥧 Allocation" },
-                { id: "watchlist", label: "👁 Watchlist" },
-                { id: "multibagger", label: "🚀 Multibagger" },
-              ].map(tab => (
-                <button key={tab.id} onClick={() => setBottomTab(tab.id)} style={{
-                  background: bottomTab === tab.id ? "rgba(255,255,255,.06)" : "transparent",
-                  border: `1px solid ${bottomTab === tab.id ? "rgba(255,255,255,.1)" : "transparent"}`,
-                  color: bottomTab === tab.id ? "#e2e8f0" : "#334155",
-                  borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "inherit", transition: "all .2s",
-                }}>{tab.label}</button>
-              ))}
-            </div>
-            
-            {bottomTab === "all" ? (
-              <div className="bottom-grid-all">
-                <div className="span-2"><HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} /></div>
-                
-                {/* Watchlist constrained to HeatMap height via absolute positioning */}
-                <div className="span-1 panel-wrapper">
-                  <div className="panel-inner">
-                    <Watchlist prices={prices} capexData={capexData} />
-                  </div>
-                </div>
-
-                <div className="span-1"><DonutChart prices={prices} capexData={capexData} /></div>
-                
-                {/* Multibagger constrained to DonutChart height via absolute positioning */}
-                <div className="span-2 panel-wrapper">
-                  <div className="panel-inner">
-                    <MultibaggerPanel prices={prices} scannerPool={scannerPool} setScannerPool={setScannerPool} onTickerClick={openPopup} />
-                  </div>
-                </div>
-              </div>
-            ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} />
-              : bottomTab === "donut" ? <DonutChart prices={prices} capexData={capexData} />
-              : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={capexData} />
-              : <MultibaggerPanel prices={prices} scannerPool={scannerPool} setScannerPool={setScannerPool} onTickerClick={openPopup} />
-            }
-          </div>
-
-          {/* FOOTER */}
-          <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 10, color: "#475569", borderTop: "1px solid rgba(255,255,255,.03)", paddingTop: 16, flexWrap: "wrap" }}>
-            <span style={{ color: "#64748b", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" }}>Legend:</span>
-            {[{ c: "#ef4444", l: "Extreme Bottleneck" }, { c: "#f59e0b", l: "Constrained" }, { c: "#34d399", l: "Rapid Growth" }, { c: "#60a5fa", l: "Emerging" }, { c: "#f472b6", l: "Speculative" }].map(x => (
-              <span key={x.l} style={{ display: "flex", alignItems: "center", gap: 5, color: "#94a3b8" }}>
-                <span style={{ width: 7, height: 7, borderRadius: "50%", background: x.c, display: "inline-block", opacity: 0.6, boxShadow: `0 0 5px ${x.c}66` }} />{x.l}
-              </span>
-            ))}
-            <span style={{ marginLeft: "auto" }}>Live via Finnhub + Yahoo · server-cached · auto-refreshes 15s</span>
-          </div>
-        </div>
-      </div>
-      {/* COMPANY POPUP */}
-      {popup && (
-        <CompanyPopup
-          ticker={popup.ticker}
-          change={popup.change}
-          anchorRect={popup.rect}
-          onClose={() => setPopup(null)}
-        />
-      )}
-    </>
-  );
-}
+                  onClick={() => setActiveTrack
