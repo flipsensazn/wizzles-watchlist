@@ -1,10 +1,30 @@
 // functions/capex.js
 export async function onRequest(context) {
   const { request, env } = context;
+
+  // ── FIX #3: Restrict CORS to your actual domain ──────────────────────────
+  // Set ALLOWED_ORIGIN as a Cloudflare env var, e.g. "https://your-project.pages.dev"
+  const ALLOWED_ORIGIN = env.ALLOWED_ORIGIN || "";
+  const origin = request.headers.get("Origin") || "";
+  const corsOrigin = origin === ALLOWED_ORIGIN ? ALLOWED_ORIGIN : ALLOWED_ORIGIN;
+
   const headers = {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": corsOrigin,
     "Content-Type": "application/json",
+    "Vary": "Origin",
   };
+
+  // Handle CORS preflight
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        ...headers,
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    });
+  }
 
   // EVERYONE: Read the global sub-sector list
   if (request.method === "GET") {
@@ -22,7 +42,12 @@ export async function onRequest(context) {
     try {
       const body = await request.json();
 
-      if (body.password !== "Cisco123") {
+      // ── FIX #1: Password read from Cloudflare env var, never hardcoded ──
+      const adminPassword = env.ADMIN_PASSWORD;
+      if (!adminPassword) {
+        return new Response(JSON.stringify({ error: "Server misconfiguration: ADMIN_PASSWORD not set." }), { status: 500, headers });
+      }
+      if (body.password !== adminPassword) {
         return new Response(JSON.stringify({ error: "Incorrect Admin Password" }), { status: 401, headers });
       }
 

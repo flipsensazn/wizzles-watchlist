@@ -61,15 +61,6 @@ async function fetchQuoteSummary(ticker) {
     const detail  = r.summaryDetail ?? {};
     const price   = r.price ?? {};
 
-    function fmt(n) {
-      if (n == null || isNaN(n)) return "—";
-      const num = Number(n);
-      if (num >= 1e12) return "$" + (num / 1e12).toFixed(2) + "T";
-      if (num >= 1e9)  return "$" + (num / 1e9).toFixed(2) + "B";
-      if (num >= 1e6)  return "$" + (num / 1e6).toFixed(2) + "M";
-      return "$" + num.toLocaleString();
-    }
-
     let chartPoints = [], chartDates = [];
     if (chartResult && chartResult.indicators?.quote?.[0]?.close && chartResult.timestamp) {
       const closes = chartResult.indicators.quote[0].close;
@@ -90,7 +81,7 @@ async function fetchQuoteSummary(ticker) {
       sector:       profile.sector || "—",
       industry:     profile.industry || "—",
       description:  profile.longBusinessSummary || null,
-      marketCap:    fmt(price.marketCap?.raw ?? price.marketCap),
+      marketCap:    fmtMarketCap(price.marketCap?.raw ?? price.marketCap),
       peRatio:      detail.trailingPE?.raw != null ? Number(detail.trailingPE.raw).toFixed(1) : "—",
       week52Low:    detail.fiftyTwoWeekLow?.raw != null ? "$" + Number(detail.fiftyTwoWeekLow.raw).toFixed(2) : "—",
       week52High:   detail.fiftyTwoWeekHigh?.raw != null ? "$" + Number(detail.fiftyTwoWeekHigh.raw).toFixed(2) : "—",
@@ -114,6 +105,17 @@ async function fetchQuoteSummary(ticker) {
   } catch (err) {
     return null;
   }
+}
+
+// ── SHARED UTILITIES ──────────────────────────────────────
+// Shared number formatter used by fetchQuoteSummary and MultibaggerPanel
+function fmtMarketCap(n) {
+  if (n == null || isNaN(n)) return "—";
+  const num = Number(n);
+  if (num >= 1e12) return "$" + (num / 1e12).toFixed(2) + "T";
+  if (num >= 1e9)  return "$" + (num / 1e9).toFixed(2) + "B";
+  if (num >= 1e6)  return "$" + (num / 1e6).toFixed(2) + "M";
+  return "$" + num.toLocaleString();
 }
 
 // ── DEFAULT CAPEX DATA ────────────────────────────────────
@@ -811,7 +813,7 @@ function DonutChart({ prices, capexData }) {
 }
 
 // ── WATCHLIST ─────────────────────────────────────────────
-function Watchlist({ prices, capexData }) {
+function Watchlist({ prices, capexData, onTickerClick }) {
   const [list, setList] = useState(() => [...new Set(capexData.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))]);
   const [input, setInput] = useState("");
   const [sortDir, setSortDir] = useState("desc");
@@ -868,7 +870,10 @@ function Watchlist({ prices, capexData }) {
           return (
             <div key={item.ticker} style={{ borderRadius: 8, padding: "10px 10px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background .15s" }} onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"} onMouseLeave={e => e.currentTarget.style.background = ""}>
               <span style={{ fontSize: 10, color: "#334155", width: 16, textAlign: "right" }}>{idx + 1}</span>
-              <div style={{ flex: "0 0 auto", minWidth: 60 }}>
+              <div 
+                style={{ flex: "0 0 auto", minWidth: 60, cursor: "pointer" }}
+                onClick={(e) => onTickerClick?.(item.ticker, e.currentTarget.getBoundingClientRect())}
+              >
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{item.ticker}</div>
                 {item.track && <div style={{ fontSize: 9, color: item.track.color, marginTop: 1 }}>{item.track.label.split(" ").slice(0, 2).join(" ")}</div>}
               </div>
@@ -898,42 +903,50 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
 
   useEffect(() => {
     const currentFetchId = ++fetchIdRef.current;
+
+    // ── FIX #4: Throttled queue — max CONCURRENCY fetches at once instead of
+    // firing all 29+ simultaneously. Each /quote call fans out to 3 Yahoo
+    // requests on the backend, so a concurrency of 4 keeps things manageable.
     async function getFundamentals() {
       if (data.length === 0) setLoading(true);
-      const results = await Promise.all(
-        scannerPool.map(async (ticker) => {
-          try {
-            const res = await fetch(`/quote?ticker=${ticker}`);
-            if (currentFetchId !== fetchIdRef.current) return null;
-            const json = await res.json();
-            const r = json?.quoteSummary?.result?.[0];
-            if (!r) return null;
+      const CONCURRENCY = 4;
 
-            const fcf = r.financialData?.freeCashflow?.raw || 0;
-            const marketCapRaw = r.price?.marketCap?.raw || 1;
-            const roa = (r.financialData?.returnOnAssets?.raw || 0) * 100;
-            const pb = r.defaultKeyStatistics?.priceToBook?.raw || 0;
-            const pe = r.summaryDetail?.trailingPE?.raw || null;
+      async function fetchOne(ticker) {
+        try {
+          const res = await fetch(`/quote?ticker=${ticker}`);
+          if (currentFetchId !== fetchIdRef.current) return null;
+          const json = await res.json();
+          const r = json?.quoteSummary?.result?.[0];
+          if (!r) return null;
 
-            const fcfYield = (fcf / marketCapRaw) * 100;
-            const bookToMarket = pb > 0 ? (1 / pb) : 0;
-            
-            function fmt(n) {
-              if (n == null || isNaN(n)) return "—";
-              const num = Number(n);
-              if (num >= 1e12) return "$" + (num / 1e12).toFixed(2) + "T";
-              if (num >= 1e9)  return "$" + (num / 1e9).toFixed(2) + "B";
-              if (num >= 1e6)  return "$" + (num / 1e6).toFixed(2) + "M";
-              return "$" + num.toLocaleString();
-            }
-            const marketCapFmt = fmt(marketCapRaw);
-            const score = (fcfYield * 15) + (bookToMarket * 10) + (roa * 2);
+          const fcf = r.financialData?.freeCashflow?.raw || 0;
+          const marketCapRaw = r.price?.marketCap?.raw || 1;
+          const roa = (r.financialData?.returnOnAssets?.raw || 0) * 100;
+          const pb = r.defaultKeyStatistics?.priceToBook?.raw || 0;
+          const pe = r.summaryDetail?.trailingPE?.raw || null;
 
-            return { ticker, fcfYield, roa, bookToMarket, pe, marketCapFmt, score };
-          } catch (err) { return null; }
-        })
-      );
-      
+          const fcfYield = (fcf / marketCapRaw) * 100;
+          const bookToMarket = pb > 0 ? (1 / pb) : 0;
+          const marketCapFmt = fmtMarketCap(marketCapRaw);
+          const score = (fcfYield * 15) + (bookToMarket * 10) + (roa * 2);
+
+          return { ticker, fcfYield, roa, bookToMarket, pe, marketCapFmt, score };
+        } catch (err) { return null; }
+      }
+
+      // Simple concurrency-limited runner
+      const results = [];
+      const queue = [...scannerPool];
+      async function worker() {
+        while (queue.length > 0) {
+          const ticker = queue.shift();
+          const result = await fetchOne(ticker);
+          if (currentFetchId !== fetchIdRef.current) return;
+          results.push(result);
+        }
+      }
+      await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+
       if (currentFetchId === fetchIdRef.current) {
         setData(results.filter(x => x !== null).sort((a, b) => b.score - a.score));
         setLoading(false);
@@ -1040,11 +1053,128 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
   );
 }
 
+// ── ADMIN LOGIN MODAL ─────────────────────────────────────
+function AdminModal({ onClose, onSuccess }) {
+  const [pwd, setPwd] = useState("");
+  const [error, setError] = useState("");
+  const [loading, setLoading] = useState(false);
+  const inputRef = useRef(null);
+
+  useEffect(() => {
+    // Focus the input when modal opens
+    const t = setTimeout(() => inputRef.current?.focus(), 50);
+    return () => clearTimeout(t);
+  }, []);
+
+  useEffect(() => {
+    function handler(e) { if (e.key === "Escape") onClose(); }
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [onClose]);
+
+  async function handleSubmit() {
+    if (!pwd.trim()) return;
+    setLoading(true);
+    setError("");
+    // Validate the password by making a no-op POST to /scanner
+    // (an empty tickers array with the password — the server will reject
+    // bad passwords with 401 before touching KV)
+    try {
+      const res = await fetch("/scanner", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ password: pwd, tickers: null }),
+      });
+      if (res.status === 401) {
+        setError("Incorrect password.");
+        setLoading(false);
+        return;
+      }
+      // 200 or 500 (missing tickers body) both mean the password was accepted
+      onSuccess(pwd);
+      onClose();
+    } catch {
+      setError("Network error. Try again.");
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div
+      onClick={onClose}
+      style={{
+        position: "fixed", inset: 0, zIndex: 4000,
+        background: "rgba(0,0,0,0.65)", display: "flex",
+        alignItems: "center", justifyContent: "center",
+      }}
+    >
+      <div
+        onClick={e => e.stopPropagation()}
+        style={{
+          background: "rgba(18,18,18,0.98)", border: "1px solid rgba(255,255,255,0.1)",
+          borderRadius: 14, padding: "28px 32px", width: 340,
+          fontFamily: "'DM Mono','Fira Code',monospace",
+          boxShadow: "0 16px 64px rgba(0,0,0,0.85)",
+          animation: "fadeSlideIn .18s ease-out",
+        }}
+      >
+        <div style={{ fontSize: 15, fontWeight: 800, color: "#e2e8f0", marginBottom: 6 }}>Admin Login</div>
+        <div style={{ fontSize: 11, color: "#475569", marginBottom: 20 }}>Enter the admin password to enable global editing.</div>
+
+        <input
+          ref={inputRef}
+          type="password"
+          value={pwd}
+          onChange={e => { setPwd(e.target.value); setError(""); }}
+          onKeyDown={e => e.key === "Enter" && handleSubmit()}
+          placeholder="Password"
+          style={{
+            width: "100%", background: "rgba(255,255,255,0.05)",
+            border: `1px solid ${error ? "#ef4444" : "rgba(255,255,255,0.12)"}`,
+            borderRadius: 8, padding: "9px 12px", color: "#e2e8f0",
+            fontSize: 13, fontFamily: "inherit", outline: "none",
+            marginBottom: error ? 6 : 16,
+          }}
+        />
+        {error && <div style={{ fontSize: 11, color: "#ef4444", marginBottom: 14 }}>{error}</div>}
+
+        <div style={{ display: "flex", gap: 8 }}>
+          <button
+            onClick={handleSubmit}
+            disabled={loading || !pwd.trim()}
+            style={{
+              flex: 1, background: "rgba(96,165,250,0.15)",
+              border: "1px solid rgba(96,165,250,0.35)", color: "#60a5fa",
+              borderRadius: 8, padding: "9px 0", cursor: "pointer",
+              fontSize: 12, fontWeight: 700, fontFamily: "inherit",
+              opacity: loading || !pwd.trim() ? 0.5 : 1,
+            }}
+          >
+            {loading ? "Verifying…" : "Unlock"}
+          </button>
+          <button
+            onClick={onClose}
+            style={{
+              flex: 1, background: "rgba(255,255,255,0.04)",
+              border: "1px solid rgba(255,255,255,0.08)", color: "#64748b",
+              borderRadius: 8, padding: "9px 0", cursor: "pointer",
+              fontSize: 12, fontFamily: "inherit",
+            }}
+          >
+            Cancel
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── ROOT APP ──────────────────────────────────────────────
 export default function App() {
   
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminPassword, setAdminPassword] = useState("");
+  const [showAdminModal, setShowAdminModal] = useState(false);
 
   const [scannerPool, setScannerPool] = useState(DEFAULT_MULTIBAGGER);
   const [capexData, setCapexData] = useState(CAPEX_DATA);
@@ -1103,13 +1233,7 @@ export default function App() {
     return () => clearInterval(id);
   }, [refresh]);
 
-  const handleUnlock = () => {
-    const pwd = prompt("Enter Admin Password to unlock global editing:");
-    if (pwd) {
-      setAdminPassword(pwd);
-      setIsAdmin(true);
-    }
-  };
+  const handleUnlock = () => setShowAdminModal(true);
 
   // Admin save functions for the KV Databases
   const saveGlobalScanner = async (newList) => {
@@ -1254,7 +1378,6 @@ export default function App() {
           </div>
           <div className="header-controls" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
             
-            {/* NEW GLOBAL ADMIN LOGIN */}
             {!isAdmin ? (
               <button onClick={handleUnlock} style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", color: "#64748b", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>
                 🔒 Login
@@ -1331,19 +1454,25 @@ export default function App() {
             {bottomTab === "all" ? (
               <div className="bottom-grid-all">
                 <div className="span-2"><HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} /></div>
-                <div className="span-1 panel-wrapper"><div className="panel-inner"><Watchlist prices={prices} capexData={capexData} /></div></div>
+                <div className="span-1 panel-wrapper"><div className="panel-inner"><Watchlist prices={prices} capexData={capexData} onTickerClick={openPopup} /></div></div>
                 <div className="span-1"><DonutChart prices={prices} capexData={capexData} /></div>
                 <div className="span-2 panel-wrapper"><div className="panel-inner"><MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} /></div></div>
               </div>
             ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} />
               : bottomTab === "donut" ? <DonutChart prices={prices} capexData={capexData} />
-              : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={capexData} />
+              : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={capexData} onTickerClick={openPopup} />
               : <MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} />
             }
           </div>
         </div>
       </div>
       {popup && <CompanyPopup ticker={popup.ticker} change={popup.change} anchorRect={popup.rect} onClose={() => setPopup(null)} />}
+      {showAdminModal && (
+        <AdminModal
+          onClose={() => setShowAdminModal(false)}
+          onSuccess={(pwd) => { setAdminPassword(pwd); setIsAdmin(true); }}
+        />
+      )}
     </>
   );
 }
