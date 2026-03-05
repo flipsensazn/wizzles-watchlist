@@ -533,8 +533,6 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
 
               </div>
             </div>
-              )}
-            </div>
 
           </div>
         )}
