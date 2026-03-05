@@ -1130,14 +1130,46 @@ function Watchlist({ prices, capexData }) {
   );
 }
 
-// ── MULTIBAGGER PANEL ─────────────────────────────────────
-function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }) {
+// ── SMALL-CAP SCANNER (Shared Globally) ─────────────────────────────────────
+function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick, forceRefresh }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newTicker, setNewTicker] = useState("");
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState("");
+  const [isAdmin, setIsAdmin] = useState(false);
+  const [adminPassword, setAdminPassword] = useState("");
   const fetchIdRef = useRef(0);
+
+  // Prompts user for the password to unlock editing features
+  const handleUnlock = () => {
+    const pwd = prompt("Enter Admin Password to update the global scanner:");
+    if (pwd) {
+      setAdminPassword(pwd);
+      setIsAdmin(true);
+    }
+  };
+
+  // Core function to send updates to the global database
+  const saveGlobalList = async (newList) => {
+    try {
+      const res = await fetch("/scanner", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ tickers: newList, password: adminPassword })
+      });
+      const json = await res.json();
+      if (res.ok) {
+        setScannerPool(newList);
+        forceRefresh(); // Immediately grab live prices for the new data
+      } else {
+        alert(json.error || "Update failed.");
+        if (res.status === 401) { setIsAdmin(false); setAdminPassword(""); } // Boot out on wrong pass
+      }
+    } catch (e) {
+      alert("Network error. Could not save to database.");
+    }
+  };
 
   useEffect(() => {
     const currentFetchId = ++fetchIdRef.current;
@@ -1170,12 +1202,10 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
               return "$" + num.toLocaleString();
             }
             const marketCapFmt = fmt(marketCapRaw);
-            
             const score = (fcfYield * 15) + (bookToMarket * 10) + (roa * 2);
 
             return { ticker, fcfYield, roa, bookToMarket, pe, marketCapFmt, score };
           } catch (err) { 
-            console.error(`Error processing ${ticker}:`, err);
             return null; 
           }
         })
@@ -1191,7 +1221,10 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
 
   const addTicker = () => {
     const sym = newTicker.trim().toUpperCase();
-    if (sym && !scannerPool.includes(sym)) { setScannerPool([...scannerPool, sym]); setNewTicker(""); }
+    if (sym && !scannerPool.includes(sym)) {
+      saveGlobalList([...scannerPool, sym]);
+      setNewTicker("");
+    }
   };
 
   const handleImport = () => {
@@ -1200,15 +1233,15 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
     const foundTickers = [...new Set(words)].filter(w => !ignoreList.includes(w));
 
     if (foundTickers.length > 0) {
-      setScannerPool(foundTickers); 
+      saveGlobalList(foundTickers);
       setShowImport(false);
       setImportText("");
     } else {
-      alert("No valid tickers found. Try copying just the column of symbols from Yahoo.");
+      alert("No valid tickers found.");
     }
   };
 
-  const removeTicker = (ticker) => { setScannerPool(scannerPool.filter(t => t !== ticker)); };
+  const removeTicker = (ticker) => { saveGlobalList(scannerPool.filter(t => t !== ticker)); };
   
   const getScoreColor = (score) => {
     if (score > 40) return "#34d399"; 
@@ -1221,35 +1254,45 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12, flexShrink: 0 }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24" }}>Multibagger Blueprint Scanner</h3>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24" }}>Small-cap Scanner</h3>
+            {/* The Lock/Unlock UI */}
+            {!isAdmin ? (
+              <button onClick={handleUnlock} style={{ background: "none", border: "none", color: "#64748b", cursor: "pointer", fontSize: 12 }} title="Admin Login">
+                🔒
+              </button>
+            ) : (
+              <span style={{ fontSize: 9, background: "rgba(52,211,153,0.1)", color: "#34d399", border: "1px solid rgba(52,211,153,0.3)", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>
+                🔓 LIVE EDITING ACTIVE
+              </span>
+            )}
           </div>
           <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Prioritizing FCF Yield, B/M, and ROA</p>
         </div>
-        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-          <button onClick={() => setShowImport(!showImport)} style={{ background: "transparent", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.3)", borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
-            {showImport ? "Close Import" : "⎘ Smart Import"}
-          </button>
-          <input value={newTicker} onChange={e => setNewTicker(e.target.value.toUpperCase())}
-            onKeyDown={e => e.key === "Enter" && addTicker()} placeholder="Add ticker..." 
-            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 12, outline: "none", width: 100 }} />
-          <button onClick={addTicker} style={{ background: "#fbbf24", color: "#000", borderRadius: 8, padding: "6px 12px", fontWeight: 700, cursor: "pointer", border: "none" }}>+</button>
-        </div>
+        
+        {/* Only show import/add tools if unlocked */}
+        {isAdmin && (
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <button onClick={() => setShowImport(!showImport)} style={{ background: "transparent", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.3)", borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
+              {showImport ? "Close Import" : "⎘ Smart Import"}
+            </button>
+            <input value={newTicker} onChange={e => setNewTicker(e.target.value.toUpperCase())}
+              onKeyDown={e => e.key === "Enter" && addTicker()} placeholder="Add ticker..." 
+              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 12, outline: "none", width: 100 }} />
+            <button onClick={addTicker} style={{ background: "#fbbf24", color: "#000", borderRadius: 8, padding: "6px 12px", fontWeight: 700, cursor: "pointer", border: "none" }}>+</button>
+          </div>
+        )}
       </div>
 
-      {showImport && (
+      {showImport && isAdmin && (
         <div style={{ marginBottom: 16, background: "rgba(0,0,0,0.2)", padding: 12, borderRadius: 12, border: "1px dashed rgba(255,255,255,0.1)", animation: "fadeSlideIn .2s ease-out", flexShrink: 0 }}>
           <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 8 }}>
-            Highlight your list of tickers from Yahoo Finance (or Excel), copy them, and paste the raw text below.
+            Paste raw tickers below to instantly update the dashboard for all users globally.
           </div>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-            <textarea 
-              value={importText} 
-              onChange={e => setImportText(e.target.value)} 
-              placeholder="Paste text here... (e.g. NVDA, MSFT, AAPL)"
-              style={{ flex: 1, height: 60, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: 8, color: "#e2e8f0", fontSize: 12, fontFamily: "monospace", outline: "none", resize: "vertical" }}
-            />
+            <textarea value={importText} onChange={e => setImportText(e.target.value)} placeholder="e.g. NVDA, MSFT, AAPL"
+              style={{ flex: 1, height: 60, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: 8, color: "#e2e8f0", fontSize: 12, fontFamily: "monospace", outline: "none", resize: "vertical" }} />
             <button onClick={handleImport} style={{ background: "#60a5fa", color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>
-              Run Import
+              Update Global
             </button>
           </div>
         </div>
@@ -1258,7 +1301,7 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
       <div style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingRight: 4 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, textAlign: "left" }}>
           <thead>
-            <tr style={{ color: "#475569", borderBottom: "1px solid rgba(255,255,255,0.05)", position: "sticky", top: 0, background: "rgba(24,24,24,0.95)", zIndex: 10 }}>
+            <tr style={{ color: "#475569", borderBottom: "1px solid rgba(255,255,255,0.05)", position: "sticky", top: 0, background: "rgba(14,17,23,0.95)", zIndex: 10 }}>
               <th style={{ padding: "10px 8px" }}>TICKER</th>
               <th style={{ padding: "10px 8px" }}>PRICE</th>
               <th style={{ padding: "10px 8px" }}>MKT CAP</th>
@@ -1267,11 +1310,11 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
               <th style={{ padding: "10px 8px" }}>B/M</th>
               <th style={{ padding: "10px 8px" }}>ROA</th>
               <th style={{ padding: "10px 8px", textAlign: "right" }}>SCORE</th>
-              <th style={{ width: 30 }}></th>
+              {isAdmin && <th style={{ width: 30 }}></th>}
             </tr>
           </thead>
           <tbody>
-            {loading ? <tr><td colSpan="9" style={{ padding: 20, color: "#475569" }}>Scanning fundamentals...</td></tr> : 
+            {loading ? <tr><td colSpan="9" style={{ padding: 20, color: "#475569" }}>Fetching live data...</td></tr> : 
              data.map((stock) => {
               const change = prices[stock.ticker]?.change;
               const currentPrice = Number(prices[stock.ticker]?.price);
@@ -1290,7 +1333,11 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
                   <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{typeof stock.bookToMarket === 'number' && !isNaN(stock.bookToMarket) ? stock.bookToMarket.toFixed(2) : "—"}</td>
                   <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{typeof stock.roa === 'number' && !isNaN(stock.roa) ? stock.roa.toFixed(1) + "%" : "—"}</td>
                   <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(stock.score), fontSize: 13 }}>{typeof stock.score === 'number' && !isNaN(stock.score) ? stock.score.toFixed(1) : "—"}</td>
-                  <td style={{ textAlign: "right" }}><button onClick={() => removeTicker(stock.ticker)} style={{ background: "none", border: "none", color: "#334155", cursor: "pointer", fontSize: 16 }}>×</button></td>
+                  
+                  {/* Only show the delete button if logged in as Admin */}
+                  {isAdmin && (
+                    <td style={{ textAlign: "right" }}><button onClick={() => removeTicker(stock.ticker)} style={{ background: "none", border: "none", color: "#334155", cursor: "pointer", fontSize: 16 }}>×</button></td>
+                  )}
                 </tr>
               );
             })}
@@ -1303,17 +1350,17 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
 
 // ── ROOT APP ──────────────────────────────────────────────
 export default function App() {
-  const [scannerPool, setScannerPool] = useState(() => {
-    try {
-      const saved = localStorage.getItem("scannerPool");
-      const parsed = saved ? JSON.parse(saved) : null;
-      return Array.isArray(parsed) ? parsed : DEFAULT_MULTIBAGGER;
-    } catch { return DEFAULT_MULTIBAGGER; }
-  });
+  
+  // Start with default, but immediately override with Global DB on load
+  const [scannerPool, setScannerPool] = useState(DEFAULT_MULTIBAGGER);
 
+  // Fetch the shared list from Cloudflare KV the exact moment the page loads
   useEffect(() => {
-    localStorage.setItem("scannerPool", JSON.stringify(scannerPool));
-  }, [scannerPool]);
+    fetch("/scanner")
+      .then(res => res.json())
+      .then(data => { if (data.tickers) setScannerPool(data.tickers); })
+      .catch(e => console.log("Failed to load global scanner. Using defaults."));
+  }, []);
 
   const [capexData, setCapexData] = useState(() => {
     try {
@@ -1342,6 +1389,8 @@ export default function App() {
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
+    
+    // Uses the live state of scannerPool
     const allTickersToFetch = [...new Set([...getAllTickers(capexData), ...scannerPool])];
 
     const [newPrices, newMarket] = await Promise.all([
@@ -1364,7 +1413,7 @@ export default function App() {
     setLastUpdated(new Date().toLocaleTimeString());
     setRefreshing(false);
   }, [capexData, scannerPool]);
-
+  
   useEffect(() => {
     refresh();
     const id = setInterval(() => {
@@ -1667,7 +1716,7 @@ const styles = `
                 
                 <div className="span-2 panel-wrapper">
                   <div className="panel-inner">
-                    <MultibaggerPanel prices={prices} scannerPool={scannerPool} setScannerPool={setScannerPool} onTickerClick={openPopup} />
+                    <MultibaggerPanel prices={prices} scannerPool={scannerPool} setScannerPool={setScannerPool} onTickerClick={openPopup} forceRefresh={refresh} />
                   </div>
                 </div>
               </div>
