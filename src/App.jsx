@@ -561,11 +561,13 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
 function MarketStrip({ data, tickers, labels, colors }) {
   function formatPrice(p, ticker) {
     if (p === null || p === undefined) return "—";
-    if (ticker === "BTC-USD") return "$" + p.toLocaleString("en-US", { maximumFractionDigits: 0 });
-    if (ticker === "ETH-USD") return "$" + p.toLocaleString("en-US", { maximumFractionDigits: 0 });
-    if (ticker === "XRP-USD") return "$" + p.toFixed(3);
+    // Removed the "$" symbol for crypto tickers
+    if (ticker === "BTC-USD") return p.toLocaleString("en-US", { maximumFractionDigits: 0 });
+    if (ticker === "ETH-USD") return p.toLocaleString("en-US", { maximumFractionDigits: 0 });
+    if (ticker === "XRP-USD") return p.toFixed(3);
     return p.toLocaleString("en-US", { maximumFractionDigits: 2 });
   }
+  
   return (
     <div className="market-strip" style={{ display: "flex", flexDirection: "column", gap: 10, justifyContent: "center", padding: "0 20px" }}>
       {tickers.map((ticker, i) => {
@@ -573,26 +575,39 @@ function MarketStrip({ data, tickers, labels, colors }) {
         const price = entry?.price;
         const change = entry?.change;
         const pos = (change ?? 0) >= 0;
+        
         return (
           <div key={ticker} style={{
-            display: "flex", flexDirection: "column", alignItems: "center",
-            padding: "12px 16px", borderRadius: 12, minWidth: 120,
-            background: "rgba(255,255,255,0.05)",
-            border: `1px solid ${colors[i]}28`,
-            transition: "border-color .2s, box-shadow .2s",
-            boxShadow: "0 2px 12px rgba(0,0,0,0.3)",
+            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
+            padding: "10px 14px", borderRadius: 6, minWidth: 230,
+            background: "rgba(255,255,255,0.02)",
+            border: `1px solid rgba(255,255,255,0.05)`,
+            transition: "background .2s, border-color .2s",
           }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = colors[i] + "66"; e.currentTarget.style.boxShadow = `0 0 16px ${colors[i]}22`; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = colors[i] + "28"; e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.3)"; }}>
-            <span style={{ fontSize: 13, fontWeight: 800, color: colors[i], letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>{labels[i]}</span>
-            <span style={{ fontSize: 18, fontWeight: 700, color: "#f1f5f9", fontFamily: "'DM Mono', monospace", marginBottom: 2 }}>
-              {formatPrice(price, ticker)}
+            onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}
+            onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.05)"; }}>
+            
+            <span style={{ fontSize: 13, fontWeight: 700, color: colors[i], letterSpacing: "0.05em", textTransform: "uppercase" }}>
+              {labels[i]}
             </span>
-            {change !== undefined && change !== null ? (
-              <span style={{ fontSize: 14, fontWeight: 700, color: pos ? "#34d399" : "#f87171" }}>
-                {pos ? "+" : ""}{change.toFixed(2)}%
+            
+            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+              <span style={{ fontSize: 16, fontWeight: 700, color: "#e2e8f0" }}>
+                {formatPrice(price, ticker)}
               </span>
-            ) : <span style={{ fontSize: 14, color: "#334155" }}>—</span>}
+              
+              {change !== undefined && change !== null ? (
+                <span style={{ 
+                  fontSize: 14, fontWeight: 700, color: pos ? "#34d399" : "#f87171", 
+                  display: "flex", alignItems: "center", gap: 4, width: 64, justifyContent: "flex-end" 
+                }}>
+                  <span style={{ fontSize: 10 }}>{pos ? "▲" : "▼"}</span> {Math.abs(change).toFixed(2)}%
+                </span>
+              ) : (
+                <span style={{ fontSize: 14, color: "#475569", width: 64, textAlign: "right" }}>—</span>
+              )}
+            </div>
+
           </div>
         );
       })}
@@ -1388,27 +1403,27 @@ export default function App() {
   const tickerEntries = Object.entries(prices);
 
 const styles = `
-    /* Bring in clean, professional SaaS fonts */
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+    /* Bring in clean SaaS UI font and CNBC-style condensed data font */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Condensed:wght@400;500;600;700&display=swap');
     
     * { 
       box-sizing: border-box; 
       margin: 0; 
       padding: 0; 
-      box-shadow: none !important; /* Instantly strips all neon glows/shadows */
+      box-shadow: none !important; 
     }
     
     html, body { 
-      background: #0E1117; /* Modern flat slate dark mode */
+      background: #0E1117; 
       font-family: 'Inter', sans-serif;
     }
 
-    /* Force monospace for numbers/tickers */
-    table, .market-strip span, .ticker-tape {
-      font-family: 'JetBrains Mono', monospace !important;
+    /* Force the CNBC-style condensed font for numbers, tables, and tickers */
+    table, .market-strip span, .ticker-tape, .capex-number {
+      font-family: 'Roboto Condensed', sans-serif !important;
+      letter-spacing: 0.02em; /* Slight spacing for clear readability */
     }
 
-    /* Override the bubbly inline border-radii globally to make it sharp and professional */
     div[style*="border-radius: 12px"],
     div[style*="border-radius: 14px"], 
     div[style*="border-radius: 18px"],
@@ -1450,7 +1465,6 @@ const styles = `
       .bottom-grid-all { grid-template-columns: 1fr !important; }
       .span-2, .span-1 { grid-column: 1 / -1 !important; }
       
-      /* Release the absolute position when stacked into a single column */
       .panel-wrapper { min-height: 450px; }
       .panel-inner { position: relative; height: 100%; }
     }
