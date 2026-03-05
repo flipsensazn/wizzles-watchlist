@@ -357,10 +357,12 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
   if (left < 12) left = 12;
 
   let chartColor = changeColor;
+  let monthChangePct = null; // <-- Added to track 1-month %
   if (data?.chartData && data.chartData.length >= 2) {
       const firstPrice = data.chartData[0];
       const lastPrice = data.chartData[data.chartData.length - 1];
       chartColor = lastPrice >= firstPrice ? "#34d399" : "#f87171";
+      monthChangePct = ((lastPrice - firstPrice) / firstPrice) * 100; // Calculate gain/loss
   }
 
   return (
@@ -450,7 +452,7 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
                 <div style={{
                   fontSize: 10.5, color: "#94a3b8", lineHeight: 1.55,
                   borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 10,
-                  overflowY: "auto", maxHeight: 130, paddingRight: 6 // <-- Swapped clamping for a scrollbar
+                  overflowY: "auto", maxHeight: 130, paddingRight: 6
                 }}>
                   {data.description}
                 </div>
@@ -470,7 +472,21 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
 
             {data.chartData && data.chartData.length > 0 && (
               <div style={{ width: 220, display: "flex", flexDirection: "column", flexShrink: 0 }}>
-                <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10, textAlign: "left" }}>1-Month Trend</div>
+                {/* Updated Header with 1-Month Gain/Loss */}
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                    1-Month Trend
+                  </div>
+                  {monthChangePct !== null && (
+                    <div style={{ 
+                      fontSize: 10, fontWeight: 700, color: chartColor, 
+                      background: chartColor + "15", padding: "1px 6px", 
+                      borderRadius: 4, border: `1px solid ${chartColor}44` 
+                    }}>
+                      {monthChangePct >= 0 ? "+" : ""}{monthChangePct.toFixed(2)}%
+                    </div>
+                  )}
+                </div>
                 
                 <div style={{ marginTop: "auto", marginBottom: "auto" }}>
                   <MiniChart data={data.chartData} dates={data.chartDates} color={chartColor} />
