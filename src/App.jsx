@@ -5,14 +5,21 @@ const INDEX_TICKERS = ["^GSPC", "^DJI", "^IXIC"];
 const CRYPTO_TICKERS = ["BTC-USD", "ETH-USD", "XRP-USD"];
 const HYPERSCALER_TICKERS = ["AMZN", "MSFT", "GOOG", "META", "ORCL"];
 
+// The new default Multibagger Scanner list
+const DEFAULT_MULTIBAGGER = [
+  "YELP", "NVRI", "CXM", "SFL", "WWW", "FIVN", "STGW", "ECVT", "CRI", 
+  "TRIP", "OLPX", "LZ", "GLDD", "ARHS", "ACEL", "CRCT", "PGY", "TDAY", 
+  "NABL", "NRDS", "STKL", "UDMY", "GOGO", "YEXT", "EHAB", "AHH", "RIGL", 
+  "RPD", "AKBA"
+];
+
 async function fetchLivePrices(tickers) {
   try {
-    // CLOUDFLARE UPDATE: Route changed to /prices
     const res = await fetch(`/prices?tickers=${tickers.join(",")}`);
     const json = await res.json();
     const prices = {};
     Object.entries(json.data ?? {}).forEach(([ticker, val]) => {
-      prices[ticker] = val?.change ?? val;
+      prices[ticker] = val;
     });
     return prices;
   } catch (err) {
@@ -24,7 +31,6 @@ async function fetchLivePrices(tickers) {
 async function fetchMarketData() {
   try {
     const tickers = [...INDEX_TICKERS, ...CRYPTO_TICKERS, ...HYPERSCALER_TICKERS];
-    // CLOUDFLARE UPDATE: Route changed to /prices
     const res = await fetch(`/prices?tickers=${tickers.join(",")}`);
     const json = await res.json();
     return json.data ?? {};
@@ -64,7 +70,6 @@ async function fetchQuoteSummary(ticker) {
       return "$" + num.toLocaleString();
     }
 
-   // Parse 1-Month Chart Data & Dates
     let chartPoints = [];
     let chartDates = [];
     if (chartResult && chartResult.indicators?.quote?.[0]?.close && chartResult.timestamp) {
@@ -73,7 +78,7 @@ async function fetchQuoteSummary(ticker) {
       for (let i = 0; i < closes.length; i++) {
         if (closes[i] !== null) {
           chartPoints.push(closes[i]);
-          chartDates.push(timestamps[i] * 1000); // Convert Unix seconds to milliseconds
+          chartDates.push(timestamps[i] * 1000); 
         }
       }
     }
@@ -94,7 +99,7 @@ async function fetchQuoteSummary(ticker) {
       country:      profile.country || "—",
       website:      profile.website || null,
       chartData:    chartPoints,
-      chartDates:   chartDates, // <-- Added dates here
+      chartDates:   chartDates,
     };
 
     quoteCache[ticker] = data;
@@ -233,38 +238,38 @@ function MiniChart({ data, dates, color }) {
   
   const min = Math.min(...data);
   const max = Math.max(...data);
-  const padding = (max - min) * 0.1 || 1; // 10% vertical padding
+  const padding = (max - min) * 0.1 || 1; 
   const yMin = min - padding;
   const yMax = max + padding;
   const range = yMax - yMin;
   
   const width = 160;
-  const height = 120; // Chart height
+  const height = 120; 
   
   const points = data.map((val, i) => {
     const x = (i / (data.length - 1)) * width;
-    const y = height - ((val - yMin) / range) * height;
+    const y = height - ((val - yMin) / (range || 1)) * height;
     return `${x},${y}`;
   }).join(" ");
 
-  const cleanColor = color.replace(/[^#0-9a-fA-F]/g, '');
+  const cleanColor = color ? color.replace(/[^#0-9a-fA-F]/g, '') : "ffffff";
 
-  // Generate 10 evenly spaced price labels
   const labelCount = 10;
   const priceLabels = Array.from({ length: labelCount }, (_, i) => {
     return max - (i * (max - min) / (labelCount - 1));
   });
 
-  // Generate 5 evenly spaced date labels (MM/DD)
   const dateLabels = [];
   if (dates && dates.length >= 5) {
     for (let i = 0; i < 5; i++) {
       const idx = Math.floor(i * (dates.length - 1) / 4);
       const d = new Date(dates[idx]);
-      dateLabels.push({
-        text: `${d.getMonth() + 1}/${d.getDate()}`,
-        x: (idx / (dates.length - 1)) * width
-      });
+      if (!isNaN(d.getTime())) {
+        dateLabels.push({
+          text: `${d.getMonth() + 1}/${d.getDate()}`,
+          x: (idx / (dates.length - 1)) * width
+        });
+      }
     }
   }
 
@@ -279,9 +284,8 @@ function MiniChart({ data, dates, color }) {
             </linearGradient>
           </defs>
           
-          {/* Horizontal Grid Lines */}
           {priceLabels.map((val, i) => {
-             const yPos = height - ((val - yMin) / range) * height;
+             const yPos = height - ((val - yMin) / (range || 1)) * height;
              return <line key={i} x1="0" y1={yPos} x2={width} y2={yPos} stroke="rgba(255,255,255,0.05)" strokeWidth="1" strokeDasharray="2,2" />
           })}
 
@@ -289,10 +293,9 @@ function MiniChart({ data, dates, color }) {
           <polyline fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={points} />
         </svg>
         
-        {/* Right-side Price Axis */}
         <div style={{ position: 'relative', height: height, width: 45, marginLeft: 8, fontSize: 9, color: "#94a3b8", fontFamily: "monospace" }}>
           {priceLabels.map((val, i) => {
-              const yPos = height - ((val - yMin) / range) * height;
+              const yPos = height - ((val - yMin) / (range || 1)) * height;
               return (
                 <span key={i} style={{ position: 'absolute', top: yPos, transform: 'translateY(-50%)', left: 0 }}>
                   ${val.toFixed(2)}
@@ -302,7 +305,6 @@ function MiniChart({ data, dates, color }) {
         </div>
       </div>
 
-      {/* Bottom Date Axis */}
       {dateLabels.length > 0 && (
         <div style={{ position: 'relative', width: width, height: 16, marginTop: 8, fontSize: 9, color: "#475569", fontFamily: "monospace" }}>
           {dateLabels.map((lbl, i) => (
@@ -372,7 +374,6 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
       animation: "fadeSlideIn .18s ease-out",
       overflow: "hidden",
     }}>
-      {/* Header */}
       <div style={{
         display: "flex", alignItems: "flex-start", justifyContent: "space-between",
         padding: "14px 16px 10px",
@@ -406,7 +407,6 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
         }}>×</button>
       </div>
 
-      {/* Body */}
       <div style={{ padding: "12px 16px 14px" }}>
         {loading ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 80, color: "#475569", fontSize: 12 }}>
@@ -418,7 +418,6 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
           </div>
         ) : (
           <div style={{ display: "flex", gap: 20 }}>
-            {/* LEFT COLUMN: Data Stats */}
             <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
               {(data.sector !== "—" || data.industry !== "—") && (
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
@@ -451,7 +450,7 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
                 <div style={{
                   fontSize: 10.5, color: "#94a3b8", lineHeight: 1.55,
                   borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 10,
-                  display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden",
+                  overflowY: "auto", maxHeight: 130, paddingRight: 6 // <-- Swapped clamping for a scrollbar
                 }}>
                   {data.description}
                 </div>
@@ -469,7 +468,6 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
               )}
             </div>
 
-            {/* RIGHT COLUMN: 1-Month Chart */}
             {data.chartData && data.chartData.length > 0 && (
               <div style={{ width: 220, display: "flex", flexDirection: "column", flexShrink: 0 }}>
                 <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10, textAlign: "left" }}>1-Month Trend</div>
@@ -505,7 +503,7 @@ function MarketStrip({ data, tickers, labels, colors }) {
         return (
           <div key={ticker} style={{
             display: "flex", flexDirection: "column", alignItems: "center",
-            padding: "12px 16px", borderRadius: 12, minWidth: 120, // Increased padding & width
+            padding: "12px 16px", borderRadius: 12, minWidth: 120,
             background: "rgba(255,255,255,0.05)",
             border: `1px solid ${colors[i]}28`,
             transition: "border-color .2s, box-shadow .2s",
@@ -530,8 +528,9 @@ function MarketStrip({ data, tickers, labels, colors }) {
 }
 
 // ── TICKER CHIP ───────────────────────────────────────────
-const TickerChip = memo(function TickerChip({ symbol, change, onRemove, onTickerClick }) {
+const TickerChip = memo(function TickerChip({ symbol, changeData, onRemove, onTickerClick }) {
   const [hovered, setHovered] = useState(false);
+  const change = changeData?.change ?? changeData;
   const pos = (change ?? 0) >= 0;
   const changeColor = change === undefined ? "#475569" : pos ? "#34d399" : "#f87171";
 
@@ -593,7 +592,7 @@ function SubsectorCard({ sub, prices, onAddTicker, onRemoveTicker, onTickerClick
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
         {sub.tickers.map(t => (
-          <TickerChip key={t} symbol={t} change={prices[t]} onRemove={() => onRemoveTicker(t)} onTickerClick={onTickerClick} />
+          <TickerChip key={t} symbol={t} changeData={prices[t]} onRemove={() => onRemoveTicker(t)} onTickerClick={onTickerClick} />
         ))}
       </div>
       {sub.materials?.length > 0 && (
@@ -711,7 +710,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
   const [tooltip, setTooltip] = useState(null);
 
   function getHeatColor(change) {
-    if (change === undefined) return "rgba(255,255,255,0.04)";
+    if (typeof change !== 'number') return "rgba(255,255,255,0.04)";
     if (change >= 15) return "#064e3b";
     if (change >= 8)  return "#065f46";
     if (change >= 4)  return "#047857";
@@ -751,12 +750,14 @@ function HeatMap({ prices, capexData, onTickerClick }) {
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {cells.map(ticker => {
-                const change = prices[ticker];
+                const change = prices[ticker]?.change ?? prices[ticker];
+                const currentPrice = prices[ticker]?.price; // <-- Extract the live price
                 const bg = getHeatColor(change);
                 const pos = change === undefined || change >= 0;
                 return (
                   <div key={ticker}
-                    onMouseEnter={e => setTooltip({ ticker, change, track: track.label, rect: e.currentTarget.getBoundingClientRect() })}
+                    // Pass the price into the tooltip state
+                    onMouseEnter={e => setTooltip({ ticker, change, price: currentPrice, track: track.label, rect: e.currentTarget.getBoundingClientRect() })}
                     onMouseLeave={() => setTooltip(null)}
                     onClick={e => { e.stopPropagation(); onTickerClick?.(ticker, e.currentTarget.getBoundingClientRect()); }}
                     style={{ background: bg, borderRadius: 8, padding: "8px 12px", border: `1px solid ${bg === "rgba(255,255,255,0.04)" ? "rgba(255,255,255,0.06)" : bg}`, minWidth: 60, textAlign: "center", cursor: "pointer", transition: "filter .15s, transform .15s" }}
@@ -765,7 +766,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
                     <div style={{ fontSize: 12, fontWeight: 700, color: "#f1f5f9" }}>{ticker}</div>
                     {change !== undefined && (
                       <div style={{ fontSize: 10, fontWeight: 600, color: pos ? "#a7f3d0" : "#fca5a5", marginTop: 2 }}>
-                        {change >= 0 ? "+" : ""}{change}%
+                        {typeof change === 'number' ? (change >= 0 ? "+" : "") + change + "%" : "—"}
                       </div>
                     )}
                   </div>
@@ -775,6 +776,8 @@ function HeatMap({ prices, capexData, onTickerClick }) {
           </div>
         );
       })}
+      
+      {/* Tooltip Overlay */}
       {tooltip && (
         <div style={{
           position: "fixed",
@@ -788,9 +791,17 @@ function HeatMap({ prices, capexData, onTickerClick }) {
           display: "flex", alignItems: "center", gap: 10,
         }}>
           <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{tooltip.ticker}</span>
+          
+          {/* Newly Added Price Display */}
+          {tooltip.price !== undefined && (
+            <span style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0" }}>
+              ${tooltip.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+            </span>
+          )}
+          
           {tooltip.change !== undefined && (
             <span style={{ fontSize: 12, fontWeight: 700, color: (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171" }}>
-              {(tooltip.change ?? 0) >= 0 ? "+" : ""}{tooltip.change}%
+              {typeof tooltip.change === 'number' ? (tooltip.change >= 0 ? "+" : "") + tooltip.change + "%" : "—"}
             </span>
           )}
           <span style={{ fontSize: 10, color: "#475569" }}>{tooltip.track}</span>
@@ -818,7 +829,7 @@ function DonutChart({ prices, capexData }) {
     const xi2 = cx + r * Math.cos(startAngle + angle), yi2 = cy + r * Math.sin(startAngle + angle);
     const large = angle > Math.PI ? 1 : 0;
     const tickers = [...new Set(track.subsectors.flatMap(s => s.tickers))];
-    const changes = tickers.map(t => prices[t]).filter(v => v !== undefined);
+    const changes = tickers.map(t => prices[t]?.change ?? prices[t]).filter(v => typeof v === 'number');
     const avg = changes.length ? changes.reduce((a, b) => a + b, 0) / changes.length : 0;
     return {
       track, frac, avg, tickerCount: tickers.length,
@@ -829,7 +840,7 @@ function DonutChart({ prices, capexData }) {
   const hov = hovered ? segments.find(s => s.track.id === hovered) : null;
   const trackPerf = capexData.tracks.map(track => {
     const tickers = [...new Set(track.subsectors.flatMap(s => s.tickers))];
-    const changes = tickers.map(t => prices[t]).filter(v => v !== undefined);
+    const changes = tickers.map(t => prices[t]?.change ?? prices[t]).filter(v => typeof v === 'number');
     const avg = changes.length ? changes.reduce((a, b) => a + b, 0) / changes.length : 0;
     return { ...track, avg };
   }).sort((a, b) => b.avg - a.avg);
@@ -901,7 +912,6 @@ function DonutChart({ prices, capexData }) {
 
 // ── WATCHLIST ─────────────────────────────────────────────
 function Watchlist({ prices, capexData }) {
-  // Automatically load all tracked tickers into the Watchlist by default
   const [list, setList] = useState(() => {
     return [...new Set(capexData.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))];
   });
@@ -916,16 +926,17 @@ function Watchlist({ prices, capexData }) {
     return null;
   }
 
-  const enriched = list.map(t => ({ ticker: t, change: prices[t], track: getSector(t) }));
+  const enriched = list.map(t => ({ ticker: t, change: prices[t]?.change ?? prices[t], track: getSector(t) }));
   const filtered = filter === "all" ? enriched : filter === "gainers"
-    ? enriched.filter(x => (x.change ?? 0) >= 0)
-    : enriched.filter(x => (x.change ?? 0) < 0);
+    ? enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) >= 0)
+    : enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) < 0);
   const sorted = [...filtered].sort((a, b) => sortDir === "desc"
-    ? ((b.change ?? -999) - (a.change ?? -999))
-    : ((a.change ?? 999) - (b.change ?? 999)));
-  const avg = enriched.filter(x => x.change !== undefined).reduce((s, x) => s + x.change, 0)
-    / (enriched.filter(x => x.change !== undefined).length || 1);
-  const maxAbs = Math.max(...enriched.map(x => Math.abs(x.change ?? 0)), 1);
+    ? ((typeof b.change === 'number' ? b.change : -999) - (typeof a.change === 'number' ? a.change : -999))
+    : ((typeof a.change === 'number' ? a.change : 999) - (typeof b.change === 'number' ? b.change : 999)));
+  
+  const validChanges = enriched.filter(x => typeof x.change === 'number');
+  const avg = validChanges.reduce((s, x) => s + x.change, 0) / (validChanges.length || 1);
+  const maxAbs = Math.max(...enriched.map(x => Math.abs(typeof x.change === 'number' ? x.change : 0)), 1);
 
   function add() {
     const sym = input.trim().toUpperCase();
@@ -933,13 +944,13 @@ function Watchlist({ prices, capexData }) {
     setInput("");
   }
 
-return (
+  return (
     <div style={{ 
       borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", 
       background: "rgba(24,24,24,0.7)", padding: 20, 
       display: "flex", flexDirection: "column", gap: 14, 
       boxShadow: "0 4px 30px rgba(0,0,0,0.4)",
-      height: "100%" // Force panel to stretch to grid cell height
+      height: "100%" 
     }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <div>
@@ -948,11 +959,11 @@ return (
         </div>
         <div style={{ display: "flex", gap: 12, fontSize: 12 }}>
           <div style={{ textAlign: "center" }}>
-            <div style={{ color: "#34d399", fontWeight: 700 }}>{enriched.filter(x => (x.change ?? -1) >= 0).length}</div>
+            <div style={{ color: "#34d399", fontWeight: 700 }}>{enriched.filter(x => (typeof x.change === 'number' ? x.change : -1) >= 0).length}</div>
             <div style={{ color: "#475569", fontSize: 10 }}>UP</div>
           </div>
           <div style={{ textAlign: "center" }}>
-            <div style={{ color: "#f87171", fontWeight: 700 }}>{enriched.filter(x => (x.change ?? 0) < 0).length}</div>
+            <div style={{ color: "#f87171", fontWeight: 700 }}>{enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) < 0).length}</div>
             <div style={{ color: "#475569", fontSize: 10 }}>DOWN</div>
           </div>
           <div style={{ textAlign: "center" }}>
@@ -982,11 +993,10 @@ return (
         </button>
       </div>
       
-      {/* Flex: 1 allows the scrollable area to take up all remaining vertical space */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, overflowY: "auto", minHeight: 0, paddingRight: 4 }}>
         {sorted.map((item, idx) => {
-          const pos = (item.change ?? 0) >= 0;
-          const barW = item.change !== undefined ? Math.abs(item.change) / maxAbs * 100 : 0;
+          const pos = (typeof item.change === 'number' ? item.change : 0) >= 0;
+          const barW = typeof item.change === 'number' ? Math.abs(item.change) / maxAbs * 100 : 0;
           return (
             <div key={item.ticker} style={{ borderRadius: 8, padding: "10px 10px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background .15s" }}
               onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
@@ -997,12 +1007,12 @@ return (
                 {item.track && <div style={{ fontSize: 9, color: item.track.color, marginTop: 1 }}>{item.track.label.split(" ").slice(0, 2).join(" ")}</div>}
               </div>
               <div style={{ flex: 1, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.04)", overflow: "hidden" }}>
-                {item.change !== undefined && (
+                {typeof item.change === 'number' && (
                   <div style={{ height: "100%", borderRadius: 2, width: `${barW}%`, background: pos ? "linear-gradient(90deg,#065f46,#34d399)" : "linear-gradient(90deg,#7f1d1d,#ef4444)", transition: "width .4s ease" }} />
                 )}
               </div>
-              <div style={{ fontSize: 12, fontWeight: 700, minWidth: 54, textAlign: "right", fontFamily: "monospace", color: item.change === undefined ? "#334155" : pos ? "#34d399" : "#f87171" }}>
-                {item.change === undefined ? "—" : (pos ? "+" : "") + item.change + "%"}
+              <div style={{ fontSize: 12, fontWeight: 700, minWidth: 54, textAlign: "right", fontFamily: "monospace", color: typeof item.change !== 'number' ? "#334155" : pos ? "#34d399" : "#f87171" }}>
+                {typeof item.change !== 'number' ? "—" : (pos ? "+" : "") + item.change + "%"}
               </div>
               <button onClick={() => setList(l => l.filter(x => x !== item.ticker))} style={{ background: "none", border: "none", color: "#1e293b", cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1, transition: "color .15s", fontFamily: "inherit" }}
                 onMouseEnter={e => e.currentTarget.style.color = "#ef4444"}
@@ -1020,13 +1030,15 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newTicker, setNewTicker] = useState("");
+  const [showImport, setShowImport] = useState(false);
+  const [importText, setImportText] = useState("");
   const fetchIdRef = useRef(0);
 
   useEffect(() => {
     const currentFetchId = ++fetchIdRef.current;
     async function getFundamentals() {
       if (data.length === 0) setLoading(true);
-const results = await Promise.all(
+      const results = await Promise.all(
         scannerPool.map(async (ticker) => {
           try {
             const res = await fetch(`/quote?ticker=${ticker}`);
@@ -1035,20 +1047,28 @@ const results = await Promise.all(
             const r = json?.quoteSummary?.result?.[0];
             if (!r) return null;
 
-            // Metrics Extraction
             const fcf = r.financialData?.freeCashflow?.raw || 0;
-            const marketCap = r.price?.marketCap?.raw || 1;
+            const marketCapRaw = r.price?.marketCap?.raw || 1;
             const roa = (r.financialData?.returnOnAssets?.raw || 0) * 100;
             const pb = r.defaultKeyStatistics?.priceToBook?.raw || 0;
-            const marketReturn = (r.defaultKeyStatistics?.['52WeekChange']?.raw || 0) * 100;
+            const pe = r.summaryDetail?.trailingPE?.raw || null;
 
-            const fcfYield = (fcf / marketCap) * 100;
+            const fcfYield = (fcf / marketCapRaw) * 100;
             const bookToMarket = pb > 0 ? (1 / pb) : 0;
             
-            // Score Calculation (Focusing on FCF Yield, B/M, ROA, and Momentum)
-            const score = (fcfYield * 10) + (bookToMarket * 20) + (roa * 2) + (marketReturn * 0.5);
+            function fmt(n) {
+              if (n == null || isNaN(n)) return "—";
+              const num = Number(n);
+              if (num >= 1e12) return "$" + (num / 1e12).toFixed(2) + "T";
+              if (num >= 1e9)  return "$" + (num / 1e9).toFixed(2) + "B";
+              if (num >= 1e6)  return "$" + (num / 1e6).toFixed(2) + "M";
+              return "$" + num.toLocaleString();
+            }
+            const marketCapFmt = fmt(marketCapRaw);
+            
+            const score = (fcfYield * 15) + (bookToMarket * 10) + (roa * 2);
 
-            return { ticker, fcfYield, roa, bookToMarket, marketReturn, score };
+            return { ticker, fcfYield, roa, bookToMarket, pe, marketCapFmt, score };
           } catch (err) { 
             console.error(`Error processing ${ticker}:`, err);
             return null; 
@@ -1069,53 +1089,102 @@ const results = await Promise.all(
     if (sym && !scannerPool.includes(sym)) { setScannerPool([...scannerPool, sym]); setNewTicker(""); }
   };
 
+  const handleImport = () => {
+    const words = importText.toUpperCase().match(/\b[A-Z]{1,5}\b/g) || [];
+    const ignoreList = ["INC", "CORP", "CO", "LTD", "PLC", "LLC", "USD", "EUR", "CAD", "M", "B", "K", "TRUE", "FALSE"];
+    const foundTickers = [...new Set(words)].filter(w => !ignoreList.includes(w));
+
+    if (foundTickers.length > 0) {
+      setScannerPool(foundTickers); 
+      setShowImport(false);
+      setImportText("");
+    } else {
+      alert("No valid tickers found. Try copying just the column of symbols from Yahoo.");
+    }
+  };
+
   const removeTicker = (ticker) => { setScannerPool(scannerPool.filter(t => t !== ticker)); };
+  
   const getScoreColor = (score) => {
-    if (score > 40) return "#34d399"; // Elite
-    if (score > 15) return "#fbbf24"; // Good
-    return "#f87171"; // Poor
+    if (score > 40) return "#34d399"; 
+    if (score > 15) return "#fbbf24"; 
+    return "#f87171"; 
   };
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20 }}>
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, display: "flex", flexDirection: "column", height: "100%" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12, flexShrink: 0 }}>
         <div>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24" }}>Multibagger Blueprint Scanner</h3>
-          <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Prioritizing FCF Yield & Asset Growth</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24" }}>Multibagger Blueprint Scanner</h3>
+          </div>
+          <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Prioritizing FCF Yield, B/M, and ROA</p>
         </div>
-        <div style={{ display: "flex", gap: 8 }}>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <button onClick={() => setShowImport(!showImport)} style={{ background: "transparent", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.3)", borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
+            {showImport ? "Close Import" : "⎘ Smart Import"}
+          </button>
           <input value={newTicker} onChange={e => setNewTicker(e.target.value.toUpperCase())}
             onKeyDown={e => e.key === "Enter" && addTicker()} placeholder="Add ticker..." 
-            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 12, outline: "none" }} />
+            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 12, outline: "none", width: 100 }} />
           <button onClick={addTicker} style={{ background: "#fbbf24", color: "#000", borderRadius: 8, padding: "6px 12px", fontWeight: 700, cursor: "pointer", border: "none" }}>+</button>
         </div>
       </div>
-      <div style={{ overflowX: "auto" }}>
+
+      {showImport && (
+        <div style={{ marginBottom: 16, background: "rgba(0,0,0,0.2)", padding: 12, borderRadius: 12, border: "1px dashed rgba(255,255,255,0.1)", animation: "fadeSlideIn .2s ease-out", flexShrink: 0 }}>
+          <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 8 }}>
+            Highlight your list of tickers from Yahoo Finance (or Excel), copy them, and paste the raw text below.
+          </div>
+          <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
+            <textarea 
+              value={importText} 
+              onChange={e => setImportText(e.target.value)} 
+              placeholder="Paste text here... (e.g. NVDA, MSFT, AAPL)"
+              style={{ flex: 1, height: 60, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: 8, color: "#e2e8f0", fontSize: 12, fontFamily: "monospace", outline: "none", resize: "vertical" }}
+            />
+            <button onClick={handleImport} style={{ background: "#60a5fa", color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>
+              Run Import
+            </button>
+          </div>
+        </div>
+      )}
+
+      <div style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingRight: 4 }}>
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, textAlign: "left" }}>
           <thead>
-            <tr style={{ color: "#475569", borderBottom: "1px solid rgba(255,255,255,0.05)" }}>
+            <tr style={{ color: "#475569", borderBottom: "1px solid rgba(255,255,255,0.05)", position: "sticky", top: 0, background: "rgba(24,24,24,0.95)", zIndex: 10 }}>
               <th style={{ padding: "10px 8px" }}>TICKER</th>
-              <th style={{ padding: "10px 8px" }}>FCF YIELD</th>
+              <th style={{ padding: "10px 8px" }}>PRICE</th>
+              <th style={{ padding: "10px 8px" }}>MKT CAP</th>
+              <th style={{ padding: "10px 8px" }}>P/E</th>
+              <th style={{ padding: "10px 8px" }}>FCF YLD</th>
+              <th style={{ padding: "10px 8px" }}>B/M</th>
               <th style={{ padding: "10px 8px" }}>ROA</th>
-              <th style={{ padding: "10px 8px" }}>1Y RET.</th>
-              <th style={{ padding: "10px 8px", textAlign: "right" }}>BLUEPRINT SCORE</th>
+              <th style={{ padding: "10px 8px", textAlign: "right" }}>SCORE</th>
               <th style={{ width: 30 }}></th>
             </tr>
           </thead>
           <tbody>
-            {loading ? <tr><td colSpan="7" style={{ padding: 20, color: "#475569" }}>Scanning fundamentals...</td></tr> : 
+            {loading ? <tr><td colSpan="9" style={{ padding: 20, color: "#475569" }}>Scanning fundamentals...</td></tr> : 
              data.map((stock) => {
-              const change = prices[stock.ticker]?.change ?? prices[stock.ticker];
+              const change = prices[stock.ticker]?.change;
+              const currentPrice = Number(prices[stock.ticker]?.price);
+              const priceStr = !isNaN(currentPrice) && currentPrice !== 0 ? "$" + currentPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
+              
               return (
                 <tr key={stock.ticker} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
                   <td onClick={(e) => onTickerClick(stock.ticker, e.currentTarget.getBoundingClientRect())} style={{ padding: "12px 8px", cursor: "pointer" }}>
                     <div style={{ fontWeight: 700, color: "#f1f5f9" }}>{stock.ticker}</div>
-                    <div style={{ fontSize: 9, color: (change >= 0 ? "#34d399" : "#f87171") }}>{change !== undefined ? `${change >= 0 ? "+" : ""}${change}%` : "—"}</div>
+                    <div style={{ fontSize: 9, color: (change >= 0 ? "#34d399" : "#f87171") }}>{typeof change === 'number' ? `${change >= 0 ? "+" : ""}${change}%` : "—"}</div>
                   </td>
-                  <td style={{ padding: "12px 8px", color: stock.fcfYield > 8 ? "#34d399" : "#e2e8f0" }}>{stock.fcfYield.toFixed(2)}%</td>
-                  <td style={{ padding: "12px 8px" }}>{stock.roa.toFixed(1)}%</td>
-                  <td style={{ padding: "12px 8px" }}>{stock.marketReturn.toFixed(1)}%</td>
-                  <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(stock.score), fontSize: 13 }}>{stock.score.toFixed(1)}</td>
+                  <td style={{ padding: "12px 8px", color: "#e2e8f0", fontWeight: 600 }}>{priceStr}</td>
+                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{stock.marketCapFmt}</td>
+                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{typeof stock.pe === 'number' ? stock.pe.toFixed(1) : "—"}</td>
+                  <td style={{ padding: "12px 8px", color: stock.fcfYield > 8 ? "#34d399" : "#cbd5e1" }}>{typeof stock.fcfYield === 'number' && !isNaN(stock.fcfYield) ? stock.fcfYield.toFixed(2) + "%" : "—"}</td>
+                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{typeof stock.bookToMarket === 'number' && !isNaN(stock.bookToMarket) ? stock.bookToMarket.toFixed(2) : "—"}</td>
+                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{typeof stock.roa === 'number' && !isNaN(stock.roa) ? stock.roa.toFixed(1) + "%" : "—"}</td>
+                  <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(stock.score), fontSize: 13 }}>{typeof stock.score === 'number' && !isNaN(stock.score) ? stock.score.toFixed(1) : "—"}</td>
                   <td style={{ textAlign: "right" }}><button onClick={() => removeTicker(stock.ticker)} style={{ background: "none", border: "none", color: "#334155", cursor: "pointer", fontSize: 16 }}>×</button></td>
                 </tr>
               );
@@ -1130,23 +1199,25 @@ const results = await Promise.all(
 // ── ROOT APP ──────────────────────────────────────────────
 export default function App() {
   const [scannerPool, setScannerPool] = useState(() => {
-  try {
-    const saved = localStorage.getItem("scannerPool");
-    // Default pool if nothing is saved
-    return saved ? JSON.parse(saved) : ["VRT", "APLD", "CORZ", "WULF", "LITE", "COHR", "AAOI", "OSS", "GTLB", "IREN"];
-  } catch { return ["VRT", "APLD", "CORZ", "WULF", "LITE", "COHR", "AAOI", "OSS", "GTLB", "IREN"]; }
-});
+    try {
+      const saved = localStorage.getItem("scannerPool");
+      const parsed = saved ? JSON.parse(saved) : null;
+      return Array.isArray(parsed) ? parsed : DEFAULT_MULTIBAGGER;
+    } catch { return DEFAULT_MULTIBAGGER; }
+  });
 
-// Save to localStorage whenever the pool changes
-useEffect(() => {
-  localStorage.setItem("scannerPool", JSON.stringify(scannerPool));
-}, [scannerPool]);
+  useEffect(() => {
+    localStorage.setItem("scannerPool", JSON.stringify(scannerPool));
+  }, [scannerPool]);
+
   const [capexData, setCapexData] = useState(() => {
     try {
       const saved = localStorage.getItem("capexData");
-      return saved ? JSON.parse(saved) : CAPEX_DATA;
+      const parsed = saved ? JSON.parse(saved) : null;
+      return (parsed && Array.isArray(parsed.tracks)) ? parsed : CAPEX_DATA;
     } catch { return CAPEX_DATA; }
   });
+  
   const [activeTrack, setActiveTrack] = useState(null);
   const [prices, setPrices] = useState({});
   const [marketData, setMarketData] = useState({});
@@ -1156,7 +1227,7 @@ useEffect(() => {
   const [popup, setPopup] = useState(null); 
 
   const openPopup = useCallback((ticker, rect) => {
-    setPopup(prev => (prev?.ticker === ticker ? null : { ticker, change: prices[ticker], rect }));
+    setPopup(prev => (prev?.ticker === ticker ? null : { ticker, change: prices[ticker]?.change ?? prices[ticker], rect }));
   }, [prices]);
 
   useEffect(() => {
@@ -1166,10 +1237,13 @@ useEffect(() => {
 
   const refresh = useCallback(async () => {
     setRefreshing(true);
+    const allTickersToFetch = [...new Set([...getAllTickers(capexData), ...scannerPool])];
+
     const [newPrices, newMarket] = await Promise.all([
-      fetchLivePrices(getAllTickers(capexData)),
+      fetchLivePrices(allTickersToFetch),
       fetchMarketData(),
     ]);
+    
     setPrices(prev => ({ ...prev, ...newPrices }));
     setMarketData(prev => {
       const merged = { ...prev };
@@ -1184,12 +1258,11 @@ useEffect(() => {
     });
     setLastUpdated(new Date().toLocaleTimeString());
     setRefreshing(false);
-  }, [capexData]);
+  }, [capexData, scannerPool]);
 
   useEffect(() => {
     refresh();
     const id = setInterval(() => {
-      // ONLY refresh if the tab is actively being viewed
       if (!document.hidden) {
         refresh();
       }
@@ -1236,12 +1309,12 @@ useEffect(() => {
     }));
   }
 
-  const gainers = Object.values(prices).filter(v => v > 0).length;
-  const losers = Object.values(prices).filter(v => v < 0).length;
+  const gainers = Object.values(prices).filter(v => (v?.change ?? v) > 0).length;
+  const losers = Object.values(prices).filter(v => (v?.change ?? v) < 0).length;
   const activeData = capexData.tracks.find(t => t.id === activeTrack);
   const tickerEntries = Object.entries(prices);
 
-const styles = `
+  const styles = `
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap');
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { background: #121212; }
@@ -1254,7 +1327,7 @@ const styles = `
     .ticker-tape { animation: scroll-left 80s linear infinite; white-space: nowrap; display: inline-flex; gap: 24px; }
     .pulse { animation: pulseDot 2s infinite; }
 
-/* ── CUSTOM DESKTOP GRID ───────────────────────────────── */
+    /* ── CUSTOM DESKTOP GRID ───────────────────────────────── */
     .bottom-grid-all {
       display: grid;
       grid-template-columns: repeat(3, 1fr);
@@ -1263,11 +1336,11 @@ const styles = `
     .span-2 { grid-column: span 2; }
     .span-1 { grid-column: span 1; }
     
-    .watchlist-wrapper {
+    .panel-wrapper {
       position: relative;
       height: 100%;
     }
-    .watchlist-inner {
+    .panel-inner {
       position: absolute;
       top: 0; left: 0; right: 0; bottom: 0;
     }
@@ -1277,9 +1350,8 @@ const styles = `
       .bottom-grid-all { grid-template-columns: 1fr !important; }
       .span-2, .span-1 { grid-column: 1 / -1 !important; }
       
-      /* Release the absolute position when stacked into a single column */
-      .watchlist-wrapper { min-height: 450px; }
-      .watchlist-inner { position: relative; height: 100%; }
+      .panel-wrapper { min-height: 450px; }
+      .panel-inner { position: relative; height: 100%; }
     }
 
     /* ── MOBILE ───────────────────────────────────────────── */
@@ -1305,21 +1377,22 @@ const styles = `
         fontFamily: "'DM Mono','Fira Code',monospace",
       }}>
 
-        {/* TICKER TAPE */}
         {tickerEntries.length > 0 && (
           <div style={{ overflow: "hidden", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(18,18,18,0.75)", padding: "6px 0" }}>
             <div className="ticker-tape">
-              {[...tickerEntries, ...tickerEntries].map(([sym, chg], i) => (
-                <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#64748b", fontSize: 11 }}>
-                  <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{sym}</span>
-                  <span style={{ color: chg >= 0 ? "#34d399" : "#f87171" }}>{chg >= 0 ? "▲" : "▼"} {Math.abs(chg).toFixed(2)}%</span>
-                </span>
-              ))}
+              {[...tickerEntries, ...tickerEntries].map(([sym, val], i) => {
+                const chg = val?.change ?? val;
+                return (
+                  <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#64748b", fontSize: 11 }}>
+                    <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{sym}</span>
+                    {chg !== undefined && <span style={{ color: chg >= 0 ? "#34d399" : "#f87171" }}>{chg >= 0 ? "▲" : "▼"} {Math.abs(chg).toFixed(2)}%</span>}
+                  </span>
+                )
+              })}
             </div>
           </div>
         )}
 
-        {/* HEADER */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
           <div>
             <div style={{ fontSize: 10, color: "#2d3a52", letterSpacing: "0.35em", textTransform: "uppercase", marginBottom: 3 }}>
@@ -1344,6 +1417,8 @@ const styles = `
                 if (window.confirm("Reset all tickers to defaults?")) {
                   setCapexData(CAPEX_DATA);
                   localStorage.removeItem("capexData");
+                  setScannerPool(DEFAULT_MULTIBAGGER);
+                  localStorage.removeItem("scannerPool");
                 }
               }}
               style={{ background: "rgba(239,68,68,0.08)", border: "1px solid rgba(239,68,68,0.2)", color: "#f87171", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>
@@ -1361,7 +1436,6 @@ const styles = `
 
         <div className="main-content" style={{ maxWidth: 1480, margin: "0 auto", padding: "32px 28px", display: "flex", flexDirection: "column", gap: 28 }}>
 
-          {/* TOP NODE WITH FLANKING MARKET DATA */}
           <div className="top-node-layout" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
             <MarketStrip data={marketData} tickers={["^GSPC","^DJI","^IXIC"]} labels={["S&P 500","DOW","NASDAQ"]} colors={["#60a5fa","#34d399","#c084fc"]} />
 
@@ -1413,7 +1487,6 @@ const styles = `
             <MarketStrip data={marketData} tickers={["BTC-USD","ETH-USD","XRP-USD"]} labels={["BTC","ETH","XRP"]} colors={["#f59e0b","#60a5fa","#34d399"]} />
           </div>
 
-          {/* TRACK CARDS */}
           <div className="track-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(0,1fr))", gap: 10, paddingTop: 8 }}>
             {capexData.tracks.map(track => (
               <div key={track.id} style={{ paddingTop: activeTrack === track.id ? 14 : 0 }}>
@@ -1423,7 +1496,6 @@ const styles = `
             ))}
           </div>
 
-          {/* EXPANDED PANE */}
           {activeData && (
             <TrackPane track={activeData} prices={prices}
               onAddTicker={addTickerToSubsector}
@@ -1431,7 +1503,6 @@ const styles = `
               onTickerClick={openPopup} />
           )}
 
-         {/* BOTTOM PANELS */}
           <div>
             <div style={{ display: "flex", gap: 4, marginBottom: 18, borderBottom: "1px solid rgba(255,255,255,.04)", paddingBottom: 4, flexWrap: "wrap" }}>
               {[
@@ -1454,16 +1525,18 @@ const styles = `
               <div className="bottom-grid-all">
                 <div className="span-2"><HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} /></div>
                 
-                {/* Watchlist constrained to HeatMap height via absolute positioning */}
-                <div className="span-1 watchlist-wrapper">
-                  <div className="watchlist-inner">
+                <div className="span-1 panel-wrapper">
+                  <div className="panel-inner">
                     <Watchlist prices={prices} capexData={capexData} />
                   </div>
                 </div>
 
                 <div className="span-1"><DonutChart prices={prices} capexData={capexData} /></div>
-                <div className="span-2">
-                  <MultibaggerPanel prices={prices} scannerPool={scannerPool} setScannerPool={setScannerPool} onTickerClick={openPopup} />
+                
+                <div className="span-2 panel-wrapper">
+                  <div className="panel-inner">
+                    <MultibaggerPanel prices={prices} scannerPool={scannerPool} setScannerPool={setScannerPool} onTickerClick={openPopup} />
+                  </div>
                 </div>
               </div>
             ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} />
@@ -1473,7 +1546,6 @@ const styles = `
             }
           </div>
 
-          {/* FOOTER */}
           <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 10, color: "#475569", borderTop: "1px solid rgba(255,255,255,.03)", paddingTop: 16, flexWrap: "wrap" }}>
             <span style={{ color: "#64748b", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" }}>Legend:</span>
             {[{ c: "#ef4444", l: "Extreme Bottleneck" }, { c: "#f59e0b", l: "Constrained" }, { c: "#34d399", l: "Rapid Growth" }, { c: "#60a5fa", l: "Emerging" }, { c: "#f472b6", l: "Speculative" }].map(x => (
@@ -1485,7 +1557,7 @@ const styles = `
           </div>
         </div>
       </div>
-      {/* COMPANY POPUP */}
+
       {popup && (
         <CompanyPopup
           ticker={popup.ticker}
