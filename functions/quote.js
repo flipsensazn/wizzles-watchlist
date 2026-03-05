@@ -52,7 +52,3 @@ export async function onRequest(context) {
     return new Response(JSON.stringify({ error: "Fetch failed" }), { status: 500, headers });
   }
 }
-  } catch (err) {
-    return new Response(JSON.stringify({ error: "Fetch failed" }), { status: 500, headers });
-  }
-}
