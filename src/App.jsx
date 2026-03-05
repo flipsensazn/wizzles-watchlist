@@ -482,50 +482,57 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
               
               {/* 1-Month Trend Header */}
               {data.chartData && data.chartData.length > 0 && (
-                <>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                    <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-                      1-Month Trend
+                <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+                  <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase" }}>
+                    1-Month Trend
+                  </div>
+                  {monthChangePct !== null && (
+                    <div style={{ 
+                      fontSize: 10, fontWeight: 700, color: chartColor, 
+                      background: chartColor + "15", padding: "1px 6px", 
+                      borderRadius: 4, border: `1px solid ${chartColor}44` 
+                    }}>
+                      {monthChangePct >= 0 ? "+" : ""}{monthChangePct.toFixed(2)}%
                     </div>
-                    {monthChangePct !== null && (
-                      <div style={{ 
-                        fontSize: 10, fontWeight: 700, color: chartColor, 
-                        background: chartColor + "15", padding: "1px 6px", 
-                        borderRadius: 4, border: `1px solid ${chartColor}44` 
-                      }}>
-                        {monthChangePct >= 0 ? "+" : ""}{monthChangePct.toFixed(2)}%
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ marginTop: "auto", marginBottom: "auto" }}>
-                    <MiniChart data={data.chartData} dates={data.chartDates} color={chartColor} />
-                  </div>
-                </>
+                  )}
+                </div>
               )}
 
-              {/* 52-Week Range Bar */}
-              {data.raw52Low != null && data.raw52High != null && data.rawPrice != null && (
-                <div style={{ marginTop: 14 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#475569", marginBottom: 6, fontFamily: "monospace" }}>
-                    <span>{data.week52Low}</span>
-                    <span style={{ color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.1em" }}>52W Range</span>
-                    <span>{data.week52High}</span>
+              {/* Grouped Container to snap the chart and 52W bar tightly together */}
+              <div style={{ marginTop: "auto", marginBottom: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
+                
+                {data.chartData && data.chartData.length > 0 && (
+                  <div>
+                    <MiniChart data={data.chartData} dates={data.chartDates} color={chartColor} />
                   </div>
-                  <div style={{ position: "relative", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2 }}>
-                    <div style={{ 
-                      position: "absolute", 
-                      // Calculate the exact % position of the current price within the 52-week bounds
-                      left: `${Math.max(0, Math.min(100, (data.raw52High - data.raw52Low) > 0 ? ((data.rawPrice - data.raw52Low) / (data.raw52High - data.raw52Low)) * 100 : 50))}%`, 
-                      top: "50%", 
-                      transform: "translate(-50%, -50%)", 
-                      width: 8, 
-                      height: 8, 
-                      borderRadius: "50%", 
-                      background: chartColor,
-                      boxShadow: `0 0 8px ${chartColor}88`
-                    }} />
+                )}
+
+                {/* 52-Week Range Bar */}
+                {data.raw52Low != null && data.raw52High != null && data.rawPrice != null && (
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#475569", marginBottom: 6, fontFamily: "monospace" }}>
+                      <span>{data.week52Low}</span>
+                      <span style={{ color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.1em" }}>52W Range</span>
+                      <span>{data.week52High}</span>
+                    </div>
+                    <div style={{ position: "relative", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2 }}>
+                      <div style={{ 
+                        position: "absolute", 
+                        left: `${Math.max(0, Math.min(100, (data.raw52High - data.raw52Low) > 0 ? ((data.rawPrice - data.raw52Low) / (data.raw52High - data.raw52Low)) * 100 : 50))}%`, 
+                        top: "50%", 
+                        transform: "translate(-50%, -50%)", 
+                        width: 8, 
+                        height: 8, 
+                        borderRadius: "50%", 
+                        background: chartColor,
+                        boxShadow: `0 0 8px ${chartColor}88`
+                      }} />
+                    </div>
                   </div>
-                </div>
+                )}
+
+              </div>
+            </div>
               )}
             </div>
 
