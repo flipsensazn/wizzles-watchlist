@@ -1,11 +1,26 @@
 // functions/quote.js
 export async function onRequest(context) {
+  const { request, env } = context;
+
+  // Restrict CORS to your actual domain (set ALLOWED_ORIGIN as a Cloudflare env var)
+  const ALLOWED_ORIGIN = env.ALLOWED_ORIGIN || "";
+  const origin = request.headers.get("Origin") || "";
+  const corsOrigin = origin === ALLOWED_ORIGIN ? ALLOWED_ORIGIN : "";
+
   const headers = {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": corsOrigin,
     "Content-Type": "application/json",
+    "Vary": "Origin",
   };
 
-  const { searchParams } = new URL(context.request.url);
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: { ...headers, "Access-Control-Allow-Methods": "GET, OPTIONS", "Access-Control-Allow-Headers": "Content-Type" },
+    });
+  }
+
+  const { searchParams } = new URL(request.url);
   const ticker = searchParams.get("ticker");
 
   if (!ticker) {
