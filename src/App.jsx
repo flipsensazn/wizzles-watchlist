@@ -38,8 +38,15 @@ async function fetchMarketData() {
 
 // ── QUOTE SUMMARY (for company popup) ────────────────────
 const quoteCache = {};
+const QUOTE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
+
 async function fetchQuoteSummary(ticker) {
-  if (quoteCache[ticker]) return quoteCache[ticker];
+  const now = Date.now();
+  // Check if we have cached data AND if it is less than 5 minutes old
+  if (quoteCache[ticker] && (now - quoteCache[ticker].timestamp < QUOTE_CACHE_TTL)) {
+    return quoteCache[ticker].data;
+  }
+
   try {
     const url = `/quote?ticker=${encodeURIComponent(ticker)}`;
     const res = await fetch(url);
@@ -47,6 +54,7 @@ async function fetchQuoteSummary(ticker) {
     const payload = json.data ? json.data : json;
     const r = payload?.quoteSummary?.result?.[0];
     const chartResult = payload?.chart?.result?.[0];
+    const newsResult = payload?.news; // Extract the news payload
     if (!r) return null;
 
     const profile = r.assetProfile ?? {};
@@ -94,9 +102,14 @@ async function fetchQuoteSummary(ticker) {
       rawPrice:     currentPriceRaw,
       raw52Low:     detail.fiftyTwoWeekLow?.raw,
       raw52High:    detail.fiftyTwoWeekHigh?.raw,
+      news:         newsResult ? {
+                      title: newsResult.title,
+                      link: newsResult.link,
+                      publisher: newsResult.publisher
+                    } : null
     };
 
-    quoteCache[ticker] = data;
+    quoteCache[ticker] = { data, timestamp: now }; // Store with timestamp
     return data;
   } catch (err) {
     return null;
@@ -294,7 +307,8 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  const POPUP_W = 500, POPUP_H = 360; 
+  // Height increased to 400 to accommodate the news banner without squishing the chart
+  const POPUP_W = 500, POPUP_H = 400; 
   const vw = window.innerWidth, vh = window.innerHeight;
   let left = anchorRect ? anchorRect.left : vw / 2 - POPUP_W / 2;
   let top  = anchorRect ? anchorRect.top - POPUP_H - 10 : vh / 2 - POPUP_H / 2;
@@ -317,12 +331,9 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
   return (
     <div ref={popupRef} style={{
       position: "fixed", top, left, width: POPUP_W, zIndex: 3000,
-      background: "rgba(18,18,18,0.97)",
-      border: `1px solid ${changeColor}44`,
-      borderRadius: 14,
-      boxShadow: `0 8px 48px rgba(0,0,0,0.85), 0 0 30px ${changeColor}18`,
-      fontFamily: "'DM Mono','Fira Code',monospace",
-      animation: "fadeSlideIn .18s ease-out",
+      background: "rgba(18,18,18,0.97)", border: `1px solid ${changeColor}44`,
+      borderRadius: 14, boxShadow: `0 8px 48px rgba(0,0,0,0.85), 0 0 30px ${changeColor}18`,
+      fontFamily: "'DM Mono','Fira Code',monospace", animation: "fadeSlideIn .18s ease-out",
       overflow: "hidden",
     }}>
       <div style={{
@@ -352,6 +363,8 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
           <div style={{ color: "#475569", fontSize: 12, textAlign: "center", padding: "20px 0" }}>No data available for {ticker}</div>
         ) : (
           <div style={{ display: "flex", gap: 20 }}>
+            
+            {/* LEFT COLUMN: Data Stats */}
             <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
               {(data.sector !== "—" || data.industry !== "—") && (
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
@@ -388,7 +401,27 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
               )}
             </div>
 
+            {/* RIGHT COLUMN: News & Charts */}
             <div style={{ width: 220, display: "flex", flexDirection: "column", flexShrink: 0 }}>
+              
+              {/* LATEST NEWS BANNER */}
+              {data.news && (
+                <div style={{ marginBottom: 14, padding: "8px 10px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
+                    <span style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700 }}>🗞 Latest News</span>
+                    <a href={data.news.link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 9, color: "#60a5fa", textDecoration: "none", fontWeight: 600, background: "rgba(96,165,250,0.15)", padding: "2px 6px", borderRadius: 4 }}>
+                      Read ↗
+                    </a>
+                  </div>
+                  <div style={{ fontSize: 11, color: "#e2e8f0", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", fontWeight: 500 }} title={data.news.title}>
+                    {data.news.title}
+                  </div>
+                  {data.news.publisher && (
+                    <div style={{ fontSize: 9, color: "#475569", marginTop: 4, fontFamily: "'Inter', sans-serif" }}>via {data.news.publisher}</div>
+                  )}
+                </div>
+              )}
+
               {data.chartData && data.chartData.length > 0 && (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                   <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase" }}>1-Month Trend</div>
@@ -399,6 +432,7 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
                   )}
                 </div>
               )}
+              
               <div style={{ marginTop: "auto", marginBottom: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
                 {data.chartData && data.chartData.length > 0 && (
                   <div><MiniChart data={data.chartData} dates={data.chartDates} color={chartColor} /></div>
@@ -417,6 +451,7 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
                 )}
               </div>
             </div>
+
           </div>
         )}
       </div>
