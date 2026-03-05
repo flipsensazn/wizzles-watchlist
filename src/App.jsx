@@ -810,83 +810,6 @@ function DonutChart({ prices, capexData }) {
   );
 }
 
-// ── WATCHLIST ─────────────────────────────────────────────
-function Watchlist({ prices, capexData }) {
-  const [list, setList] = useState(() => [...new Set(capexData.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))]);
-  const [input, setInput] = useState("");
-  const [sortDir, setSortDir] = useState("desc");
-  const [filter, setFilter] = useState("all");
-
-  function getSector(ticker) {
-    for (const track of capexData.tracks)
-      for (const sub of track.subsectors)
-        if (sub.tickers.includes(ticker)) return track;
-    return null;
-  }
-
-  const enriched = list.map(t => ({ ticker: t, change: prices[t]?.change ?? prices[t], track: getSector(t) }));
-  const filtered = filter === "all" ? enriched : filter === "gainers" ? enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) >= 0) : enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) < 0);
-  const sorted = [...filtered].sort((a, b) => sortDir === "desc" ? ((typeof b.change === 'number' ? b.change : -999) - (typeof a.change === 'number' ? a.change : -999)) : ((typeof a.change === 'number' ? a.change : 999) - (typeof b.change === 'number' ? b.change : 999)));
-  const validChanges = enriched.filter(x => typeof x.change === 'number');
-  const avg = validChanges.reduce((s, x) => s + x.change, 0) / (validChanges.length || 1);
-  const maxAbs = Math.max(...enriched.map(x => Math.abs(typeof x.change === 'number' ? x.change : 0)), 1);
-
-  function add() {
-    const sym = input.trim().toUpperCase();
-    if (sym && !list.includes(sym)) setList(l => [...l, sym]);
-    setInput("");
-  }
-
-  return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, display: "flex", flexDirection: "column", gap: 14, height: "100%" }}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-        <div>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Watchlist</h3>
-          <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Track positions · add any ticker</p>
-        </div>
-        <div style={{ display: "flex", gap: 12, fontSize: 12 }}>
-          <div style={{ textAlign: "center" }}><div style={{ color: "#34d399", fontWeight: 700 }}>{enriched.filter(x => (typeof x.change === 'number' ? x.change : -1) >= 0).length}</div><div style={{ color: "#475569", fontSize: 10 }}>UP</div></div>
-          <div style={{ textAlign: "center" }}><div style={{ color: "#f87171", fontWeight: 700 }}>{enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) < 0).length}</div><div style={{ color: "#475569", fontSize: 10 }}>DOWN</div></div>
-          <div style={{ textAlign: "center" }}><div style={{ color: avg >= 0 ? "#34d399" : "#f87171", fontWeight: 700 }}>{avg >= 0 ? "+" : ""}{avg.toFixed(2)}%</div><div style={{ color: "#475569", fontSize: 10 }}>AVG</div></div>
-        </div>
-      </div>
-      <div style={{ display: "flex", gap: 8 }}>
-        <input value={input} onChange={e => setInput(e.target.value.toUpperCase())} onKeyDown={e => e.key === "Enter" && add()} placeholder="Add ticker… e.g. NVDA" style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "7px 12px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit", outline: "none" }} />
-        <button onClick={add} style={{ background: "rgba(96,165,250,0.12)", border: "1px solid rgba(96,165,250,0.25)", color: "#60a5fa", borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>+ Add</button>
-      </div>
-      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-        {["all", "gainers", "losers"].map(f => (
-          <button key={f} onClick={() => setFilter(f)} style={{ background: filter === f ? "rgba(255,255,255,0.08)" : "transparent", border: `1px solid ${filter === f ? "rgba(255,255,255,0.15)" : "transparent"}`, color: filter === f ? "#e2e8f0" : "#475569", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit", textTransform: "capitalize" }}>{f}</button>
-        ))}
-        <button onClick={() => setSortDir(d => d === "desc" ? "asc" : "desc")} style={{ marginLeft: "auto", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>Sort {sortDir === "desc" ? "↓" : "↑"}</button>
-      </div>
-      
-      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, overflowY: "auto", minHeight: 0, paddingRight: 4 }}>
-        {sorted.map((item, idx) => {
-          const pos = (typeof item.change === 'number' ? item.change : 0) >= 0;
-          const barW = typeof item.change === 'number' ? Math.abs(item.change) / maxAbs * 100 : 0;
-          return (
-            <div key={item.ticker} style={{ borderRadius: 8, padding: "10px 10px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background .15s" }} onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"} onMouseLeave={e => e.currentTarget.style.background = ""}>
-              <span style={{ fontSize: 10, color: "#334155", width: 16, textAlign: "right" }}>{idx + 1}</span>
-              <div style={{ flex: "0 0 auto", minWidth: 60 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{item.ticker}</div>
-                {item.track && <div style={{ fontSize: 9, color: item.track.color, marginTop: 1 }}>{item.track.label.split(" ").slice(0, 2).join(" ")}</div>}
-              </div>
-              <div style={{ flex: 1, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.04)", overflow: "hidden" }}>
-                {typeof item.change === 'number' && <div style={{ height: "100%", borderRadius: 2, width: `${barW}%`, background: pos ? "linear-gradient(90deg,#065f46,#34d399)" : "linear-gradient(90deg,#7f1d1d,#ef4444)", transition: "width .4s ease" }} />}
-              </div>
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, fontSize: 13, fontWeight: 700, minWidth: 68, textAlign: "right", color: typeof item.change !== 'number' ? "#334155" : pos ? "#34d399" : "#f87171" }}>
-                {typeof item.change !== 'number' ? "—" : <><span style={{ fontSize: 10 }}>{pos ? "▲" : "▼"}</span>{Math.abs(item.change).toFixed(2)}%</>}
-              </div>
-              <button onClick={() => setList(l => l.filter(x => x !== item.ticker))} style={{ background: "none", border: "none", color: "#1e293b", cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1, transition: "color .15s", fontFamily: "inherit" }} onMouseEnter={e => e.currentTarget.style.color = "#ef4444"} onMouseLeave={e => e.currentTarget.style.color = "#1e293b"}>×</button>
-            </div>
-          );
-        })}
-      </div>
-    </div>
-  );
-}
-
 // ── MULTIBAGGER PANEL ─────────────────────────────────────
 function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTickerClick }) {
   const [data, setData] = useState([]);
@@ -1331,13 +1254,15 @@ export default function App() {
             {bottomTab === "all" ? (
               <div className="bottom-grid-all">
                 <div className="span-2"><HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} /></div>
-                <div className="span-1 panel-wrapper"><div className="panel-inner"><Watchlist prices={prices} capexData={capexData} /></div></div>
+                {/* ADDED onTickerClick TO WATCHLIST BELOW */}
+                <div className="span-1 panel-wrapper"><div className="panel-inner"><Watchlist prices={prices} capexData={capexData} onTickerClick={openPopup} /></div></div>
                 <div className="span-1"><DonutChart prices={prices} capexData={capexData} /></div>
                 <div className="span-2 panel-wrapper"><div className="panel-inner"><MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} /></div></div>
               </div>
             ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} />
               : bottomTab === "donut" ? <DonutChart prices={prices} capexData={capexData} />
-              : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={capexData} />
+              {/* ADDED onTickerClick TO WATCHLIST BELOW */}
+              : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={capexData} onTickerClick={openPopup} />
               : <MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} />
             }
           </div>
