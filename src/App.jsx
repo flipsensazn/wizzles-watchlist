@@ -239,19 +239,28 @@ function MiniChart({ data, color }) {
     return `${x},${y}`;
   }).join(" ");
 
-  const cleanColor = color.replace(/[^#0-9a-fA-F]/g, ''); // Fix gradient ID string
+  const cleanColor = color.replace(/[^#0-9a-fA-F]/g, '');
 
   return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: "visible", display: "block" }}>
-      <defs>
-        <linearGradient id={`grad-${cleanColor}`} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
-          <stop offset="100%" stopColor={color} stopOpacity="0" />
-        </linearGradient>
-      </defs>
-      <polygon fill={`url(#grad-${cleanColor})`} points={`${points} ${width},${height} 0,${height}`} />
-      <polyline fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={points} />
-    </svg>
+    <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+      <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: "visible", display: "block" }}>
+        <defs>
+          <linearGradient id={`grad-${cleanColor}`} x1="0" x2="0" y1="0" y2="1">
+            <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+            <stop offset="100%" stopColor={color} stopOpacity="0" />
+          </linearGradient>
+        </defs>
+        <polygon fill={`url(#grad-${cleanColor})`} points={`${points} ${width},${height} 0,${height}`} />
+        <polyline fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={points} />
+        {/* Baseline (optional, depending on preference) */}
+        {/* <line x1="0" y1={height} x2={width} y2={height} stroke="rgba(255,255,255,0.1)" strokeWidth="1" /> */}
+      </svg>
+      {/* Price Range Labels on the Right */}
+      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: height, marginLeft: 8, fontSize: 9, color: "#94a3b8", fontFamily: "monospace" }}>
+        <span>${max.toFixed(2)}</span>
+        <span>${min.toFixed(2)}</span>
+      </div>
+    </div>
   );
 }
 
@@ -282,7 +291,7 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  // Increased width to fit the chart
+  // Increased width to fit the chart and labels
   const POPUP_W = 500;
   const POPUP_H = 260; 
   const vw = window.innerWidth;
@@ -293,6 +302,14 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
   if (top < 10) top = anchorRect ? anchorRect.bottom + 10 : vh / 2 - POPUP_H / 2;
   if (left + POPUP_W > vw - 12) left = vw - POPUP_W - 12;
   if (left < 12) left = 12;
+
+  // Determine chart line color based on 1-month trend
+  let chartColor = changeColor;
+  if (data?.chartData && data.chartData.length >= 2) {
+      const firstPrice = data.chartData[0];
+      const lastPrice = data.chartData[data.chartData.length - 1];
+      chartColor = lastPrice >= firstPrice ? "#34d399" : "#f87171";
+  }
 
   return (
     <div ref={popupRef} style={{
@@ -404,14 +421,14 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
 
             {/* RIGHT COLUMN: 1-Month Chart */}
             {data.chartData && data.chartData.length > 0 && (
-              <div style={{ width: 160, display: "flex", flexDirection: "column", flexShrink: 0 }}>
-                <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10, textAlign: "right" }}>1-Month Trend</div>
+              <div style={{ width: 200, display: "flex", flexDirection: "column", flexShrink: 0 }}>
+                <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10, textAlign: "left" }}>1-Month Trend</div>
                 
                 <div style={{ marginTop: "auto", marginBottom: "auto" }}>
-                  <MiniChart data={data.chartData} color={changeColor} />
+                  <MiniChart data={data.chartData} color={chartColor} />
                 </div>
                 
-                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#475569", marginTop: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#475569", marginTop: 6, width: 160 }}>
                   <span>30D Ago</span>
                   <span>Today</span>
                 </div>
