@@ -25,12 +25,25 @@ export async function onRequest(context) {
     const crumb = await crumbRes.text();
 
     const modules = "assetProfile,summaryDetail,price,financialData,defaultKeyStatistics";
-    const url = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${modules}&crumb=${crumb}`;
     
-    const res = await fetch(url, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } });
-    const data = await res.json();
+    // Fetch both Quote Summary and 1-Month Chart History simultaneously
+    const quoteUrl = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${modules}&crumb=${crumb}`;
+    const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1mo&interval=1d&crumb=${crumb}`;
+    
+    const [quoteRes, chartRes] = await Promise.all([
+      fetch(quoteUrl, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } }),
+      fetch(chartUrl, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } })
+    ]);
+    
+    const quoteData = await quoteRes.json();
+    const chartData = await chartRes.json();
 
-    return new Response(JSON.stringify(data), { status: 200, headers });
+    // Merge responses into a single payload
+    return new Response(JSON.stringify({
+      quoteSummary: quoteData.quoteSummary,
+      chart: chartData.chart
+    }), { status: 200, headers });
+
   } catch (err) {
     return new Response(JSON.stringify({ error: "Fetch failed" }), { status: 500, headers });
   }
