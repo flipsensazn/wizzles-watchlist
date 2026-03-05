@@ -22,7 +22,7 @@ export async function onRequest(context) {
     try {
       const body = await request.json();
 
-      if (body.password !== "admin123") {
+      if (body.password !== "Cisco123") {
         return new Response(JSON.stringify({ error: "Incorrect Admin Password" }), { status: 401, headers });
       }
 
