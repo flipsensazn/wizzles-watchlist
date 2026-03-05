@@ -476,7 +476,7 @@ function MarketStrip({ data, tickers, labels, colors }) {
         const change = entry?.change;
         const session = entry?.session;
         const pos = (change ?? 0) >= 0;
-        const sessionLabel = session === "POST" ? "AH" : session === "PRE" ? "PM" : null;
+        const sessionLabel = session === "POST" || session === "CLOSED" ? "AH" : session === "PRE" ? "PM" : null;
         
         return (
           <div key={ticker} style={{
@@ -512,7 +512,7 @@ const TickerChip = memo(function TickerChip({ symbol, changeData, onRemove, onTi
   const session = changeData?.session;
   const pos = (change ?? 0) >= 0;
   const changeColor = change === undefined ? "#475569" : pos ? "#34d399" : "#f87171";
-  const sessionLabel = session === "POST" ? "AH" : session === "PRE" ? "PM" : null;
+  const sessionLabel = session === "POST" || session === "CLOSED" ? "AH" : session === "PRE" ? "PM" : null;
 
   return (
     <div
@@ -699,18 +699,24 @@ function HeatMap({ prices, capexData, onTickerClick }) {
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {cells.map(ticker => {
-                const change = prices[ticker]?.change ?? prices[ticker];
-                const currentPrice = prices[ticker]?.price; 
+                const entry = prices[ticker];
+                const change = entry?.change ?? entry;
+                const currentPrice = entry?.price;
+                const session = entry?.session;
+                const sessionLabel = session === "POST" || session === "CLOSED" ? "AH" : session === "PRE" ? "PM" : null;
                 const bg = getHeatColor(change);
                 const pos = change === undefined || change >= 0;
                 return (
                   <div key={ticker}
-                    onMouseEnter={e => setTooltip({ ticker, change, price: currentPrice, track: track.label, rect: e.currentTarget.getBoundingClientRect() })}
+                    onMouseEnter={e => setTooltip({ ticker, change, price: currentPrice, session: sessionLabel, track: track.label, rect: e.currentTarget.getBoundingClientRect() })}
                     onMouseLeave={() => setTooltip(null)}
                     onClick={e => { e.stopPropagation(); onTickerClick?.(ticker, e.currentTarget.getBoundingClientRect()); }}
-                    style={{ background: bg, borderRadius: 8, padding: "8px 12px", border: `1px solid ${bg === "rgba(255,255,255,0.04)" ? "rgba(255,255,255,0.06)" : bg}`, minWidth: 60, textAlign: "center", cursor: "pointer", transition: "filter .15s, transform .15s" }}
+                    style={{ position: "relative", background: bg, borderRadius: 8, padding: "8px 12px", border: `1px solid ${bg === "rgba(255,255,255,0.04)" ? "rgba(255,255,255,0.06)" : bg}`, minWidth: 60, textAlign: "center", cursor: "pointer", transition: "filter .15s, transform .15s" }}
                     onMouseOver={e => { e.currentTarget.style.filter = "brightness(1.4)"; e.currentTarget.style.transform = "scale(1.06)"; }}
                     onMouseOut={e => { e.currentTarget.style.filter = ""; e.currentTarget.style.transform = ""; }}>
+                    {sessionLabel && (
+                      <div style={{ position: "absolute", top: 3, right: 4, fontSize: 7, fontWeight: 800, color: "rgba(255,255,255,0.55)", letterSpacing: "0.05em", lineHeight: 1 }}>{sessionLabel}</div>
+                    )}
                     <div style={{ fontSize: 12, fontWeight: 700, color: "#f1f5f9" }}>{ticker}</div>
                     {change !== undefined && (
                       <div style={{ fontSize: 10, fontWeight: 600, color: pos ? "#a7f3d0" : "#fca5a5", marginTop: 2 }}>
@@ -730,6 +736,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
           <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{tooltip.ticker}</span>
           {tooltip.price !== undefined && <span style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0" }}>${tooltip.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
           {tooltip.change !== undefined && <span style={{ fontSize: 12, fontWeight: 700, color: (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171" }}>{typeof tooltip.change === 'number' ? (tooltip.change >= 0 ? "+" : "") + tooltip.change + "%" : "—"}</span>}
+          {tooltip.session && <span style={{ fontSize: 9, fontWeight: 700, color: "#64748b", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.05em" }}>{tooltip.session}</span>}
           <span style={{ fontSize: 10, color: "#475569" }}>{tooltip.track}</span>
         </div>
       )}
@@ -1411,7 +1418,7 @@ export default function App() {
             <div className="ticker-tape">
               {[...tickerEntries, ...tickerEntries].map(([sym, val], i) => {
                 const chg = val?.change ?? val;
-                const sessionLabel = val?.session === "POST" ? "AH" : val?.session === "PRE" ? "PM" : null;
+                const sessionLabel = val?.session === "POST" || val?.session === "CLOSED" ? "AH" : val?.session === "PRE" ? "PM" : null;
                 return (
                   <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "#64748b", fontSize: 11 }}>
                     <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{sym}</span>
@@ -1468,7 +1475,7 @@ export default function App() {
                   {CAPEX_DATA.companies.map(co => {
                     const entry = marketData[co];
                     const pos = (entry?.change ?? 0) >= 0;
-                    const sessionLabel = entry?.session === "POST" ? "AH" : entry?.session === "PRE" ? "PM" : null;
+                    const sessionLabel = entry?.session === "POST" || entry?.session === "CLOSED" ? "AH" : entry?.session === "PRE" ? "PM" : null;
                     return (
                       <div key={co} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 12px", borderRadius: 10, minWidth: 72, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", transition: "all .2s" }} onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(251,191,36,0.45)"; }} onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.09)"; }}>
                         <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
