@@ -11,7 +11,7 @@ async function fetchLivePrices(tickers) {
     const json = await res.json();
     const prices = {};
     Object.entries(json.data ?? {}).forEach(([ticker, val]) => {
-      // FIX: Store the entire object { price, change } so MultibaggerPanel can access the price
+      // Store the entire object { price, change } so MultibaggerPanel can access the price
       prices[ticker] = val;
     });
     return prices;
@@ -521,9 +521,9 @@ function MarketStrip({ data, tickers, labels, colors }) {
 }
 
 // ── TICKER CHIP ───────────────────────────────────────────
-const TickerChip = memo(function TickerChip({ symbol, changeObj, onRemove, onTickerClick }) {
+const TickerChip = memo(function TickerChip({ symbol, changeData, onRemove, onTickerClick }) {
   const [hovered, setHovered] = useState(false);
-  const change = changeObj?.change ?? changeObj;
+  const change = changeData?.change ?? changeData;
   const pos = (change ?? 0) >= 0;
   const changeColor = change === undefined ? "#475569" : pos ? "#34d399" : "#f87171";
 
@@ -1098,9 +1098,6 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24" }}>Multibagger Blueprint Scanner</h3>
-            <span style={{ fontSize: 9, background: "rgba(96,165,250,0.15)", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.3)", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>
-              YAHOO LINKED
-            </span>
           </div>
           <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Prioritizing FCF Yield, B/M, and ROA</p>
         </div>
@@ -1186,7 +1183,6 @@ export default function App() {
     try {
       const saved = localStorage.getItem("scannerPool");
       const parsed = saved ? JSON.parse(saved) : null;
-      // FIX: Guard against corrupted string/null local storage that crashes .map()
       return Array.isArray(parsed) ? parsed : ["VRT", "APLD", "CORZ", "WULF", "LITE", "COHR", "AAOI", "OSS", "GTLB", "IREN"];
     } catch { return ["VRT", "APLD", "CORZ", "WULF", "LITE", "COHR", "AAOI", "OSS", "GTLB", "IREN"]; }
   });
@@ -1199,7 +1195,6 @@ export default function App() {
     try {
       const saved = localStorage.getItem("capexData");
       const parsed = saved ? JSON.parse(saved) : null;
-      // FIX: Guard against corrupted local storage
       return (parsed && Array.isArray(parsed.tracks)) ? parsed : CAPEX_DATA;
     } catch { return CAPEX_DATA; }
   });
@@ -1333,7 +1328,6 @@ export default function App() {
       .bottom-grid-all { grid-template-columns: 1fr !important; }
       .span-2, .span-1 { grid-column: 1 / -1 !important; }
       
-      /* Release the absolute position when stacked into a single column */
       .panel-wrapper { min-height: 450px; }
       .panel-inner { position: relative; height: 100%; }
     }
@@ -1361,7 +1355,6 @@ export default function App() {
         fontFamily: "'DM Mono','Fira Code',monospace",
       }}>
 
-        {/* TICKER TAPE */}
         {tickerEntries.length > 0 && (
           <div style={{ overflow: "hidden", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(18,18,18,0.75)", padding: "6px 0" }}>
             <div className="ticker-tape">
@@ -1378,7 +1371,6 @@ export default function App() {
           </div>
         )}
 
-        {/* HEADER */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
           <div>
             <div style={{ fontSize: 10, color: "#2d3a52", letterSpacing: "0.35em", textTransform: "uppercase", marginBottom: 3 }}>
@@ -1420,7 +1412,6 @@ export default function App() {
 
         <div className="main-content" style={{ maxWidth: 1480, margin: "0 auto", padding: "32px 28px", display: "flex", flexDirection: "column", gap: 28 }}>
 
-          {/* TOP NODE WITH FLANKING MARKET DATA */}
           <div className="top-node-layout" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
             <MarketStrip data={marketData} tickers={["^GSPC","^DJI","^IXIC"]} labels={["S&P 500","DOW","NASDAQ"]} colors={["#60a5fa","#34d399","#c084fc"]} />
 
@@ -1472,9 +1463,85 @@ export default function App() {
             <MarketStrip data={marketData} tickers={["BTC-USD","ETH-USD","XRP-USD"]} labels={["BTC","ETH","XRP"]} colors={["#f59e0b","#60a5fa","#34d399"]} />
           </div>
 
-          {/* TRACK CARDS */}
           <div className="track-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(0,1fr))", gap: 10, paddingTop: 8 }}>
             {capexData.tracks.map(track => (
               <div key={track.id} style={{ paddingTop: activeTrack === track.id ? 14 : 0 }}>
                 <TrackCard track={track} isActive={activeTrack === track.id}
-                  onClick={() => setActiveTrack
+                  onClick={() => setActiveTrack(p => p === track.id ? null : track.id)} />
+              </div>
+            ))}
+          </div>
+
+          {activeData && (
+            <TrackPane track={activeData} prices={prices}
+              onAddTicker={addTickerToSubsector}
+              onRemoveTicker={removeTickerFromSubsector}
+              onTickerClick={openPopup} />
+          )}
+
+          <div>
+            <div style={{ display: "flex", gap: 4, marginBottom: 18, borderBottom: "1px solid rgba(255,255,255,.04)", paddingBottom: 4, flexWrap: "wrap" }}>
+              {[
+                { id: "all", label: "⬛ All Panels" },
+                { id: "heatmap", label: "📊 Heat Map" },
+                { id: "donut", label: "🥧 Allocation" },
+                { id: "watchlist", label: "👁 Watchlist" },
+                { id: "multibagger", label: "🚀 Multibagger" },
+              ].map(tab => (
+                <button key={tab.id} onClick={() => setBottomTab(tab.id)} style={{
+                  background: bottomTab === tab.id ? "rgba(255,255,255,.06)" : "transparent",
+                  border: `1px solid ${bottomTab === tab.id ? "rgba(255,255,255,.1)" : "transparent"}`,
+                  color: bottomTab === tab.id ? "#e2e8f0" : "#334155",
+                  borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "inherit", transition: "all .2s",
+                }}>{tab.label}</button>
+              ))}
+            </div>
+            
+            {bottomTab === "all" ? (
+              <div className="bottom-grid-all">
+                <div className="span-2"><HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} /></div>
+                
+                <div className="span-1 panel-wrapper">
+                  <div className="panel-inner">
+                    <Watchlist prices={prices} capexData={capexData} />
+                  </div>
+                </div>
+
+                <div className="span-1"><DonutChart prices={prices} capexData={capexData} /></div>
+                
+                <div className="span-2 panel-wrapper">
+                  <div className="panel-inner">
+                    <MultibaggerPanel prices={prices} scannerPool={scannerPool} setScannerPool={setScannerPool} onTickerClick={openPopup} />
+                  </div>
+                </div>
+              </div>
+            ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} />
+              : bottomTab === "donut" ? <DonutChart prices={prices} capexData={capexData} />
+              : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={capexData} />
+              : <MultibaggerPanel prices={prices} scannerPool={scannerPool} setScannerPool={setScannerPool} onTickerClick={openPopup} />
+            }
+          </div>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 16, fontSize: 10, color: "#475569", borderTop: "1px solid rgba(255,255,255,.03)", paddingTop: 16, flexWrap: "wrap" }}>
+            <span style={{ color: "#64748b", fontWeight: 600, letterSpacing: "0.1em", textTransform: "uppercase" }}>Legend:</span>
+            {[{ c: "#ef4444", l: "Extreme Bottleneck" }, { c: "#f59e0b", l: "Constrained" }, { c: "#34d399", l: "Rapid Growth" }, { c: "#60a5fa", l: "Emerging" }, { c: "#f472b6", l: "Speculative" }].map(x => (
+              <span key={x.l} style={{ display: "flex", alignItems: "center", gap: 5, color: "#94a3b8" }}>
+                <span style={{ width: 7, height: 7, borderRadius: "50%", background: x.c, display: "inline-block", opacity: 0.6, boxShadow: `0 0 5px ${x.c}66` }} />{x.l}
+              </span>
+            ))}
+            <span style={{ marginLeft: "auto" }}>Live via Finnhub + Yahoo · server-cached · auto-refreshes 15s</span>
+          </div>
+        </div>
+      </div>
+
+      {popup && (
+        <CompanyPopup
+          ticker={popup.ticker}
+          change={popup.change}
+          anchorRect={popup.rect}
+          onClose={() => setPopup(null)}
+        />
+      )}
+    </>
+  );
+}
