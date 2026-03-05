@@ -1366,16 +1366,43 @@ export default function App() {
   const activeData = capexData.tracks.find(t => t.id === activeTrack);
   const tickerEntries = Object.entries(prices);
 
-  const styles = `
-    @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap');
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { background: #121212; }
-    ::-webkit-scrollbar { width: 5px; height: 5px; }
+const styles = `
+    /* Bring in clean, professional SaaS fonts */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+    
+    * { 
+      box-sizing: border-box; 
+      margin: 0; 
+      padding: 0; 
+      box-shadow: none !important; /* Instantly strips all neon glows/shadows */
+    }
+    
+    html, body { 
+      background: #0E1117; /* Modern flat slate dark mode */
+      font-family: 'Inter', sans-serif;
+    }
+
+    /* Force monospace for numbers/tickers */
+    table, .market-strip span, .ticker-tape {
+      font-family: 'JetBrains Mono', monospace !important;
+    }
+
+    /* Override the bubbly inline border-radii globally to make it sharp and professional */
+    div[style*="border-radius: 12px"],
+    div[style*="border-radius: 14px"], 
+    div[style*="border-radius: 18px"],
+    div[style*="border-radius: 22px"] {
+        border-radius: 6px !important;
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.08); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 4px; }
+    
     @keyframes scroll-left { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
     @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes pulseDot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(.7); } }
+    
     .ticker-tape { animation: scroll-left 80s linear infinite; white-space: nowrap; display: inline-flex; gap: 24px; }
     .pulse { animation: pulseDot 2s infinite; }
 
@@ -1402,6 +1429,7 @@ export default function App() {
       .bottom-grid-all { grid-template-columns: 1fr !important; }
       .span-2, .span-1 { grid-column: 1 / -1 !important; }
       
+      /* Release the absolute position when stacked into a single column */
       .panel-wrapper { min-height: 450px; }
       .panel-inner { position: relative; height: 100%; }
     }
