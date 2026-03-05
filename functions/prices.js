@@ -76,14 +76,33 @@ export async function onRequest(context) {
         const data = await res.json();
         const quoteList = data?.quoteResponse?.result || [];
         for (const q of quoteList) {
-          if (q.regularMarketPrice !== undefined) {
-            results[q.symbol] = {
-              price: parseFloat(q.regularMarketPrice.toFixed(2)),
-              change: q.regularMarketChangePercent !== undefined
-                ? parseFloat(q.regularMarketChangePercent.toFixed(2))
-                : 0
-            };
+          if (q.regularMarketPrice === undefined) continue;
+
+          const state = q.marketState; // "PRE" | "REGULAR" | "POST" | "POSTPOST" | "CLOSED"
+          let price, change, session;
+
+          if (state === "POST" || state === "POSTPOST") {
+            // After-hours: use post-market price if available, fall back to regular
+            price  = q.postMarketPrice  ?? q.regularMarketPrice;
+            change = q.postMarketChangePercent ?? q.regularMarketChangePercent ?? 0;
+            session = "POST";
+          } else if (state === "PRE") {
+            // Pre-market: use pre-market price if available, fall back to regular
+            price  = q.preMarketPrice  ?? q.regularMarketPrice;
+            change = q.preMarketChangePercent ?? q.regularMarketChangePercent ?? 0;
+            session = "PRE";
+          } else {
+            // Regular market hours or fully closed (no extended data available)
+            price  = q.regularMarketPrice;
+            change = q.regularMarketChangePercent ?? 0;
+            session = "REGULAR";
           }
+
+          results[q.symbol] = {
+            price:   parseFloat(price.toFixed(2)),
+            change:  parseFloat(change.toFixed(2)),
+            session, // "PRE" | "POST" | "REGULAR" — lets the frontend label extended-hours data
+          };
         }
       }
     }
