@@ -496,7 +496,7 @@ function MarketStrip({ data, tickers, labels, colors }) {
     return p.toLocaleString("en-US", { maximumFractionDigits: 2 });
   }
   return (
-    <div className="market-strip" style={{ display: "flex", flexDirection: "column", gap: 8, justifyContent: "center", padding: "0 20px" }}>
+    <div className="market-strip" style={{ display: "flex", flexDirection: "column", gap: 10, justifyContent: "center", padding: "0 20px" }}>
       {tickers.map((ticker, i) => {
         const entry = data[ticker];
         const price = entry?.price;
@@ -505,7 +505,7 @@ function MarketStrip({ data, tickers, labels, colors }) {
         return (
           <div key={ticker} style={{
             display: "flex", flexDirection: "column", alignItems: "center",
-            padding: "8px 14px", borderRadius: 10, minWidth: 96,
+            padding: "12px 16px", borderRadius: 12, minWidth: 120, // Increased padding & width
             background: "rgba(255,255,255,0.05)",
             border: `1px solid ${colors[i]}28`,
             transition: "border-color .2s, box-shadow .2s",
@@ -513,15 +513,15 @@ function MarketStrip({ data, tickers, labels, colors }) {
           }}
             onMouseEnter={e => { e.currentTarget.style.borderColor = colors[i] + "66"; e.currentTarget.style.boxShadow = `0 0 16px ${colors[i]}22`; }}
             onMouseLeave={e => { e.currentTarget.style.borderColor = colors[i] + "28"; e.currentTarget.style.boxShadow = "0 2px 12px rgba(0,0,0,0.3)"; }}>
-            <span style={{ fontSize: 10, fontWeight: 700, color: colors[i], letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 3 }}>{labels[i]}</span>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9", fontFamily: "'DM Mono', monospace", marginBottom: 2 }}>
+            <span style={{ fontSize: 13, fontWeight: 800, color: colors[i], letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>{labels[i]}</span>
+            <span style={{ fontSize: 18, fontWeight: 700, color: "#f1f5f9", fontFamily: "'DM Mono', monospace", marginBottom: 2 }}>
               {formatPrice(price, ticker)}
             </span>
             {change !== undefined && change !== null ? (
-              <span style={{ fontSize: 10, fontWeight: 600, color: pos ? "#34d399" : "#f87171" }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: pos ? "#34d399" : "#f87171" }}>
                 {pos ? "+" : ""}{change.toFixed(2)}%
               </span>
-            ) : <span style={{ fontSize: 10, color: "#334155" }}>—</span>}
+            ) : <span style={{ fontSize: 14, color: "#334155" }}>—</span>}
           </div>
         );
       })}
@@ -901,7 +901,10 @@ function DonutChart({ prices, capexData }) {
 
 // ── WATCHLIST ─────────────────────────────────────────────
 function Watchlist({ prices, capexData }) {
-  const [list, setList] = useState(["NVDA","LITE","COHR","AXTI","IQEPF","SMCI","IONQ","ANET","VST","CORZ"]);
+  // Automatically load all tracked tickers into the Watchlist by default
+  const [list, setList] = useState(() => {
+    return [...new Set(capexData.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))];
+  });
   const [input, setInput] = useState("");
   const [sortDir, setSortDir] = useState("desc");
   const [filter, setFilter] = useState("all");
@@ -930,8 +933,14 @@ function Watchlist({ prices, capexData }) {
     setInput("");
   }
 
-  return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 4px 30px rgba(0,0,0,0.4)" }}>
+return (
+    <div style={{ 
+      borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", 
+      background: "rgba(24,24,24,0.7)", padding: 20, 
+      display: "flex", flexDirection: "column", gap: 14, 
+      boxShadow: "0 4px 30px rgba(0,0,0,0.4)",
+      height: "100%" // Force panel to stretch to grid cell height
+    }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <div>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Watchlist</h3>
@@ -972,7 +981,9 @@ function Watchlist({ prices, capexData }) {
           Sort {sortDir === "desc" ? "↓" : "↑"}
         </button>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 380, overflowY: "auto" }}>
+      
+      {/* Flex: 1 allows the scrollable area to take up all remaining vertical space */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, overflowY: "auto", minHeight: 0, paddingRight: 4 }}>
         {sorted.map((item, idx) => {
           const pos = (item.change ?? 0) >= 0;
           const barW = item.change !== undefined ? Math.abs(item.change) / maxAbs * 100 : 0;
@@ -1230,7 +1241,7 @@ useEffect(() => {
   const activeData = capexData.tracks.find(t => t.id === activeTrack);
   const tickerEntries = Object.entries(prices);
 
-  const styles = `
+const styles = `
     @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap');
     * { box-sizing: border-box; margin: 0; padding: 0; }
     html, body { background: #121212; }
@@ -1243,14 +1254,41 @@ useEffect(() => {
     .ticker-tape { animation: scroll-left 80s linear infinite; white-space: nowrap; display: inline-flex; gap: 24px; }
     .pulse { animation: pulseDot 2s infinite; }
 
+/* ── CUSTOM DESKTOP GRID ───────────────────────────────── */
+    .bottom-grid-all {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 16px;
+    }
+    .span-2 { grid-column: span 2; }
+    .span-1 { grid-column: span 1; }
+    
+    .watchlist-wrapper {
+      position: relative;
+      height: 100%;
+    }
+    .watchlist-inner {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+    }
+
+    /* ── TABLET / SMALL DESKTOP ───────────────────────────────── */
+    @media (max-width: 1024px) {
+      .bottom-grid-all { grid-template-columns: 1fr !important; }
+      .span-2, .span-1 { grid-column: 1 / -1 !important; }
+      
+      /* Release the absolute position when stacked into a single column */
+      .watchlist-wrapper { min-height: 450px; }
+      .watchlist-inner { position: relative; height: 100%; }
+    }
+
     /* ── MOBILE ───────────────────────────────────────────── */
     @media (max-width: 640px) {
       .track-grid { grid-template-columns: repeat(2, minmax(0,1fr)) !important; }
-      .top-node-layout { flex-direction: column !important; align-items: center !important; gap: 12px !important; }
+      .top-node-layout { flex-direction: column !important; align-items: stretch !important; gap: 12px !important; }
       .market-strip { flex-direction: row !important; flex-wrap: wrap !important; justify-content: center !important; padding: 0 8px !important; gap: 8px !important; }
       .top-node-center { width: 100% !important; max-width: 100% !important; }
       .capex-number { font-size: 44px !important; }
-      .bottom-grid { grid-template-columns: 1fr !important; }
       .subsector-grid { grid-template-columns: 1fr !important; }
       .main-content { padding: 16px 12px !important; }
       .header-controls { gap: 8px !important; }
@@ -1393,7 +1431,7 @@ useEffect(() => {
               onTickerClick={openPopup} />
           )}
 
-          {/* BOTTOM PANELS */}
+         {/* BOTTOM PANELS */}
           <div>
             <div style={{ display: "flex", gap: 4, marginBottom: 18, borderBottom: "1px solid rgba(255,255,255,.04)", paddingBottom: 4, flexWrap: "wrap" }}>
               {[
@@ -1411,28 +1449,28 @@ useEffect(() => {
                 }}>{tab.label}</button>
               ))}
             </div>
-          {bottomTab === "all" ? (
-            <div className="bottom-grid" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
-    <div style={{ gridColumn: "1/-1" }}><HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} /></div>
-    <DonutChart prices={prices} capexData={capexData} />
-    <Watchlist prices={prices} capexData={capexData} />
-    <div style={{ gridColumn: "1/-1" }}><MultibaggerPanel 
-  prices={prices} 
-  scannerPool={scannerPool} 
-  setScannerPool={setScannerPool} 
-  onTickerClick={openPopup} 
-/></div>
-  </div>
-) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} />
-  : bottomTab === "donut" ? <DonutChart prices={prices} capexData={capexData} />
-  : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={capexData} />
-  : <MultibaggerPanel 
-      prices={prices} 
-      scannerPool={scannerPool} 
-      setScannerPool={setScannerPool} 
-      onTickerClick={openPopup} 
-    />
-}
+            
+            {bottomTab === "all" ? (
+              <div className="bottom-grid-all">
+                <div className="span-2"><HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} /></div>
+                
+                {/* Watchlist constrained to HeatMap height via absolute positioning */}
+                <div className="span-1 watchlist-wrapper">
+                  <div className="watchlist-inner">
+                    <Watchlist prices={prices} capexData={capexData} />
+                  </div>
+                </div>
+
+                <div className="span-1"><DonutChart prices={prices} capexData={capexData} /></div>
+                <div className="span-2">
+                  <MultibaggerPanel prices={prices} scannerPool={scannerPool} setScannerPool={setScannerPool} onTickerClick={openPopup} />
+                </div>
+              </div>
+            ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} />
+              : bottomTab === "donut" ? <DonutChart prices={prices} capexData={capexData} />
+              : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={capexData} />
+              : <MultibaggerPanel prices={prices} scannerPool={scannerPool} setScannerPool={setScannerPool} onTickerClick={openPopup} />
+            }
           </div>
 
           {/* FOOTER */}
