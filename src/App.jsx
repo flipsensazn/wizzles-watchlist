@@ -1020,13 +1020,35 @@ function MultibaggerPanel({ prices, scannerPool, setScannerPool, onTickerClick }
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [newTicker, setNewTicker] = useState("");
+  const [syncing, setSyncing] = useState(false);
   const fetchIdRef = useRef(0);
 
+  // Automatically fetch from Yahoo Screener when the dashboard loads
+  const syncYahooScreener = useCallback(async () => {
+    setSyncing(true);
+    try {
+      const res = await fetch("/screener");
+      const json = await res.json();
+      if (json.tickers && json.tickers.length > 0) {
+        setScannerPool(json.tickers); // Overwrite panel with live Yahoo data
+      }
+    } catch (e) {
+      console.error("Failed to sync screener", e);
+    }
+    setSyncing(false);
+  }, [setScannerPool]);
+
+  // Run the sync on initial mount
+  useEffect(() => {
+    syncYahooScreener();
+  }, [syncYahooScreener]);
+
+  // Calculate fundamentals whenever the pool updates
   useEffect(() => {
     const currentFetchId = ++fetchIdRef.current;
     async function getFundamentals() {
       if (data.length === 0) setLoading(true);
-const results = await Promise.all(
+      const results = await Promise.all(
         scannerPool.map(async (ticker) => {
           try {
             const res = await fetch(`/quote?ticker=${ticker}`);
@@ -1045,7 +1067,7 @@ const results = await Promise.all(
             const fcfYield = (fcf / marketCap) * 100;
             const bookToMarket = pb > 0 ? (1 / pb) : 0;
             
-            // Score Calculation (Focusing on FCF Yield, B/M, ROA, and Momentum)
+            // Score Calculation
             const score = (fcfYield * 10) + (bookToMarket * 20) + (roa * 2) + (marketReturn * 0.5);
 
             return { ticker, fcfYield, roa, bookToMarket, marketReturn, score };
@@ -1070,6 +1092,7 @@ const results = await Promise.all(
   };
 
   const removeTicker = (ticker) => { setScannerPool(scannerPool.filter(t => t !== ticker)); };
+  
   const getScoreColor = (score) => {
     if (score > 40) return "#34d399"; // Elite
     if (score > 15) return "#fbbf24"; // Good
@@ -1080,13 +1103,21 @@ const results = await Promise.all(
     <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20 }}>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
         <div>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24" }}>Multibagger Blueprint Scanner</h3>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24" }}>Multibagger Blueprint Scanner</h3>
+            <span style={{ fontSize: 9, background: "rgba(96,165,250,0.15)", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.3)", padding: "2px 6px", borderRadius: 4, fontWeight: 700 }}>
+              YAHOO LINKED
+            </span>
+          </div>
           <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Prioritizing FCF Yield & Asset Growth</p>
         </div>
         <div style={{ display: "flex", gap: 8 }}>
+          <button onClick={syncYahooScreener} disabled={syncing} style={{ background: "transparent", color: "#64748b", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: syncing ? "wait" : "pointer" }}>
+            {syncing ? "Syncing..." : "↻ Sync Screener"}
+          </button>
           <input value={newTicker} onChange={e => setNewTicker(e.target.value.toUpperCase())}
             onKeyDown={e => e.key === "Enter" && addTicker()} placeholder="Add ticker..." 
-            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 12, outline: "none" }} />
+            style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 12, outline: "none", width: 100 }} />
           <button onClick={addTicker} style={{ background: "#fbbf24", color: "#000", borderRadius: 8, padding: "6px 12px", fontWeight: 700, cursor: "pointer", border: "none" }}>+</button>
         </div>
       </div>
@@ -1103,7 +1134,7 @@ const results = await Promise.all(
             </tr>
           </thead>
           <tbody>
-            {loading ? <tr><td colSpan="7" style={{ padding: 20, color: "#475569" }}>Scanning fundamentals...</td></tr> : 
+            {loading || syncing ? <tr><td colSpan="7" style={{ padding: 20, color: "#475569" }}>{syncing ? "Fetching live screener data..." : "Scanning fundamentals..."}</td></tr> : 
              data.map((stock) => {
               const change = prices[stock.ticker]?.change ?? prices[stock.ticker];
               return (
