@@ -459,6 +459,136 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
   );
 }
 
+// ── MARKET CLOCK ─────────────────────────────────────────
+// NYSE hours: 9:30am–4:00pm ET, Mon–Fri, excluding US federal holidays.
+// Pre-market: 4:00am–9:30am ET. After-hours: 4:00pm–8:00pm ET.
+// Uses Intl.DateTimeFormat to convert UTC → America/New_York without any lib.
+
+const NYSE_HOLIDAYS_2025_2026 = new Set([
+  "2025-01-01","2025-01-20","2025-02-17","2025-04-18",
+  "2025-05-26","2025-06-19","2025-07-04","2025-09-01",
+  "2025-11-27","2025-12-25",
+  "2026-01-01","2026-01-19","2026-02-16","2026-04-03",
+  "2026-05-25","2026-06-19","2026-07-03","2026-09-07",
+  "2026-11-26","2026-12-25",
+]);
+
+function getNYTime(date = new Date()) {
+  // Returns { h, m, s, dow, dateStr } in America/New_York
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "America/New_York",
+    hour: "numeric", minute: "numeric", second: "numeric",
+    weekday: "short", year: "numeric", month: "2-digit", day: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const get = type => parts.find(p => p.type === type)?.value;
+  const h = parseInt(get("hour")), m = parseInt(get("minute")), s = parseInt(get("second"));
+  const dow = get("weekday"); // "Mon","Tue",...
+  const month = get("month"), day = get("day"), year = get("year");
+  const dateStr = `${year}-${month}-${day}`;
+  return { h, m, s, dow, dateStr };
+}
+
+function getMarketState(date = new Date()) {
+  const { h, m, s, dow, dateStr } = getNYTime(date);
+  const isWeekend = dow === "Sat" || dow === "Sun";
+  const isHoliday = NYSE_HOLIDAYS_2025_2026.has(dateStr);
+  const totalMins = h * 60 + m;
+
+  if (isWeekend || isHoliday) return { state: "closed", session: "weekend" };
+  if (totalMins <  4 * 60)            return { state: "closed",   session: "overnight" };
+  if (totalMins <  9 * 60 + 30)       return { state: "pre",      session: "premarket"  };
+  if (totalMins < 16 * 60)            return { state: "open",     session: "regular"    };
+  if (totalMins < 20 * 60)            return { state: "post",     session: "afterhours" };
+  return                                     { state: "closed",   session: "overnight"  };
+}
+
+function secsUntilNextEvent(date = new Date()) {
+  const { h, m, s, dow, dateStr } = getNYTime(date);
+  const totalSecs = h * 3600 + m * 60 + s;
+  const { state } = getMarketState(date);
+
+  // Seconds until the boundary that ends the current state
+  if (state === "pre")  return (9 * 3600 + 30 * 60) - totalSecs;
+  if (state === "open") return (16 * 3600)           - totalSecs;
+  if (state === "post") return (20 * 3600)           - totalSecs;
+
+  // Closed: find seconds until next 4:00am ET on a trading day
+  let msAhead = 0;
+  for (let d = 1; d <= 5; d++) {
+    const candidate = new Date(date.getTime() + d * 86400000);
+    const cny = getNYTime(candidate);
+    if (cny.dow !== "Sat" && cny.dow !== "Sun" && !NYSE_HOLIDAYS_2025_2026.has(cny.dateStr)) {
+      // Seconds from now until 4:00am ET on that day
+      const secsToMidnight = 86400 - totalSecs;
+      const secsFromMidnightTo4am = 4 * 3600;
+      return secsToMidnight + (d - 1) * 86400 + secsFromMidnightTo4am;
+    }
+  }
+  return 0;
+}
+
+function fmtCountdown(secs) {
+  if (secs <= 0) return "00:00:00";
+  const h = Math.floor(secs / 3600);
+  const m = Math.floor((secs % 3600) / 60);
+  const s = secs % 60;
+  return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
+}
+
+function MarketClock() {
+  const [tick, setTick] = useState(() => Date.now());
+
+  useEffect(() => {
+    const id = setInterval(() => setTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const now = new Date(tick);
+  const { state } = getMarketState(now);
+  const secsLeft = secsUntilNextEvent(now);
+  const countdown = fmtCountdown(secsLeft);
+
+  // Current ET time display
+  const { h, m, s } = getNYTime(now);
+  const etTime = `${String(h % 12 || 12).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")} ${h >= 12 ? "PM" : "AM"} ET`;
+
+  const isOpen = state === "open";
+  const isPre  = state === "pre";
+  const isPost = state === "post";
+  const isExtended = isPre || isPost;
+
+  const dotColor   = isOpen ? "#34d399" : isExtended ? "#f59e0b" : "#475569";
+  const labelColor = isOpen ? "#34d399" : isExtended ? "#f59e0b" : "#64748b";
+  const label      = isOpen ? "MARKET OPEN" : isPre ? "PRE-MARKET" : isPost ? "AFTER HOURS" : "MARKET CLOSED";
+  const subLabel   = isOpen ? "closes in" : isExtended ? (isPre ? "opens in" : "closes in") : "opens in";
+
+  return (
+    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 6, padding: "0 20px 10px" }}>
+      {/* Status row */}
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+        <span style={{
+          width: 6, height: 6, borderRadius: "50%", background: dotColor, display: "inline-block",
+          boxShadow: isOpen ? `0 0 6px ${dotColor}` : "none",
+          animation: isOpen ? "pulseDot 2s infinite" : "none",
+        }} />
+        <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.18em", color: labelColor, textTransform: "uppercase" }}>{label}</span>
+      </div>
+
+      {/* Countdown */}
+      <div style={{ fontFamily: "'DM Mono','Fira Code',monospace" }}>
+        <span style={{ fontSize: 10, color: "#334155", letterSpacing: "0.05em" }}>{subLabel} </span>
+        <span style={{ fontSize: 18, fontWeight: 800, letterSpacing: "0.08em", color: isOpen ? "#34d399" : isExtended ? "#f59e0b" : "#475569" }}>
+          {countdown}
+        </span>
+      </div>
+
+      {/* ET clock */}
+      <div style={{ fontSize: 9, color: "#2d3a52", fontFamily: "'DM Mono','Fira Code',monospace", letterSpacing: "0.05em" }}>{etTime}</div>
+    </div>
+  );
+}
+
 // ── MARKET STRIP ──────────────────────────────────────────
 function MarketStrip({ data, tickers, labels, colors }) {
   function formatPrice(p, ticker) {
@@ -474,7 +604,9 @@ function MarketStrip({ data, tickers, labels, colors }) {
         const entry = data[ticker];
         const price = entry?.price;
         const change = entry?.change;
+        const session = entry?.session;
         const pos = (change ?? 0) >= 0;
+        const sessionLabel = session === "POST" || session === "CLOSED" ? "AH" : session === "PRE" ? "PM" : null;
         
         return (
           <div key={ticker} style={{
@@ -485,8 +617,11 @@ function MarketStrip({ data, tickers, labels, colors }) {
             onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}
             onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.05)"; }}>
             <span style={{ fontSize: 14, fontWeight: 700, color: colors[i], letterSpacing: "0.05em", textTransform: "uppercase" }}>{labels[i]}</span>
-            <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-              <span style={{ fontSize: 18, fontWeight: 700, color: "#e2e8f0" }}>{formatPrice(price, ticker)}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              {sessionLabel && (
+                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: "#64748b", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, padding: "1px 5px" }}>{sessionLabel}</span>
+              )}
+              <span style={{ fontSize: 18, fontWeight: 700, color: "rgba(255,255,255,0.7)" }}>{formatPrice(price, ticker)}</span>
               {change !== undefined && change !== null ? (
                 <span style={{ fontSize: 14, fontWeight: 700, color: pos ? "#34d399" : "#f87171", display: "flex", alignItems: "center", gap: 4, width: 64, justifyContent: "flex-end" }}>
                   <span style={{ fontSize: 10 }}>{pos ? "▲" : "▼"}</span> {Math.abs(change).toFixed(2)}%
@@ -504,8 +639,10 @@ function MarketStrip({ data, tickers, labels, colors }) {
 const TickerChip = memo(function TickerChip({ symbol, changeData, onRemove, onTickerClick }) {
   const [hovered, setHovered] = useState(false);
   const change = changeData?.change ?? changeData;
+  const session = changeData?.session;
   const pos = (change ?? 0) >= 0;
   const changeColor = change === undefined ? "#475569" : pos ? "#34d399" : "#f87171";
+  const sessionLabel = session === "POST" || session === "CLOSED" ? "AH" : session === "PRE" ? "PM" : null;
 
   return (
     <div
@@ -519,6 +656,7 @@ const TickerChip = memo(function TickerChip({ symbol, changeData, onRemove, onTi
       }}>
       <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{symbol}</span>
       {change !== undefined ? <span style={{ fontSize: 11, fontWeight: 600, color: changeColor }}>{pos ? "+" : ""}{change}%</span> : <span style={{ fontSize: 11, color: "#475569" }}>…</span>}
+      {sessionLabel && <span style={{ fontSize: 8, fontWeight: 700, color: "#64748b", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 2, padding: "1px 3px", letterSpacing: "0.05em" }}>{sessionLabel}</span>}
       {/* Hide delete button if onRemove is not provided (User is not Admin) */}
       {hovered && onRemove && (
         <button
@@ -691,18 +829,24 @@ function HeatMap({ prices, capexData, onTickerClick }) {
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {cells.map(ticker => {
-                const change = prices[ticker]?.change ?? prices[ticker];
-                const currentPrice = prices[ticker]?.price; 
+                const entry = prices[ticker];
+                const change = entry?.change ?? entry;
+                const currentPrice = entry?.price;
+                const session = entry?.session;
+                const sessionLabel = session === "POST" || session === "CLOSED" ? "AH" : session === "PRE" ? "PM" : null;
                 const bg = getHeatColor(change);
                 const pos = change === undefined || change >= 0;
                 return (
                   <div key={ticker}
-                    onMouseEnter={e => setTooltip({ ticker, change, price: currentPrice, track: track.label, rect: e.currentTarget.getBoundingClientRect() })}
+                    onMouseEnter={e => setTooltip({ ticker, change, price: currentPrice, session: sessionLabel, track: track.label, rect: e.currentTarget.getBoundingClientRect() })}
                     onMouseLeave={() => setTooltip(null)}
                     onClick={e => { e.stopPropagation(); onTickerClick?.(ticker, e.currentTarget.getBoundingClientRect()); }}
-                    style={{ background: bg, borderRadius: 8, padding: "8px 12px", border: `1px solid ${bg === "rgba(255,255,255,0.04)" ? "rgba(255,255,255,0.06)" : bg}`, minWidth: 60, textAlign: "center", cursor: "pointer", transition: "filter .15s, transform .15s" }}
+                    style={{ position: "relative", background: bg, borderRadius: 8, padding: "8px 12px", border: `1px solid ${bg === "rgba(255,255,255,0.04)" ? "rgba(255,255,255,0.06)" : bg}`, minWidth: 60, textAlign: "center", cursor: "pointer", transition: "filter .15s, transform .15s" }}
                     onMouseOver={e => { e.currentTarget.style.filter = "brightness(1.4)"; e.currentTarget.style.transform = "scale(1.06)"; }}
                     onMouseOut={e => { e.currentTarget.style.filter = ""; e.currentTarget.style.transform = ""; }}>
+                    {sessionLabel && (
+                      <div style={{ position: "absolute", top: 3, right: 4, fontSize: 7, fontWeight: 800, color: "rgba(255,255,255,0.55)", letterSpacing: "0.05em", lineHeight: 1 }}>{sessionLabel}</div>
+                    )}
                     <div style={{ fontSize: 12, fontWeight: 700, color: "#f1f5f9" }}>{ticker}</div>
                     {change !== undefined && (
                       <div style={{ fontSize: 10, fontWeight: 600, color: pos ? "#a7f3d0" : "#fca5a5", marginTop: 2 }}>
@@ -722,6 +866,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
           <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{tooltip.ticker}</span>
           {tooltip.price !== undefined && <span style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0" }}>${tooltip.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
           {tooltip.change !== undefined && <span style={{ fontSize: 12, fontWeight: 700, color: (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171" }}>{typeof tooltip.change === 'number' ? (tooltip.change >= 0 ? "+" : "") + tooltip.change + "%" : "—"}</span>}
+          {tooltip.session && <span style={{ fontSize: 9, fontWeight: 700, color: "#64748b", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.05em" }}>{tooltip.session}</span>}
           <span style={{ fontSize: 10, color: "#475569" }}>{tooltip.track}</span>
         </div>
       )}
@@ -1403,9 +1548,11 @@ export default function App() {
             <div className="ticker-tape">
               {[...tickerEntries, ...tickerEntries].map(([sym, val], i) => {
                 const chg = val?.change ?? val;
+                const sessionLabel = val?.session === "POST" || val?.session === "CLOSED" ? "AH" : val?.session === "PRE" ? "PM" : null;
                 return (
-                  <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 6, color: "#64748b", fontSize: 11 }}>
+                  <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "#64748b", fontSize: 11 }}>
                     <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{sym}</span>
+                    {sessionLabel && <span style={{ fontSize: 8, fontWeight: 700, color: "#475569", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 2, padding: "0px 3px" }}>{sessionLabel}</span>}
                     {chg !== undefined && <span style={{ color: chg >= 0 ? "#34d399" : "#f87171" }}>{chg >= 0 ? "▲" : "▼"} {Math.abs(chg).toFixed(2)}%</span>}
                   </span>
                 )
@@ -1448,7 +1595,10 @@ export default function App() {
         <div className="main-content" style={{ maxWidth: 1480, margin: "0 auto", padding: "32px 28px", display: "flex", flexDirection: "column", gap: 28 }}>
           
           <div className="top-node-layout" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
-            <MarketStrip data={marketData} tickers={["^GSPC","^DJI","^IXIC"]} labels={["S&P 500","DOW","NASDAQ"]} colors={["#60a5fa","#34d399","#c084fc"]} />
+            <div style={{ display: "flex", flexDirection: "column" }}>
+              <MarketClock />
+              <MarketStrip data={marketData} tickers={["^GSPC","^DJI","^IXIC"]} labels={["S&P 500","DOW","NASDAQ"]} colors={["#60a5fa","#34d399","#c084fc"]} />
+            </div>
             <div className="top-node-center" style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "0 0 auto" }}>
               <div style={{ width: 480, borderRadius: 22, padding: "26px 30px", textAlign: "center", background: "linear-gradient(135deg,rgba(251,191,36,.1) 0%,rgba(180,120,10,.04) 50%,rgba(18,18,18,.9) 100%)", border: "1.5px solid rgba(251,191,36,.45)" }}>
                 <div style={{ fontSize: 10, color: "rgba(251,191,36,.5)", letterSpacing: "0.4em", textTransform: "uppercase", marginBottom: 6 }}>Total Investment Flow</div>
@@ -1458,10 +1608,14 @@ export default function App() {
                   {CAPEX_DATA.companies.map(co => {
                     const entry = marketData[co];
                     const pos = (entry?.change ?? 0) >= 0;
+                    const sessionLabel = entry?.session === "POST" || entry?.session === "CLOSED" ? "AH" : entry?.session === "PRE" ? "PM" : null;
                     return (
                       <div key={co} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 12px", borderRadius: 10, minWidth: 72, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", transition: "all .2s" }} onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(251,191,36,0.45)"; }} onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.09)"; }}>
-                        <span style={{ fontSize: 10, fontWeight: 800, color: "#fbbf24", letterSpacing: "0.1em", marginBottom: 2 }}>{co}</span>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: "#f1f5f9", marginBottom: 1 }}>{entry?.price ? "$" + entry.price.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"}</span>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: "#fbbf24", letterSpacing: "0.1em" }}>{co}</span>
+                          {sessionLabel && <span style={{ fontSize: 8, fontWeight: 700, color: "#64748b", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 2, padding: "1px 3px" }}>{sessionLabel}</span>}
+                        </div>
+                        <span style={{ fontSize: 12, fontWeight: 700, color: sessionLabel ? "rgba(255,255,255,0.7)" : "#f1f5f9", marginBottom: 1 }}>{entry?.price ? "$" + entry.price.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"}</span>
                         {entry?.change !== undefined && entry?.change !== null ? <span style={{ fontSize: 10, fontWeight: 600, color: pos ? "#34d399" : "#f87171" }}>{pos ? "+" : ""}{entry.change.toFixed(2)}%</span> : <span style={{ fontSize: 10, color: "#334155" }}>—</span>}
                       </div>
                     );
