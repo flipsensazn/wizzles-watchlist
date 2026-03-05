@@ -100,6 +100,9 @@ async function fetchQuoteSummary(ticker) {
       website:      profile.website || null,
       chartData:    chartPoints,
       chartDates:   chartDates,
+      rawPrice:     currentPriceRaw, // <-- Added raw numbers for range calc
+      raw52Low:     detail.fiftyTwoWeekLow?.raw,
+      raw52High:    detail.fiftyTwoWeekHigh?.raw,
     };
 
     quoteCache[ticker] = data;
@@ -345,8 +348,9 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
+  // Increased height slightly to accommodate the 52-week bar
   const POPUP_W = 500;
-  const POPUP_H = 340; 
+  const POPUP_H = 360; 
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   let left = anchorRect ? anchorRect.left : vw / 2 - POPUP_W / 2;
@@ -357,12 +361,12 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
   if (left < 12) left = 12;
 
   let chartColor = changeColor;
-  let monthChangePct = null; // <-- Added to track 1-month %
+  let monthChangePct = null; 
   if (data?.chartData && data.chartData.length >= 2) {
       const firstPrice = data.chartData[0];
       const lastPrice = data.chartData[data.chartData.length - 1];
       chartColor = lastPrice >= firstPrice ? "#34d399" : "#f87171";
-      monthChangePct = ((lastPrice - firstPrice) / firstPrice) * 100; // Calculate gain/loss
+      monthChangePct = ((lastPrice - firstPrice) / firstPrice) * 100;
   }
 
   return (
@@ -376,6 +380,7 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
       animation: "fadeSlideIn .18s ease-out",
       overflow: "hidden",
     }}>
+      {/* Header */}
       <div style={{
         display: "flex", alignItems: "flex-start", justifyContent: "space-between",
         padding: "14px 16px 10px",
@@ -409,6 +414,7 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
         }}>×</button>
       </div>
 
+      {/* Body */}
       <div style={{ padding: "12px 16px 14px" }}>
         {loading ? (
           <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 80, color: "#475569", fontSize: 12 }}>
@@ -420,6 +426,7 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
           </div>
         ) : (
           <div style={{ display: "flex", gap: 20 }}>
+            {/* LEFT COLUMN: Data Stats */}
             <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
               {(data.sector !== "—" || data.industry !== "—") && (
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
@@ -470,9 +477,11 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
               )}
             </div>
 
-            {data.chartData && data.chartData.length > 0 && (
-              <div style={{ width: 220, display: "flex", flexDirection: "column", flexShrink: 0 }}>
-                {/* Updated Header with 1-Month Gain/Loss */}
+            {/* RIGHT COLUMN: Charts & Trackers */}
+            <div style={{ width: 220, display: "flex", flexDirection: "column", flexShrink: 0 }}>
+              
+              {/* 1-Month Trend Header */}
+              {data.chartData && data.chartData.length > 0 && (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
                   <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase" }}>
                     1-Month Trend
@@ -487,12 +496,44 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
                     </div>
                   )}
                 </div>
+              )}
+
+              {/* Grouped Container to snap the chart and 52W bar tightly together */}
+              <div style={{ marginTop: "auto", marginBottom: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
                 
-                <div style={{ marginTop: "auto", marginBottom: "auto" }}>
-                  <MiniChart data={data.chartData} dates={data.chartDates} color={chartColor} />
-                </div>
+                {data.chartData && data.chartData.length > 0 && (
+                  <div>
+                    <MiniChart data={data.chartData} dates={data.chartDates} color={chartColor} />
+                  </div>
+                )}
+
+                {/* 52-Week Range Bar */}
+                {data.raw52Low != null && data.raw52High != null && data.rawPrice != null && (
+                  <div>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#475569", marginBottom: 6, fontFamily: "monospace" }}>
+                      <span>{data.week52Low}</span>
+                      <span style={{ color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.1em" }}>52W Range</span>
+                      <span>{data.week52High}</span>
+                    </div>
+                    <div style={{ position: "relative", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2 }}>
+                      <div style={{ 
+                        position: "absolute", 
+                        left: `${Math.max(0, Math.min(100, (data.raw52High - data.raw52Low) > 0 ? ((data.rawPrice - data.raw52Low) / (data.raw52High - data.raw52Low)) * 100 : 50))}%`, 
+                        top: "50%", 
+                        transform: "translate(-50%, -50%)", 
+                        width: 8, 
+                        height: 8, 
+                        borderRadius: "50%", 
+                        background: chartColor,
+                        boxShadow: `0 0 8px ${chartColor}88`
+                      }} />
+                    </div>
+                  </div>
+                )}
+
               </div>
-            )}
+            </div>
+
           </div>
         )}
       </div>
@@ -1330,16 +1371,43 @@ export default function App() {
   const activeData = capexData.tracks.find(t => t.id === activeTrack);
   const tickerEntries = Object.entries(prices);
 
-  const styles = `
-    @import url('https://fonts.googleapis.com/css2?family=Bebas+Neue&family=DM+Mono:wght@300;400;500&family=Syne:wght@700;800&display=swap');
-    * { box-sizing: border-box; margin: 0; padding: 0; }
-    html, body { background: #121212; }
-    ::-webkit-scrollbar { width: 5px; height: 5px; }
+const styles = `
+    /* Bring in clean, professional SaaS fonts */
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;700&display=swap');
+    
+    * { 
+      box-sizing: border-box; 
+      margin: 0; 
+      padding: 0; 
+      box-shadow: none !important; /* Instantly strips all neon glows/shadows */
+    }
+    
+    html, body { 
+      background: #0E1117; /* Modern flat slate dark mode */
+      font-family: 'Inter', sans-serif;
+    }
+
+    /* Force monospace for numbers/tickers */
+    table, .market-strip span, .ticker-tape {
+      font-family: 'JetBrains Mono', monospace !important;
+    }
+
+    /* Override the bubbly inline border-radii globally to make it sharp and professional */
+    div[style*="border-radius: 12px"],
+    div[style*="border-radius: 14px"], 
+    div[style*="border-radius: 18px"],
+    div[style*="border-radius: 22px"] {
+        border-radius: 6px !important;
+    }
+
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.08); border-radius: 3px; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 4px; }
+    
     @keyframes scroll-left { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
     @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
     @keyframes pulseDot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(.7); } }
+    
     .ticker-tape { animation: scroll-left 80s linear infinite; white-space: nowrap; display: inline-flex; gap: 24px; }
     .pulse { animation: pulseDot 2s infinite; }
 
@@ -1366,6 +1434,7 @@ export default function App() {
       .bottom-grid-all { grid-template-columns: 1fr !important; }
       .span-2, .span-1 { grid-column: 1 / -1 !important; }
       
+      /* Release the absolute position when stacked into a single column */
       .panel-wrapper { min-height: 450px; }
       .panel-inner { position: relative; height: 100%; }
     }
