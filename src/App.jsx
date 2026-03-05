@@ -901,7 +901,10 @@ function DonutChart({ prices, capexData }) {
 
 // ── WATCHLIST ─────────────────────────────────────────────
 function Watchlist({ prices, capexData }) {
-  const [list, setList] = useState(["NVDA","LITE","COHR","AXTI","IQEPF","SMCI","IONQ","ANET","VST","CORZ"]);
+  // Automatically load all tracked tickers into the Watchlist by default
+  const [list, setList] = useState(() => {
+    return [...new Set(capexData.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))];
+  });
   const [input, setInput] = useState("");
   const [sortDir, setSortDir] = useState("desc");
   const [filter, setFilter] = useState("all");
@@ -930,8 +933,14 @@ function Watchlist({ prices, capexData }) {
     setInput("");
   }
 
-  return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 4px 30px rgba(0,0,0,0.4)" }}>
+return (
+    <div style={{ 
+      borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", 
+      background: "rgba(24,24,24,0.7)", padding: 20, 
+      display: "flex", flexDirection: "column", gap: 14, 
+      boxShadow: "0 4px 30px rgba(0,0,0,0.4)",
+      height: "100%" // Force panel to stretch to grid cell height
+    }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
         <div>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Watchlist</h3>
@@ -972,7 +981,9 @@ function Watchlist({ prices, capexData }) {
           Sort {sortDir === "desc" ? "↓" : "↑"}
         </button>
       </div>
-      <div style={{ display: "flex", flexDirection: "column", gap: 2, maxHeight: 380, overflowY: "auto" }}>
+      
+      {/* Flex: 1 allows the scrollable area to take up all remaining vertical space */}
+      <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, overflowY: "auto", minHeight: 0, paddingRight: 4 }}>
         {sorted.map((item, idx) => {
           const pos = (item.change ?? 0) >= 0;
           const barW = item.change !== undefined ? Math.abs(item.change) / maxAbs * 100 : 0;
@@ -1261,7 +1272,7 @@ const styles = `
     /* ── MOBILE ───────────────────────────────────────────── */
     @media (max-width: 640px) {
       .track-grid { grid-template-columns: repeat(2, minmax(0,1fr)) !important; }
-      .top-node-layout { flex-direction: column !important; align-items: center !important; gap: 12px !important; }
+      .top-node-layout { flex-direction: column !important; align-items: stretch !important; gap: 12px !important; }
       .market-strip { flex-direction: row !important; flex-wrap: wrap !important; justify-content: center !important; padding: 0 8px !important; gap: 8px !important; }
       .top-node-center { width: 100% !important; max-width: 100% !important; }
       .capex-number { font-size: 44px !important; }
