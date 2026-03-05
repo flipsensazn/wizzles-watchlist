@@ -38,13 +38,13 @@ const quoteCache = {};
 async function fetchQuoteSummary(ticker) {
   if (quoteCache[ticker]) return quoteCache[ticker];
   try {
-    // CLOUDFLARE UPDATE: Route changed to /quote
     const url = `/quote?ticker=${encodeURIComponent(ticker)}`;
     const res = await fetch(url);
     const json = await res.json();
 
     const payload = json.data ? json.data : json;
     const r = payload?.quoteSummary?.result?.[0];
+    const chartResult = payload?.chart?.result?.[0];
 
     if (!r) {
       console.warn(`[Quote Fetch] Could not find result array for ${ticker}.`);
@@ -64,18 +64,29 @@ async function fetchQuoteSummary(ticker) {
       return "$" + num.toLocaleString();
     }
 
+    // Parse 1-Month Chart Data
+    let chartPoints = [];
+    if (chartResult && chartResult.indicators?.quote?.[0]?.close) {
+      const closes = chartResult.indicators.quote[0].close;
+      chartPoints = closes.filter(c => c !== null); // Filter out any empty trading days
+    }
+
+    const currentPriceRaw = price.regularMarketPrice?.raw ?? price.regularMarketPrice;
+
     const data = {
-      name:        price.longName || price.shortName || ticker,
-      sector:      profile.sector || "—",
-      industry:    profile.industry || "—",
-      description: profile.longBusinessSummary || null,
-      marketCap:   fmt(price.marketCap?.raw ?? price.marketCap),
-      peRatio:     detail.trailingPE?.raw != null ? Number(detail.trailingPE.raw).toFixed(1) : "—",
-      week52Low:   detail.fiftyTwoWeekLow?.raw != null ? "$" + Number(detail.fiftyTwoWeekLow.raw).toFixed(2) : "—",
-      week52High:  detail.fiftyTwoWeekHigh?.raw != null ? "$" + Number(detail.fiftyTwoWeekHigh.raw).toFixed(2) : "—",
-      employees:   profile.fullTimeEmployees ? Number(profile.fullTimeEmployees).toLocaleString() : "—",
-      country:     profile.country || "—",
-      website:     profile.website || null,
+      name:         price.longName || price.shortName || ticker,
+      currentPrice: currentPriceRaw != null ? "$" + Number(currentPriceRaw).toFixed(2) : null,
+      sector:       profile.sector || "—",
+      industry:     profile.industry || "—",
+      description:  profile.longBusinessSummary || null,
+      marketCap:    fmt(price.marketCap?.raw ?? price.marketCap),
+      peRatio:      detail.trailingPE?.raw != null ? Number(detail.trailingPE.raw).toFixed(1) : "—",
+      week52Low:    detail.fiftyTwoWeekLow?.raw != null ? "$" + Number(detail.fiftyTwoWeekLow.raw).toFixed(2) : "—",
+      week52High:   detail.fiftyTwoWeekHigh?.raw != null ? "$" + Number(detail.fiftyTwoWeekHigh.raw).toFixed(2) : "—",
+      employees:    profile.fullTimeEmployees ? Number(profile.fullTimeEmployees).toLocaleString() : "—",
+      country:      profile.country || "—",
+      website:      profile.website || null,
+      chartData:    chartPoints,
     };
 
     quoteCache[ticker] = data;
@@ -208,6 +219,42 @@ const Badge = memo(function Badge({ text, color }) {
   );
 });
 
+// ── MINI CHART (1-Month SVG Sparkline) ────────────────────
+function MiniChart({ data, color }) {
+  if (!data || data.length < 2) return null;
+  
+  const min = Math.min(...data);
+  const max = Math.max(...data);
+  const padding = (max - min) * 0.1 || 1; // 10% vertical padding
+  const yMin = min - padding;
+  const yMax = max + padding;
+  const range = yMax - yMin;
+  
+  const width = 160;
+  const height = 65;
+  
+  const points = data.map((val, i) => {
+    const x = (i / (data.length - 1)) * width;
+    const y = height - ((val - yMin) / range) * height;
+    return `${x},${y}`;
+  }).join(" ");
+
+  const cleanColor = color.replace(/[^#0-9a-fA-F]/g, ''); // Fix gradient ID string
+
+  return (
+    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: "visible", display: "block" }}>
+      <defs>
+        <linearGradient id={`grad-${cleanColor}`} x1="0" x2="0" y1="0" y2="1">
+          <stop offset="0%" stopColor={color} stopOpacity="0.3" />
+          <stop offset="100%" stopColor={color} stopOpacity="0" />
+        </linearGradient>
+      </defs>
+      <polygon fill={`url(#grad-${cleanColor})`} points={`${points} ${width},${height} 0,${height}`} />
+      <polyline fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={points} />
+    </svg>
+  );
+}
+
 // ── COMPANY POPUP ─────────────────────────────────────────
 function CompanyPopup({ ticker, change, anchorRect, onClose }) {
   const [data, setData] = useState(null);
@@ -235,8 +282,9 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  const POPUP_W = 320;
-  const POPUP_H = 300; 
+  // Increased width to fit the chart
+  const POPUP_W = 500;
+  const POPUP_H = 260; 
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   let left = anchorRect ? anchorRect.left : vw / 2 - POPUP_W / 2;
@@ -267,6 +315,9 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
             <span style={{ fontSize: 16, fontWeight: 800, color: "#f1f5f9", letterSpacing: "0.04em" }}>{ticker}</span>
+            {data?.currentPrice && (
+              <span style={{ fontSize: 15, fontWeight: 700, color: "#e2e8f0" }}>{data.currentPrice}</span>
+            )}
             {change !== undefined && (
               <span style={{
                 fontSize: 11, fontWeight: 700, color: changeColor,
@@ -299,55 +350,74 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
             No data available for {ticker}
           </div>
         ) : (
-          <>
-            {(data.sector !== "—" || data.industry !== "—") && (
-              <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-                {data.sector !== "—" && (
-                  <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: "rgba(96,165,250,0.12)", border: "1px solid rgba(96,165,250,0.25)", color: "#60a5fa" }}>{data.sector}</span>
-                )}
-                {data.industry !== "—" && (
-                  <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#94a3b8" }}>{data.industry}</span>
-                )}
-              </div>
-            )}
-
-            <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 12px", marginBottom: 12 }}>
-              {[
-                { label: "Market Cap", value: data.marketCap },
-                { label: "P/E Ratio",  value: data.peRatio },
-                { label: "52W Low",    value: data.week52Low },
-                { label: "52W High",   value: data.week52High },
-                { label: "Employees",  value: data.employees },
-                { label: "Country",    value: data.country },
-              ].map(({ label, value }) => (
-                <div key={label}>
-                  <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 1 }}>{label}</div>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0" }}>{value}</div>
+          <div style={{ display: "flex", gap: 20 }}>
+            {/* LEFT COLUMN: Data Stats */}
+            <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
+              {(data.sector !== "—" || data.industry !== "—") && (
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+                  {data.sector !== "—" && (
+                    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: "rgba(96,165,250,0.12)", border: "1px solid rgba(96,165,250,0.25)", color: "#60a5fa" }}>{data.sector}</span>
+                  )}
+                  {data.industry !== "—" && (
+                    <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#94a3b8" }}>{data.industry}</span>
+                  )}
                 </div>
-              ))}
+              )}
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: "6px 12px", marginBottom: 12 }}>
+                {[
+                  { label: "Market Cap", value: data.marketCap },
+                  { label: "P/E Ratio",  value: data.peRatio },
+                  { label: "52W Low",    value: data.week52Low },
+                  { label: "52W High",   value: data.week52High },
+                  { label: "Employees",  value: data.employees },
+                  { label: "Country",    value: data.country },
+                ].map(({ label, value }) => (
+                  <div key={label}>
+                    <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 1 }}>{label}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0" }}>{value}</div>
+                  </div>
+                ))}
+              </div>
+
+              {data.description && (
+                <div style={{
+                  fontSize: 10.5, color: "#94a3b8", lineHeight: 1.55,
+                  borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 10,
+                  display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden",
+                }}>
+                  {data.description}
+                </div>
+              )}
+
+              {data.website && (
+                <a href={data.website} target="_blank" rel="noopener noreferrer" style={{
+                  display: "inline-block", marginTop: "auto", paddingTop: 8, fontSize: 10, color: "#60a5fa",
+                  textDecoration: "none", opacity: 0.7,
+                }}
+                  onMouseEnter={e => e.currentTarget.style.opacity = "1"}
+                  onMouseLeave={e => e.currentTarget.style.opacity = "0.7"}>
+                  {data.website.replace(/^https?:\/\//, "")} ↗
+                </a>
+              )}
             </div>
 
-            {data.description && (
-              <div style={{
-                fontSize: 10.5, color: "#94a3b8", lineHeight: 1.55,
-                borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 10,
-                display: "-webkit-box", WebkitLineClamp: 5, WebkitBoxOrient: "vertical", overflow: "hidden",
-              }}>
-                {data.description}
+            {/* RIGHT COLUMN: 1-Month Chart */}
+            {data.chartData && data.chartData.length > 0 && (
+              <div style={{ width: 160, display: "flex", flexDirection: "column", flexShrink: 0 }}>
+                <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10, textAlign: "right" }}>1-Month Trend</div>
+                
+                <div style={{ marginTop: "auto", marginBottom: "auto" }}>
+                  <MiniChart data={data.chartData} color={changeColor} />
+                </div>
+                
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#475569", marginTop: 6 }}>
+                  <span>30D Ago</span>
+                  <span>Today</span>
+                </div>
               </div>
             )}
-
-            {data.website && (
-              <a href={data.website} target="_blank" rel="noopener noreferrer" style={{
-                display: "inline-block", marginTop: 10, fontSize: 10, color: "#60a5fa",
-                textDecoration: "none", opacity: 0.7,
-              }}
-                onMouseEnter={e => e.currentTarget.style.opacity = "1"}
-                onMouseLeave={e => e.currentTarget.style.opacity = "0.7"}>
-                {data.website.replace(/^https?:\/\//, "")} ↗
-              </a>
-            )}
-          </>
+          </div>
         )}
       </div>
     </div>
