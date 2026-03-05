@@ -231,7 +231,7 @@ function MiniChart({ data, color }) {
   const range = yMax - yMin;
   
   const width = 160;
-  const height = 65;
+  const height = 140; // Increased height to comfortably fit 10 price labels
   
   const points = data.map((val, i) => {
     const x = (i / (data.length - 1)) * width;
@@ -240,6 +240,12 @@ function MiniChart({ data, color }) {
   }).join(" ");
 
   const cleanColor = color.replace(/[^#0-9a-fA-F]/g, '');
+
+  // Generate 10 evenly spaced price labels
+  const labelCount = 10;
+  const priceLabels = Array.from({ length: labelCount }, (_, i) => {
+    return max - (i * (max - min) / (labelCount - 1));
+  });
 
   return (
     <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
@@ -250,15 +256,27 @@ function MiniChart({ data, color }) {
             <stop offset="100%" stopColor={color} stopOpacity="0" />
           </linearGradient>
         </defs>
+        
+        {/* Horizontal Grid Lines for easy reading */}
+        {priceLabels.map((val, i) => {
+           const yPos = height - ((val - yMin) / range) * height;
+           return <line key={i} x1="0" y1={yPos} x2={width} y2={yPos} stroke="rgba(255,255,255,0.05)" strokeWidth="1" strokeDasharray="2,2" />
+        })}
+
         <polygon fill={`url(#grad-${cleanColor})`} points={`${points} ${width},${height} 0,${height}`} />
         <polyline fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={points} />
-        {/* Baseline (optional, depending on preference) */}
-        {/* <line x1="0" y1={height} x2={width} y2={height} stroke="rgba(255,255,255,0.1)" strokeWidth="1" /> */}
       </svg>
-      {/* Price Range Labels on the Right */}
-      <div style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: height, marginLeft: 8, fontSize: 9, color: "#94a3b8", fontFamily: "monospace" }}>
-        <span>${max.toFixed(2)}</span>
-        <span>${min.toFixed(2)}</span>
+      
+      {/* Price Range Labels mapped perfectly to the grid lines */}
+      <div style={{ position: 'relative', height: height, width: 45, marginLeft: 8, fontSize: 9, color: "#94a3b8", fontFamily: "monospace" }}>
+        {priceLabels.map((val, i) => {
+            const yPos = height - ((val - yMin) / range) * height;
+            return (
+              <span key={i} style={{ position: 'absolute', top: yPos, transform: 'translateY(-50%)', left: 0 }}>
+                ${val.toFixed(2)}
+              </span>
+            );
+        })}
       </div>
     </div>
   );
@@ -291,9 +309,9 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  // Increased width to fit the chart and labels
+  // Increased heights to accommodate the expanded chart
   const POPUP_W = 500;
-  const POPUP_H = 260; 
+  const POPUP_H = 340; 
   const vw = window.innerWidth;
   const vh = window.innerHeight;
   let left = anchorRect ? anchorRect.left : vw / 2 - POPUP_W / 2;
@@ -302,14 +320,6 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
   if (top < 10) top = anchorRect ? anchorRect.bottom + 10 : vh / 2 - POPUP_H / 2;
   if (left + POPUP_W > vw - 12) left = vw - POPUP_W - 12;
   if (left < 12) left = 12;
-
-  // Determine chart line color based on 1-month trend
-  let chartColor = changeColor;
-  if (data?.chartData && data.chartData.length >= 2) {
-      const firstPrice = data.chartData[0];
-      const lastPrice = data.chartData[data.chartData.length - 1];
-      chartColor = lastPrice >= firstPrice ? "#34d399" : "#f87171";
-  }
 
   return (
     <div ref={popupRef} style={{
@@ -421,11 +431,11 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
 
             {/* RIGHT COLUMN: 1-Month Chart */}
             {data.chartData && data.chartData.length > 0 && (
-              <div style={{ width: 200, display: "flex", flexDirection: "column", flexShrink: 0 }}>
+              <div style={{ width: 220, display: "flex", flexDirection: "column", flexShrink: 0 }}>
                 <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 10, textAlign: "left" }}>1-Month Trend</div>
                 
                 <div style={{ marginTop: "auto", marginBottom: "auto" }}>
-                  <MiniChart data={data.chartData} color={chartColor} />
+                  <MiniChart data={data.chartData} color={changeColor} />
                 </div>
                 
                 <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#475569", marginTop: 6, width: 160 }}>
