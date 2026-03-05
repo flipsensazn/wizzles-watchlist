@@ -348,15 +348,31 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  // Increased height slightly to accommodate the 52-week bar
   const POPUP_W = 500;
   const POPUP_H = 360; 
   const vw = window.innerWidth;
   const vh = window.innerHeight;
+  
+  // Initial positioning logic
   let left = anchorRect ? anchorRect.left : vw / 2 - POPUP_W / 2;
   let top  = anchorRect ? anchorRect.top - POPUP_H - 10 : vh / 2 - POPUP_H / 2;
   
-  if (top < 10) top = anchorRect ? anchorRect.bottom + 10 : vh / 2 - POPUP_H / 2;
+  // 1. If it hits the top of the browser, try flipping it below the clicked item
+  if (top < 10) {
+    top = anchorRect ? anchorRect.bottom + 10 : vh / 2 - POPUP_H / 2;
+  }
+  
+  // 2. NEW: If it hits the bottom of the browser, force it back up into view
+  if (top + POPUP_H > vh - 12) {
+    top = vh - POPUP_H - 12;
+  }
+
+  // 3. NEW: Absolute failsafe for very small screens (never go above top edge)
+  if (top < 12) {
+    top = 12;
+  }
+
+  // 4. Prevent bleeding off the left or right sides
   if (left + POPUP_W > vw - 12) left = vw - POPUP_W - 12;
   if (left < 12) left = 12;
 
@@ -459,7 +475,7 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
                 <div style={{
                   fontSize: 10.5, color: "#94a3b8", lineHeight: 1.55,
                   borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 10,
-                  overflowY: "auto", maxHeight: 130, paddingRight: 6
+                  overflowY: "auto", maxHeight: 130, paddingRight: 6 
                 }}>
                   {data.description}
                 </div>
@@ -498,7 +514,7 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
                 </div>
               )}
 
-              {/* Grouped Container to snap the chart and 52W bar tightly together */}
+              {/* Grouped Container */}
               <div style={{ marginTop: "auto", marginBottom: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
                 
                 {data.chartData && data.chartData.length > 0 && (
