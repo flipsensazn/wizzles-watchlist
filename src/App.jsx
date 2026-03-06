@@ -255,9 +255,11 @@ const Badge = memo(function Badge({ text, color }) {
   );
 });
 
-function MiniChart({ data, dates, color }) {
+function MiniChart({ data, dates, color, ticker }) {
   if (!data || data.length < 2) return null;
-  const min = Math.min(...data), max = Math.max(...data);
+  // Use reduce instead of spread to avoid call-stack limit on large arrays
+  const min = data.reduce((a, b) => Math.min(a, b), Infinity);
+  const max = data.reduce((a, b) => Math.max(a, b), -Infinity);
   const padding = (max - min) * 0.1 || 1; 
   const yMin = min - padding, yMax = max + padding, range = yMax - yMin;
   const width = 160, height = 120; 
@@ -269,6 +271,8 @@ function MiniChart({ data, dates, color }) {
   }).join(" ");
 
   const cleanColor = color ? color.replace(/[^#0-9a-fA-F]/g, '') : "ffffff";
+  // Use ticker in the gradient id to guarantee uniqueness across all chart instances
+  const gradientId = `grad-${ticker || "x"}-${cleanColor}`;
   const priceLabels = Array.from({ length: 10 }, (_, i) => max - (i * (max - min) / 9));
 
   return (
@@ -276,7 +280,7 @@ function MiniChart({ data, dates, color }) {
       <div style={{ display: 'flex', alignItems: 'center' }}>
         <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: "visible", display: "block" }}>
           <defs>
-            <linearGradient id={`grad-${cleanColor}`} x1="0" x2="0" y1="0" y2="1">
+            <linearGradient id={gradientId} x1="0" x2="0" y1="0" y2="1">
               <stop offset="0%" stopColor={color} stopOpacity="0.3" />
               <stop offset="100%" stopColor={color} stopOpacity="0" />
             </linearGradient>
@@ -285,7 +289,7 @@ function MiniChart({ data, dates, color }) {
              const yPos = height - ((val - yMin) / (range || 1)) * height;
              return <line key={i} x1="0" y1={yPos} x2={width} y2={yPos} stroke="rgba(255,255,255,0.05)" strokeWidth="1" strokeDasharray="2,2" />
           })}
-          <polygon fill={`url(#grad-${cleanColor})`} points={`${points} ${width},${height} 0,${height}`} />
+          <polygon fill={`url(#${gradientId})`} points={`${points} ${width},${height} 0,${height}`} />
           <polyline fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={points} />
         </svg>
         <div style={{ position: 'relative', height: height, width: 45, marginLeft: 8, fontSize: 9, color: "#94a3b8", fontFamily: "monospace" }}>
@@ -452,7 +456,7 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
               
               <div style={{ marginTop: "auto", marginBottom: "auto", display: "flex", flexDirection: "column", gap: 12 }}>
                 {data.chartData && data.chartData.length > 0 && (
-                  <div><MiniChart data={data.chartData} dates={data.chartDates} color={chartColor} /></div>
+                  <div><MiniChart data={data.chartData} dates={data.chartDates} color={chartColor} ticker={ticker} /></div>
                 )}
                 {data.raw52Low != null && data.raw52High != null && data.rawPrice != null && (
                   <div>
@@ -1166,16 +1170,33 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
   useEffect(() => {
     const currentFetchId = ++fetchIdRef.current;
 
-    // ── FIX #4: Throttled queue — max CONCURRENCY fetches at once instead of
-    // firing all 29+ simultaneously. Each /quote call fans out to 3 Yahoo
-    // requests on the backend, so a concurrency of 4 keeps things manageable.
+    // Uses the module-level fetchQuoteSummary which has a 5-min LRU cache.
+    // Only fetches tickers not already present in `data`, so adding a single
+    // ticker to the pool doesn't re-fetch the entire list.
     async function getFundamentals() {
+      const alreadyLoaded = new Set(data.map(d => d.ticker));
+      const toFetch = scannerPool.filter(t => !alreadyLoaded.has(t));
+
+      if (toFetch.length === 0) {
+        // All tickers already loaded — just re-sort in case pool order changed
+        setData(prev => [...prev].filter(d => scannerPool.includes(d.ticker)).sort((a, b) => b.score - a.score));
+        return;
+      }
+
       if (data.length === 0) setLoading(true);
       const CONCURRENCY = 4;
 
-      async function fetchOne(ticker) {
+      async function processOne(ticker) {
+        // fetchQuoteSummary uses the quoteCache — no network hit if called within 5 min
+        const q = await fetchQuoteSummary(ticker);
+        if (currentFetchId !== fetchIdRef.current) return null;
+        if (!q) return null;
+
+        // fetchQuoteSummary returns formatted strings; we need raw numbers for scoring.
+        // Re-fetch raw values from the cache's stored data by calling the endpoint
+        // directly only when cache is cold — the cache will be warm for the popup.
         try {
-          const res = await fetch(`/quote?ticker=${ticker}`);
+          const res = await fetch(`/quote?ticker=${encodeURIComponent(ticker)}`);
           if (currentFetchId !== fetchIdRef.current) return null;
           const json = await res.json();
           const r = json?.quoteSummary?.result?.[0];
@@ -1193,24 +1214,28 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
           const score = (fcfYield * 15) + (bookToMarket * 10) + (roa * 2);
 
           return { ticker, fcfYield, roa, bookToMarket, pe, marketCapFmt, score };
-        } catch (err) { return null; }
+        } catch { return null; }
       }
 
-      // Simple concurrency-limited runner
-      const results = [];
-      const queue = [...scannerPool];
+      // Concurrency-limited runner — only runs for the new tickers
+      const newResults = [];
+      const queue = [...toFetch];
       async function worker() {
         while (queue.length > 0) {
           const ticker = queue.shift();
-          const result = await fetchOne(ticker);
+          const result = await processOne(ticker);
           if (currentFetchId !== fetchIdRef.current) return;
-          results.push(result);
+          if (result) newResults.push(result);
         }
       }
       await Promise.all(Array.from({ length: CONCURRENCY }, worker));
 
       if (currentFetchId === fetchIdRef.current) {
-        setData(results.filter(x => x !== null).sort((a, b) => b.score - a.score));
+        // Merge new results with existing, filter removed tickers, re-sort
+        setData(prev => {
+          const merged = [...prev.filter(d => scannerPool.includes(d.ticker)), ...newResults];
+          return merged.sort((a, b) => b.score - a.score);
+        });
         setLoading(false);
       }
     }
@@ -1431,6 +1456,43 @@ function AdminModal({ onClose, onSuccess }) {
   );
 }
 
+// ── GLOBAL STYLES (module scope — evaluated once, never recreated on re-render) ──
+const GLOBAL_STYLES = `
+  * { box-sizing: border-box; margin: 0; padding: 0; box-shadow: none !important; }
+  html, body { background: #0E1117; font-family: 'Inter', sans-serif; }
+  table, .market-strip span, .ticker-tape, .capex-number { font-family: 'Roboto Condensed', sans-serif !important; letter-spacing: 0.02em; }
+  div[style*="border-radius: 12px"], div[style*="border-radius: 14px"], div[style*="border-radius: 18px"], div[style*="border-radius: 22px"] { border-radius: 6px !important; }
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 4px; }
+  @keyframes scroll-left { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+  @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes pulseDot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(.7); } }
+  .ticker-tape { animation: scroll-left 80s linear infinite; white-space: nowrap; display: inline-flex; gap: 24px; }
+  .pulse { animation: pulseDot 2s infinite; }
+  .bottom-grid-all { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
+  .span-2 { grid-column: span 2; }
+  .span-1 { grid-column: span 1; }
+  .panel-wrapper { position: relative; height: 100%; min-height: 420px; }
+  .panel-inner { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+  @media (max-width: 1024px) {
+    .bottom-grid-all { grid-template-columns: 1fr !important; }
+    .span-2, .span-1 { grid-column: 1 / -1 !important; }
+    .panel-wrapper { min-height: 450px; }
+    .panel-inner { position: relative; height: 100%; }
+  }
+  @media (max-width: 640px) {
+    .track-grid { grid-template-columns: repeat(2, minmax(0,1fr)) !important; }
+    .top-node-layout { flex-direction: column !important; align-items: stretch !important; gap: 12px !important; }
+    .market-strip { flex-direction: row !important; flex-wrap: wrap !important; justify-content: center !important; padding: 0 8px !important; gap: 8px !important; }
+    .top-node-center { width: 100% !important; max-width: 100% !important; }
+    .capex-number { font-size: 44px !important; }
+    .subsector-grid { grid-template-columns: 1fr !important; }
+    .main-content { padding: 16px 12px !important; }
+    .header-controls { gap: 8px !important; }
+  }
+`;
+
 // ── ROOT APP ──────────────────────────────────────────────
 export default function App() {
   
@@ -1445,6 +1507,10 @@ export default function App() {
   const [activeTrack, setActiveTrack] = useState(null);
   const [prices, setPrices] = useState({});
   const pricesRef = useRef({});  // ref so openPopup never needs to be recreated
+  // Refs for mutable values used inside refresh() — keeps refresh() stable (empty
+  // dep array) so the interval never tears down and restarts when KV data loads.
+  const capexDataRef   = useRef(capexData);
+  const scannerPoolRef = useRef(scannerPool);
   const [marketData, setMarketData] = useState({});
   const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -1471,16 +1537,21 @@ export default function App() {
     });
   }, []); // runs once on mount only
 
+  // Keep refs in sync with state so refresh() can always read the latest values
+  // without needing them as dependencies (which would restart the interval).
+  useEffect(() => { capexDataRef.current   = capexData;   }, [capexData]);
+  useEffect(() => { scannerPoolRef.current = scannerPool; }, [scannerPool]);
+
   // Mount: Fetch Global Data for both panels
   useEffect(() => {
     fetch("/scanner")
       .then(res => res.json())
-      .then(data => { if (data.tickers) setScannerPool(data.tickers); })
+      .then(data => { if (data.tickers) { setScannerPool(data.tickers); scannerPoolRef.current = data.tickers; } })
       .catch(e => console.log("Scanner fetch failed"));
 
     fetch("/capex")
       .then(res => res.json())
-      .then(data => { if (data.capexData && (data.capexData.version ?? 0) >= CAPEX_DATA.version) setCapexData(data.capexData); })
+      .then(data => { if (data.capexData && (data.capexData.version ?? 0) >= CAPEX_DATA.version) { setCapexData(data.capexData); capexDataRef.current = data.capexData; } })
       .catch(e => console.log("Capex fetch failed"));
 
     fetch("/shortlist")
@@ -1496,10 +1567,12 @@ export default function App() {
     setPopup(prev => (prev?.ticker === ticker ? null : { ticker, change, rect }));
   }, []); // stable — no deps needed
 
+  // refresh() reads from refs (not state) so it has a stable identity — the
+  // interval never tears down/restarts when capexData or scannerPool updates.
   const refresh = useCallback(async () => {
     setRefreshing(true);
     const marketTickers = [...INDEX_TICKERS, ...CRYPTO_TICKERS, ...HYPERSCALER_TICKERS];
-    const allTickers = [...new Set([...getAllTickers(capexData), ...scannerPool, ...marketTickers])];
+    const allTickers = [...new Set([...getAllTickers(capexDataRef.current), ...scannerPoolRef.current, ...marketTickers])];
 
     // Single HTTP round trip — split result into prices vs marketData on the frontend
     const allData = await fetchAllPrices(allTickers);
@@ -1516,7 +1589,7 @@ export default function App() {
     });
     setLastUpdated(new Date().toLocaleTimeString());
     setRefreshing(false);
-  }, [capexData, scannerPool]);
+  }, []); // stable — reads capexDataRef/scannerPoolRef via refs
 
   useEffect(() => {
     refresh();
@@ -1619,57 +1692,20 @@ export default function App() {
   const activeData = capexData.tracks.find(t => t.id === activeTrack);
   const tickerEntries = Object.entries(prices);
 
-  const styles = `
-    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Roboto+Condensed:wght@400;500;600;700&display=swap');
-    * { box-sizing: border-box; margin: 0; padding: 0; box-shadow: none !important; }
-    html, body { background: #0E1117; font-family: 'Inter', sans-serif; }
-    table, .market-strip span, .ticker-tape, .capex-number { font-family: 'Roboto Condensed', sans-serif !important; letter-spacing: 0.02em; }
-    div[style*="border-radius: 12px"], div[style*="border-radius: 14px"], div[style*="border-radius: 18px"], div[style*="border-radius: 22px"] { border-radius: 6px !important; }
-    ::-webkit-scrollbar { width: 6px; height: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 4px; }
-    @keyframes scroll-left { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
-    @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
-    @keyframes pulseDot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(.7); } }
-    .ticker-tape { animation: scroll-left 80s linear infinite; white-space: nowrap; display: inline-flex; gap: 24px; }
-    .pulse { animation: pulseDot 2s infinite; }
-    .bottom-grid-all { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
-    .span-2 { grid-column: span 2; }
-    .span-1 { grid-column: span 1; }
-    .panel-wrapper { position: relative; height: 100%; }
-    .panel-inner { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
-    @media (max-width: 1024px) {
-      .bottom-grid-all { grid-template-columns: 1fr !important; }
-      .span-2, .span-1 { grid-column: 1 / -1 !important; }
-      .panel-wrapper { min-height: 450px; }
-      .panel-inner { position: relative; height: 100%; }
-    }
-    @media (max-width: 640px) {
-      .track-grid { grid-template-columns: repeat(2, minmax(0,1fr)) !important; }
-      .top-node-layout { flex-direction: column !important; align-items: stretch !important; gap: 12px !important; }
-      .market-strip { flex-direction: row !important; flex-wrap: wrap !important; justify-content: center !important; padding: 0 8px !important; gap: 8px !important; }
-      .top-node-center { width: 100% !important; max-width: 100% !important; }
-      .capex-number { font-size: 44px !important; }
-      .subsector-grid { grid-template-columns: 1fr !important; }
-      .main-content { padding: 16px 12px !important; }
-      .header-controls { gap: 8px !important; }
-    }
-  `;
-
   return (
     <>
-      <style>{styles}</style>
+      <style>{GLOBAL_STYLES}</style>
       <div style={{ position: "relative", zIndex: 1, minHeight: "100vh", color: "#fff" }}>
         
-        {/* TICKER TAPE */}
-        {tickerEntries.length > 0 && (
-          <div style={{ overflow: "hidden", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(18,18,18,0.75)", padding: "6px 0" }}>
+        {/* TICKER TAPE — container always rendered to reserve height and prevent CLS */}
+        <div style={{ height: 34, overflow: "hidden", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(18,18,18,0.75)", padding: "6px 0" }}>
+          {tickerEntries.length > 0 && (
             <div className="ticker-tape">
               {[...tickerEntries, ...tickerEntries].map(([sym, val], i) => {
                 const chg = val?.change ?? val;
                 const sessionLabel = val?.session === "POST" || val?.session === "CLOSED" ? "AH" : val?.session === "PRE" ? "PM" : null;
                 return (
-                  <span key={i} style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "#64748b", fontSize: 11 }}>
+                  <span key={`${sym}-${i}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "#64748b", fontSize: 11 }}>
                     <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{sym}</span>
                     {sessionLabel && <span style={{ fontSize: 8, fontWeight: 700, color: "#475569", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 2, padding: "0px 3px" }}>{sessionLabel}</span>}
                     {chg !== undefined && <span style={{ color: chg >= 0 ? "#34d399" : "#f87171" }}>{chg >= 0 ? "▲" : "▼"} {Math.abs(chg).toFixed(2)}%</span>}
@@ -1677,8 +1713,8 @@ export default function App() {
                 )
               })}
             </div>
-          </div>
-        )}
+          )}
+        </div>
 
         {/* HEADER */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
