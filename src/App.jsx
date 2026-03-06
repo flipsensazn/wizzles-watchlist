@@ -1008,8 +1008,11 @@ function Watchlist({ prices, capexData, onTickerClick }) {
     return map;
   }, [capexData]);
 
+  // Short labels for the filter pills — derived from track IDs so they never go stale
+  const TRACK_SHORT = { compute: "Compute", networking: "Network", photonics: "Photonics", neoclouds: "Data Ctr", power: "Power", frontier: "Frontier" };
+
   const enriched = list.map(t => ({ ticker: t, change: prices[t]?.change ?? prices[t], track: sectorMap[t] ?? null }));
-  const filtered = filter === "all" ? enriched : filter === "gainers" ? enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) >= 0) : enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) < 0);
+  const filtered = filter === "all" ? enriched : enriched.filter(x => x.track?.id === filter);
   const sorted = [...filtered].sort((a, b) => sortDir === "desc" ? ((typeof b.change === 'number' ? b.change : -999) - (typeof a.change === 'number' ? a.change : -999)) : ((typeof a.change === 'number' ? a.change : 999) - (typeof b.change === 'number' ? b.change : 999)));
   const validChanges = enriched.filter(x => typeof x.change === 'number');
   const avg = validChanges.reduce((s, x) => s + x.change, 0) / (validChanges.length || 1);
@@ -1029,8 +1032,8 @@ function Watchlist({ prices, capexData, onTickerClick }) {
           <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Track positions · add any ticker</p>
         </div>
         <div style={{ display: "flex", gap: 12, fontSize: 12 }}>
-          <div style={{ textAlign: "center" }}><div style={{ color: "#34d399", fontWeight: 700 }}>{enriched.filter(x => (typeof x.change === 'number' ? x.change : -1) >= 0).length}</div><div style={{ color: "#475569", fontSize: 10 }}>UP</div></div>
-          <div style={{ textAlign: "center" }}><div style={{ color: "#f87171", fontWeight: 700 }}>{enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) < 0).length}</div><div style={{ color: "#475569", fontSize: 10 }}>DOWN</div></div>
+          <div style={{ textAlign: "center" }}><div style={{ color: "#34d399", fontWeight: 700 }}>{filtered.filter(x => (typeof x.change === 'number' ? x.change : -1) >= 0).length}</div><div style={{ color: "#475569", fontSize: 10 }}>UP</div></div>
+          <div style={{ textAlign: "center" }}><div style={{ color: "#f87171", fontWeight: 700 }}>{filtered.filter(x => (typeof x.change === 'number' ? x.change : 0) < 0).length}</div><div style={{ color: "#475569", fontSize: 10 }}>DOWN</div></div>
           <div style={{ textAlign: "center" }}><div style={{ color: avg >= 0 ? "#34d399" : "#f87171", fontWeight: 700 }}>{avg >= 0 ? "+" : ""}{avg.toFixed(2)}%</div><div style={{ color: "#475569", fontSize: 10 }}>AVG</div></div>
         </div>
       </div>
@@ -1038,10 +1041,15 @@ function Watchlist({ prices, capexData, onTickerClick }) {
         <input value={input} onChange={e => setInput(e.target.value.toUpperCase())} onKeyDown={e => e.key === "Enter" && add()} placeholder="Add ticker… e.g. NVDA" style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "7px 12px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit", outline: "none" }} />
         <button onClick={add} style={{ background: "rgba(96,165,250,0.12)", border: "1px solid rgba(96,165,250,0.25)", color: "#60a5fa", borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>+ Add</button>
       </div>
-      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-        {["all", "gainers", "losers"].map(f => (
-          <button key={f} onClick={() => setFilter(f)} style={{ background: filter === f ? "rgba(255,255,255,0.08)" : "transparent", border: `1px solid ${filter === f ? "rgba(255,255,255,0.15)" : "transparent"}`, color: filter === f ? "#e2e8f0" : "#475569", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit", textTransform: "capitalize" }}>{f}</button>
-        ))}
+      <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
+        <button onClick={() => setFilter("all")} style={{ background: filter === "all" ? "rgba(255,255,255,0.08)" : "transparent", border: `1px solid ${filter === "all" ? "rgba(255,255,255,0.15)" : "transparent"}`, color: filter === "all" ? "#e2e8f0" : "#475569", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>All</button>
+        {capexData.tracks.map(track => {
+          const label = TRACK_SHORT[track.id] ?? track.label.split(" ")[0];
+          const active = filter === track.id;
+          return (
+            <button key={track.id} onClick={() => setFilter(active ? "all" : track.id)} style={{ background: active ? `${track.color}22` : "transparent", border: `1px solid ${active ? track.color + "66" : "transparent"}`, color: active ? track.color : "#475569", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit", transition: "all .15s" }}>{label}</button>
+          );
+        })}
         <button onClick={() => setSortDir(d => d === "desc" ? "asc" : "desc")} style={{ marginLeft: "auto", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>Sort {sortDir === "desc" ? "↓" : "↑"}</button>
       </div>
       
