@@ -52,7 +52,9 @@ export async function onRequest(context) {
       }
 
       if (env.SHARED_DATA && body.capexData) {
-        await env.SHARED_DATA.put("capexData", JSON.stringify(body.capexData));
+        // Always persist the version field so future deploys can detect stale KV data
+        const payload = { ...body.capexData, version: body.capexData.version ?? 1 };
+        await env.SHARED_DATA.put("capexData", JSON.stringify(payload));
         return new Response(JSON.stringify({ success: true }), { status: 200, headers });
       }
 

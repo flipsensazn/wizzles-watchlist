@@ -118,6 +118,7 @@ async function fetchQuoteSummary(ticker) {
 
 // ── DEFAULT CAPEX DATA ────────────────────────────────────
 const CAPEX_DATA = {
+  version: 2,
   companies: ["AMZN", "MSFT", "GOOG", "META", "ORCL"],
   tracks: [
     {
@@ -133,8 +134,10 @@ const CAPEX_DATA = {
           materials: ["Advanced Packaging CoWoS","HBM","EUV Photomasks"] },
         { id: "foundry", label: "Leading-Edge Foundry", badge: "CAPACITY CONSTRAINED", badgeColor: "#f59e0b",
           tickers: ["TSM","TSEM","GFS"], materials: ["Silicon Carbide","Neon Gas","EUV Resist","Cobalt"] },
-        { id: "equip", label: "Semiconductor Equipment", badge: null, tickers: ["AMAT","LRCX","KLAC","ASML","AMKR","ASX"],
+        { id: "equip", label: "Semiconductor Equipment", badge: null, tickers: ["AMAT","LRCX","ASML"],
           materials: ["Rare Earth Magnets","Fluorine Gas","Quartz"] },
+        { id: "packaging", label: "Advanced Packaging", badge: null, tickers: ["AMKR","ASX","CAMT","ONTO","KLAC"],
+          materials: ["Advanced Packaging CoWoS","HBM","Fan-Out Wafer"] },
       ],
     },
     {
@@ -147,10 +150,12 @@ const CAPEX_DATA = {
           tickers: ["LITE","COHR"], materials: ["Indium Phosphide","Gallium Arsenide","Single-Mode Fiber"] },
         { id: "cable", label: "Cables & Connectors", badge: null, tickers: ["FN"],
           materials: ["Copper","Optical Fiber SiO2","Polymer Cladding"] },
+        { id: "cyber", label: "Cybersecurity", badge: null, tickers: ["PANW","CRWD","ZS"],
+          materials: ["Secure Enclaves","HSM Hardware","Zero Trust Infrastructure"] },
       ],
     },
     {
-      id: "photonics", label: "Photonics & Optical Interconnect", value: "~$40B", capex: 35,
+      id: "photonics", label: "Photonics & Interconnects", value: "~$40B", capex: 35,
       color: "#fbbf24", borderColor: "#f59e0b",
       subsectors: [
         { id: "engine", label: "Optical Engine & Transceiver L1", badge: null,
@@ -168,6 +173,8 @@ const CAPEX_DATA = {
           materials: ["Trimethylindium TMIn","Phosphine PH3","Quartz Chambers"] },
         { id: "siph", label: "SiPh Foundry L4", badge: null, tickers: ["TSEM","GFS"],
           materials: ["Silicon-on-Insulator Wafers","Germanium","TiN Electrodes"] },
+        { id: "interconnects", label: "High-Speed Interconnects", badge: null, tickers: ["APH","TEL"],
+          materials: ["High-Speed Copper","Differential Pair PCB","Signal Integrity"] },
       ],
     },
     {
@@ -181,6 +188,8 @@ const CAPEX_DATA = {
           materials: ["Power Infrastructure","Cooling Systems","High-density Racks"] },
         { id: "servers", label: "AI Server Infrastructure", badge: null, tickers: ["SMCI","VRT"],
           materials: ["Copper Heat Pipes","PCB","Aluminum Extrusions"] },
+        { id: "mep", label: "Mechanical, Electrical & Plumbing", badge: null, tickers: ["FIX","EME","MTZ"],
+          materials: ["Electrical Conduit","HVAC Systems","Industrial Piping"] },
       ],
     },
     {
@@ -188,8 +197,11 @@ const CAPEX_DATA = {
       color: "#fb923c", borderColor: "#f97316",
       subsectors: [
         { id: "grid", label: "Power Generation & Utilities", badge: "GRID BOTTLENECK", badgeColor: "#ef4444",
-          tickers: ["VST","NEE","BE","LEU","OKLO","SMR"],
+          tickers: ["VST","NEE","BE"],
           materials: ["Copper Grid","Silicon Steel Transformers","Lithium Storage"] },
+        { id: "nuclear", label: "Nuclear", badge: "EMERGING", badgeColor: "#fb923c",
+          tickers: ["OKLO","SMR","LEU","ASPI"],
+          materials: ["Enriched Uranium","Zirconium Cladding","Boron Control Rods"] },
         { id: "ups", label: "Power Management & UPS", badge: null, tickers: ["ETN","VRT","PLPC","ENS"],
           materials: ["Silicon Carbide SiC","Electrolytic Capacitors","Copper Winding"] },
         { id: "cooling", label: "Liquid & Immersion Cooling", badge: "EMERGING", badgeColor: "#60a5fa",
@@ -210,7 +222,12 @@ const CAPEX_DATA = {
         { id: "neuro", label: "Neuromorphic & Edge AI", badge: "EARLY STAGE", badgeColor: "#c084fc",
           tickers: ["GTLB","OSS"], materials: ["Phase-Change Materials","Memristive Oxides","Hafnium Oxide"] },
         { id: "space", label: "Space", badge: "EARLY STAGE", badgeColor: "#c084fc",
-          tickers: ["TSLA","RKLB","ASTS"], materials: ["Phase-Change Materials","Memristive Oxides","Hafnium Oxide"] },
+          tickers: ["RKLB","ASTS"], materials: ["Phase-Change Materials","Memristive Oxides","Hafnium Oxide"] },
+        { id: "saas", label: "SaaS", badge: null, tickers: ["PLTR","SNOW","NOW"],
+          materials: ["Cloud Infrastructure","API Gateways","Multi-tenant Architecture"] },
+        { id: "robotics", label: "Robotics", badge: "EMERGING", badgeColor: "#c084fc",
+          tickers: ["TER","SYM","TSLA"],
+          materials: ["Servo Motors","LiDAR Sensors","Carbon Fiber Composites"] },
         { id: "metals", label: "Precious Metals & Commodities", badge: "MACRO HEDGE", badgeColor: "#f59e0b",
           tickers: ["USAS","COPX","SLV","GLD","NEM"],
           materials: [
@@ -1382,7 +1399,7 @@ export default function App() {
 
     fetch("/capex")
       .then(res => res.json())
-      .then(data => { if (data.capexData) setCapexData(data.capexData); })
+      .then(data => { if (data.capexData && (data.capexData.version ?? 0) >= CAPEX_DATA.version) setCapexData(data.capexData); })
       .catch(e => console.log("Capex fetch failed"));
   }, []);
 
