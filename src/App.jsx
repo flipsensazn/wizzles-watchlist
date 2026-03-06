@@ -1687,8 +1687,11 @@ export default function App() {
   }
 
   const allTickerCount = useMemo(() => getAllTickers(capexData).length, [capexData]);
-  const gainers = Object.values(prices).filter(v => (v?.change ?? v) > 0).length;
-  const losers = Object.values(prices).filter(v => (v?.change ?? v) < 0).length;
+  // Count only the capex watchlist tickers — prices also contains market strip
+  // tickers (indices, crypto, hyperscalers) which would inflate these counts.
+  const watchlistTickers = useMemo(() => getAllTickers(capexData), [capexData]);
+  const gainers = watchlistTickers.filter(t => (prices[t]?.change ?? prices[t]) > 0).length;
+  const losers  = watchlistTickers.filter(t => (prices[t]?.change ?? prices[t]) < 0).length;
   const activeData = capexData.tracks.find(t => t.id === activeTrack);
   const tickerEntries = Object.entries(prices);
 
