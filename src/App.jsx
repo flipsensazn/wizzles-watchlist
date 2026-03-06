@@ -1593,7 +1593,7 @@ export default function App() {
 
   useEffect(() => {
     refresh();
-    const id = setInterval(() => { if (!document.hidden) refresh(); }, 15000); 
+    const id = setInterval(() => { if (!document.hidden) refresh(); }, 30000); 
     return () => clearInterval(id);
   }, [refresh]);
 
