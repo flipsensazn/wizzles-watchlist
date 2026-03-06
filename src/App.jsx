@@ -525,21 +525,31 @@ function secsUntilNextEvent(date = new Date()) {
   const totalSecs = h * 3600 + m * 60 + s;
   const { state } = getMarketState(date);
 
-  // Seconds until the boundary that ends the current state
+  // During active sessions: count down to the closing boundary
   if (state === "pre")  return (9 * 3600 + 30 * 60) - totalSecs;
   if (state === "open") return (16 * 3600)           - totalSecs;
   if (state === "post") return (20 * 3600)           - totalSecs;
 
-  // Closed: find seconds until next 4:00am ET on a trading day
-  let msAhead = 0;
-  for (let d = 1; d <= 5; d++) {
+  // Closed/overnight: count down to 9:30am ET on the next trading day.
+  // Check today first (handles the overnight window before today's open),
+  // then look ahead up to 5 days for the next non-weekend, non-holiday day.
+  const openSecs = 9 * 3600 + 30 * 60; // 9:30am in seconds
+
+  // Is today itself a trading day and 9:30am hasn't passed yet?
+  const isWeekend = dow === "Sat" || dow === "Sun";
+  const isHoliday = NYSE_HOLIDAYS_2025_2026.has(dateStr);
+  if (!isWeekend && !isHoliday && totalSecs < openSecs) {
+    return openSecs - totalSecs;
+  }
+
+  // Otherwise find the next trading day
+  for (let d = 1; d <= 7; d++) {
     const candidate = new Date(date.getTime() + d * 86400000);
     const cny = getNYTime(candidate);
     if (cny.dow !== "Sat" && cny.dow !== "Sun" && !NYSE_HOLIDAYS_2025_2026.has(cny.dateStr)) {
-      // Seconds from now until 4:00am ET on that day
-      const secsToMidnight = 86400 - totalSecs;
-      const secsFromMidnightTo4am = 4 * 3600;
-      return secsToMidnight + (d - 1) * 86400 + secsFromMidnightTo4am;
+      // Seconds remaining today + full days until candidate + seconds to 9:30am
+      const secsLeftToday = 86400 - totalSecs;
+      return secsLeftToday + (d - 1) * 86400 + openSecs;
     }
   }
   return 0;
@@ -994,12 +1004,22 @@ function DonutChart({ prices, capexData }) {
 
 // ── WATCHLIST ─────────────────────────────────────────────
 function Watchlist({ prices, capexData, onTickerClick }) {
-  const [list, setList] = useState(() => [...new Set(capexData.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))]);
-  const [input, setInput] = useState("");
-  const [sortDir, setSortDir] = useState("desc");
-  const [filter, setFilter] = useState("all");
+  const [tab, setTab]           = useState("watch"); // "watch" | "short"
+  const [watchList, setWatchList] = useState(() => [...new Set(capexData.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))]);
+  const [shortList, setShortList] = useState([]);
+  const [input, setInput]       = useState("");
+  const [sortDir, setSortDir]   = useState("desc");
+  const [filter, setFilter]     = useState("all");
 
-  // Memoized O(1) lookup map — replaces the O(n²) getSector linear search
+  const isShort = tab === "short";
+  const list    = isShort ? shortList : watchList;
+  const setList = isShort ? setShortList : setWatchList;
+  const accent  = isShort ? "#f59e0b" : "#60a5fa";
+
+  // Reset filter when switching tabs
+  function switchTab(t) { setTab(t); setFilter("all"); setInput(""); }
+
+  // Memoized O(1) sector lookup
   const sectorMap = useMemo(() => {
     const map = {};
     for (const track of capexData.tracks)
@@ -1008,12 +1028,16 @@ function Watchlist({ prices, capexData, onTickerClick }) {
     return map;
   }, [capexData]);
 
-  const enriched = list.map(t => ({ ticker: t, change: prices[t]?.change ?? prices[t], track: sectorMap[t] ?? null }));
-  const filtered = filter === "all" ? enriched : filter === "gainers" ? enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) >= 0) : enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) < 0);
-  const sorted = [...filtered].sort((a, b) => sortDir === "desc" ? ((typeof b.change === 'number' ? b.change : -999) - (typeof a.change === 'number' ? a.change : -999)) : ((typeof a.change === 'number' ? a.change : 999) - (typeof b.change === 'number' ? b.change : 999)));
-  const validChanges = enriched.filter(x => typeof x.change === 'number');
-  const avg = validChanges.reduce((s, x) => s + x.change, 0) / (validChanges.length || 1);
-  const maxAbs = Math.max(...enriched.map(x => Math.abs(typeof x.change === 'number' ? x.change : 0)), 1);
+  const TRACK_SHORT = { compute: "Compute", networking: "Network", photonics: "Photonics", neoclouds: "Data Ctr", power: "Power", frontier: "Frontier" };
+
+  const enriched     = list.map(t => ({ ticker: t, change: prices[t]?.change ?? prices[t], track: sectorMap[t] ?? null }));
+  const filtered     = filter === "all" ? enriched : enriched.filter(x => x.track?.id === filter);
+  const sorted       = [...filtered].sort((a, b) => sortDir === "desc"
+    ? ((typeof b.change === 'number' ? b.change : -999) - (typeof a.change === 'number' ? a.change : -999))
+    : ((typeof a.change === 'number' ? a.change : 999)  - (typeof b.change === 'number' ? b.change : 999)));
+  const validChanges = filtered.filter(x => typeof x.change === 'number');
+  const avg          = validChanges.reduce((s, x) => s + x.change, 0) / (validChanges.length || 1);
+  const maxAbs       = Math.max(...enriched.map(x => Math.abs(typeof x.change === 'number' ? x.change : 0)), 1);
 
   function add() {
     const sym = input.trim().toUpperCase();
@@ -1023,41 +1047,82 @@ function Watchlist({ prices, capexData, onTickerClick }) {
 
   return (
     <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, display: "flex", flexDirection: "column", gap: 14, height: "100%" }}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: 8 }}>
-        <div>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Watchlist</h3>
-          <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Track positions · add any ticker</p>
+
+      {/* ── TAB ROW ── */}
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
+        <div style={{ display: "flex", gap: 2, background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: 3 }}>
+          {[["watch","👁 Watchlist"],["short","⭐ Shortlist"]].map(([id, label]) => (
+            <button key={id} onClick={() => switchTab(id)} style={{
+              background: tab === id ? (id === "short" ? "rgba(245,158,11,0.15)" : "rgba(96,165,250,0.12)") : "transparent",
+              border: `1px solid ${tab === id ? (id === "short" ? "rgba(245,158,11,0.35)" : "rgba(96,165,250,0.25)") : "transparent"}`,
+              color: tab === id ? (id === "short" ? "#f59e0b" : "#60a5fa") : "#475569",
+              borderRadius: 7, padding: "5px 14px", cursor: "pointer", fontSize: 12, fontFamily: "inherit",
+              fontWeight: tab === id ? 700 : 400, transition: "all .15s",
+            }}>{label}</button>
+          ))}
         </div>
+        {/* Stats */}
         <div style={{ display: "flex", gap: 12, fontSize: 12 }}>
-          <div style={{ textAlign: "center" }}><div style={{ color: "#34d399", fontWeight: 700 }}>{enriched.filter(x => (typeof x.change === 'number' ? x.change : -1) >= 0).length}</div><div style={{ color: "#475569", fontSize: 10 }}>UP</div></div>
-          <div style={{ textAlign: "center" }}><div style={{ color: "#f87171", fontWeight: 700 }}>{enriched.filter(x => (typeof x.change === 'number' ? x.change : 0) < 0).length}</div><div style={{ color: "#475569", fontSize: 10 }}>DOWN</div></div>
-          <div style={{ textAlign: "center" }}><div style={{ color: avg >= 0 ? "#34d399" : "#f87171", fontWeight: 700 }}>{avg >= 0 ? "+" : ""}{avg.toFixed(2)}%</div><div style={{ color: "#475569", fontSize: 10 }}>AVG</div></div>
+          <div style={{ textAlign: "center" }}><div style={{ color: "#34d399", fontWeight: 700 }}>{filtered.filter(x => (typeof x.change === 'number' ? x.change : -1) >= 0).length}</div><div style={{ color: "#475569", fontSize: 10 }}>UP</div></div>
+          <div style={{ textAlign: "center" }}><div style={{ color: "#f87171", fontWeight: 700 }}>{filtered.filter(x => (typeof x.change === 'number' ? x.change : 0) < 0).length}</div><div style={{ color: "#475569", fontSize: 10 }}>DOWN</div></div>
+          <div style={{ textAlign: "center" }}><div style={{ color: avg >= 0 ? "#34d399" : "#f87171", fontWeight: 700 }}>{validChanges.length ? (avg >= 0 ? "+" : "") + avg.toFixed(2) + "%" : "—"}</div><div style={{ color: "#475569", fontSize: 10 }}>AVG</div></div>
         </div>
       </div>
+
+      {/* Shortlist description */}
+      {isShort && (
+        <p style={{ fontSize: 11, color: "#64748b", margin: 0, marginTop: -6 }}>
+          Potential investment opportunities · personal picks
+        </p>
+      )}
+
+      {/* ── ADD ROW ── */}
       <div style={{ display: "flex", gap: 8 }}>
-        <input value={input} onChange={e => setInput(e.target.value.toUpperCase())} onKeyDown={e => e.key === "Enter" && add()} placeholder="Add ticker… e.g. NVDA" style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "7px 12px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit", outline: "none" }} />
-        <button onClick={add} style={{ background: "rgba(96,165,250,0.12)", border: "1px solid rgba(96,165,250,0.25)", color: "#60a5fa", borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>+ Add</button>
+        <input
+          value={input}
+          onChange={e => setInput(e.target.value.toUpperCase())}
+          onKeyDown={e => e.key === "Enter" && add()}
+          placeholder={isShort ? "Add opportunity… e.g. NVDA" : "Add ticker… e.g. NVDA"}
+          style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "7px 12px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit", outline: "none" }}
+        />
+        <button onClick={add} style={{ background: `${accent}1a`, border: `1px solid ${accent}40`, color: accent, borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>+ Add</button>
       </div>
-      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
-        {["all", "gainers", "losers"].map(f => (
-          <button key={f} onClick={() => setFilter(f)} style={{ background: filter === f ? "rgba(255,255,255,0.08)" : "transparent", border: `1px solid ${filter === f ? "rgba(255,255,255,0.15)" : "transparent"}`, color: filter === f ? "#e2e8f0" : "#475569", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit", textTransform: "capitalize" }}>{f}</button>
-        ))}
+
+      {/* ── SECTOR FILTER + SORT ── */}
+      <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
+        <button onClick={() => setFilter("all")} style={{ background: filter === "all" ? "rgba(255,255,255,0.08)" : "transparent", border: `1px solid ${filter === "all" ? "rgba(255,255,255,0.15)" : "transparent"}`, color: filter === "all" ? "#e2e8f0" : "#475569", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>All</button>
+        {capexData.tracks.map(track => {
+          const label = TRACK_SHORT[track.id] ?? track.label.split(" ")[0];
+          const active = filter === track.id;
+          return (
+            <button key={track.id} onClick={() => setFilter(active ? "all" : track.id)} style={{ background: active ? `${track.color}22` : "transparent", border: `1px solid ${active ? track.color + "66" : "transparent"}`, color: active ? track.color : "#475569", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit", transition: "all .15s" }}>{label}</button>
+          );
+        })}
         <button onClick={() => setSortDir(d => d === "desc" ? "asc" : "desc")} style={{ marginLeft: "auto", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>Sort {sortDir === "desc" ? "↓" : "↑"}</button>
       </div>
-      
+
+      {/* ── TICKER ROWS ── */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, overflowY: "auto", minHeight: 0, paddingRight: 4 }}>
+        {sorted.length === 0 && (
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: "#334155", fontSize: 12 }}>
+            <span style={{ fontSize: 28 }}>{isShort ? "⭐" : "👁"}</span>
+            <span>{isShort ? "Add tickers you're watching for entry" : "No tickers match this filter"}</span>
+          </div>
+        )}
         {sorted.map((item, idx) => {
-          const pos = (typeof item.change === 'number' ? item.change : 0) >= 0;
+          const pos  = (typeof item.change === 'number' ? item.change : 0) >= 0;
           const barW = typeof item.change === 'number' ? Math.abs(item.change) / maxAbs * 100 : 0;
           return (
-            <div key={item.ticker} style={{ borderRadius: 8, padding: "10px 10px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background .15s" }} onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"} onMouseLeave={e => e.currentTarget.style.background = ""}>
+            <div key={item.ticker} style={{ borderRadius: 8, padding: "10px 10px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background .15s" }}
+              onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
+              onMouseLeave={e => e.currentTarget.style.background = ""}>
               <span style={{ fontSize: 10, color: "#334155", width: 16, textAlign: "right" }}>{idx + 1}</span>
-              <div 
-                style={{ flex: "0 0 auto", minWidth: 60, cursor: "pointer" }}
-                onClick={(e) => onTickerClick?.(item.ticker, e.currentTarget.getBoundingClientRect())}
-              >
+              <div style={{ flex: "0 0 auto", minWidth: 60, cursor: "pointer" }} onClick={e => onTickerClick?.(item.ticker, e.currentTarget.getBoundingClientRect())}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{item.ticker}</div>
-                {item.track && <div style={{ fontSize: 9, color: item.track.color, marginTop: 1 }}>{item.track.label.split(" ").slice(0, 2).join(" ")}</div>}
+                {item.track
+                  ? <div style={{ fontSize: 9, color: item.track.color, marginTop: 1 }}>{item.track.label.split(" ").slice(0,2).join(" ")}</div>
+                  : isShort && <div style={{ fontSize: 9, color: "#f59e0b", marginTop: 1 }}>Shortlist</div>
+                }
               </div>
               <div style={{ flex: 1, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.04)", overflow: "hidden" }}>
                 {typeof item.change === 'number' && <div style={{ height: "100%", borderRadius: 2, width: `${barW}%`, background: pos ? "linear-gradient(90deg,#065f46,#34d399)" : "linear-gradient(90deg,#7f1d1d,#ef4444)", transition: "width .4s ease" }} />}
