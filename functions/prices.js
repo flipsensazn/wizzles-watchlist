@@ -147,9 +147,10 @@ export async function onRequest(context) {
           }
 
           results[q.symbol] = {
-            price:   parseFloat(price.toFixed(2)),
-            change:  parseFloat(change.toFixed(2)),
+            price:    parseFloat(price.toFixed(2)),
+            change:   parseFloat(change.toFixed(2)),
             session,
+            week52Low: q.fiftyTwoWeekLow != null ? parseFloat(q.fiftyTwoWeekLow.toFixed(2)) : null,
           };
         }
       } else if (res.status === 401 || res.status === 403) {
