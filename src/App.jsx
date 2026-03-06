@@ -896,7 +896,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
                         ? `linear-gradient(135deg, ${bg} 60%, rgba(245,158,11,0.18) 100%)`
                         : bg,
                       borderRadius: 8,
-                      padding: near52W ? "8px 12px 10px" : "8px 12px",
+                      padding: "8px 12px",
                       border: near52W
                         ? "1px solid #f59e0b"
                         : `1px solid ${bg === "rgba(255,255,255,0.04)" ? "rgba(255,255,255,0.06)" : bg}`,
@@ -919,11 +919,6 @@ function HeatMap({ prices, capexData, onTickerClick }) {
                     {change !== undefined && (
                       <div style={{ fontSize: 10, fontWeight: 600, color: pos ? "#a7f3d0" : "#fca5a5", marginTop: 2 }}>
                         {typeof change === 'number' ? (change >= 0 ? "+" : "") + change + "%" : "—"}
-                      </div>
-                    )}
-                    {near52W && (
-                      <div style={{ fontSize: 8, fontWeight: 700, color: "#f59e0b", marginTop: 3, letterSpacing: "0.03em" }}>
-                        +{near52W.pctAboveLow}% vs low
                       </div>
                     )}
                   </div>
