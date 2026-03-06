@@ -2,8 +2,55 @@
 
 const CACHE_TTL_SECONDS = 30;
 // v2 key ensures any old REGULAR-session snapshots are not served after this deploy
-const KV_CACHE_KEY = "priceCache_v2";
+const KV_CACHE_KEY  = "priceCache_v2";
+// Crumb is valid for hours — cache it in KV to eliminate 2 serial round trips
+// (fc.yahoo.com + getcrumb) on every price request.
+const KV_CRUMB_KEY  = "yahooSession_v1";
+const CRUMB_TTL_MS  = 55 * 60 * 1000; // 55 minutes (Yahoo crumbs last ~1 hour)
+const USER_AGENT    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
+// ── CRUMB HELPER ─────────────────────────────────────────────────────────────
+// Returns { cookie, crumb } — reads from KV first, falls back to a live fetch
+// and writes the result back to KV so the next invocation skips the round trips.
+async function getYahooSession(env) {
+  if (env.SHARED_DATA) {
+    try {
+      const cached = await env.SHARED_DATA.get(KV_CRUMB_KEY, "json");
+      if (cached && cached.timestamp && (Date.now() - cached.timestamp < CRUMB_TTL_MS)) {
+        return { cookie: cached.cookie, crumb: cached.crumb };
+      }
+    } catch (err) {
+      console.error("KV crumb read error:", err);
+    }
+  }
+
+  // Fetch fresh cookie + crumb
+  const cookieRes = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": USER_AGENT } });
+  const rawCookie = cookieRes.headers.get("set-cookie");
+  const cookie    = rawCookie ? rawCookie.split(";")[0] : "";
+
+  const crumbRes = await fetch("https://query1.finance.yahoo.com/v1/test/getcrumb", {
+    headers: { "User-Agent": USER_AGENT, "Cookie": cookie }
+  });
+  const crumb = await crumbRes.text();
+
+  // Persist to KV for reuse across invocations
+  if (env.SHARED_DATA) {
+    try {
+      await env.SHARED_DATA.put(
+        KV_CRUMB_KEY,
+        JSON.stringify({ cookie, crumb, timestamp: Date.now() }),
+        { expirationTtl: 3600 } // KV auto-expiry at 1 hour
+      );
+    } catch (err) {
+      console.error("KV crumb write error:", err);
+    }
+  }
+
+  return { cookie, crumb };
+}
+
+// ── REQUEST HANDLER ──────────────────────────────────────────────────────────
 export async function onRequest(context) {
   const { request, env } = context;
 
@@ -33,7 +80,7 @@ export async function onRequest(context) {
     return new Response(JSON.stringify({ error: "No tickers provided" }), { status: 400, headers });
   }
 
-  // 2. KV CACHE CHECK
+  // 2. KV PRICE CACHE CHECK
   if (env.SHARED_DATA) {
     try {
       const cached = await env.SHARED_DATA.get(KV_CACHE_KEY, "json");
@@ -46,19 +93,12 @@ export async function onRequest(context) {
   }
 
   // 3. FETCH FROM YAHOO (Primary Engine)
+  // getYahooSession() returns a cached crumb — no extra round trips on warm invocations.
   const results = {};
-  const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
   const FINNHUB_KEY = env.FINNHUB_KEY;
 
   try {
-    const cookieRes = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": USER_AGENT } });
-    const rawCookie = cookieRes.headers.get("set-cookie");
-    const cookie = rawCookie ? rawCookie.split(";")[0] : "";
-
-    const crumbRes = await fetch("https://query1.finance.yahoo.com/v1/test/getcrumb", {
-      headers: { "User-Agent": USER_AGENT, "Cookie": cookie }
-    });
-    const crumb = await crumbRes.text();
+    const { cookie, crumb } = await getYahooSession(env);
 
     const batchSize = 40;
     for (let i = 0; i < tickers.length; i += batchSize) {
@@ -83,18 +123,14 @@ export async function onRequest(context) {
           let price, change, session;
 
           if (state === "POST" || state === "POSTPOST") {
-            // After-hours trading window
             price   = q.postMarketPrice ?? q.regularMarketPrice;
             change  = q.postMarketChangePercent ?? q.regularMarketChangePercent ?? 0;
             session = "POST";
           } else if (state === "PRE") {
-            // Pre-market trading window
             price   = q.preMarketPrice ?? q.regularMarketPrice;
             change  = q.preMarketChangePercent ?? q.regularMarketChangePercent ?? 0;
             session = "PRE";
           } else if (state === "CLOSED") {
-            // Weekend / well after AH session — still show last post-market
-            // price if Yahoo has it, otherwise fall back to regular close.
             if (q.postMarketPrice != null) {
               price   = q.postMarketPrice;
               change  = q.postMarketChangePercent ?? q.regularMarketChangePercent ?? 0;
@@ -105,7 +141,6 @@ export async function onRequest(context) {
               session = "CLOSED";
             }
           } else {
-            // REGULAR market hours
             price   = q.regularMarketPrice;
             change  = q.regularMarketChangePercent ?? 0;
             session = "REGULAR";
@@ -117,6 +152,12 @@ export async function onRequest(context) {
             session,
           };
         }
+      } else if (res.status === 401 || res.status === 403) {
+        // Crumb has expired mid-session — evict the KV cache so next request
+        // fetches a fresh one rather than retrying the same stale crumb.
+        if (env.SHARED_DATA) {
+          try { await env.SHARED_DATA.delete(KV_CRUMB_KEY); } catch {}
+        }
       }
     }
   } catch (err) {
@@ -124,10 +165,13 @@ export async function onRequest(context) {
   }
 
   // 4. FINNHUB FALLBACK (only for tickers Yahoo missed)
+  // Run in parallel batches instead of fully serially to reduce latency.
   const missingTickers = tickers.filter(t => !results[t]);
   if (missingTickers.length > 0 && FINNHUB_KEY) {
     const safeMissing = missingTickers.slice(0, 45);
-    for (const t of safeMissing) {
+    const BATCH_SIZE  = 8; // Finnhub free tier: 60 req/min → safe at 8 concurrent
+
+    async function fetchFinnhub(t) {
       try {
         const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${t}&token=${FINNHUB_KEY}`);
         if (res.ok) {
@@ -136,18 +180,26 @@ export async function onRequest(context) {
             results[t] = {
               price:   parseFloat((quote.c ?? 0).toFixed(2)),
               change:  parseFloat(quote.dp.toFixed(2)),
-              session: "REGULAR", // Finnhub doesn't expose session state
+              session: "REGULAR",
             };
           }
         }
-        await new Promise(resolve => setTimeout(resolve, 35));
       } catch (e) {
         console.error(`Finnhub fallback error for ${t}:`, e);
       }
     }
+
+    // Process in parallel batches with a brief pause between each batch
+    for (let i = 0; i < safeMissing.length; i += BATCH_SIZE) {
+      const batch = safeMissing.slice(i, i + BATCH_SIZE);
+      await Promise.all(batch.map(fetchFinnhub));
+      if (i + BATCH_SIZE < safeMissing.length) {
+        await new Promise(resolve => setTimeout(resolve, 200));
+      }
+    }
   }
 
-  // 5. WRITE BACK TO KV CACHE
+  // 5. WRITE BACK TO KV PRICE CACHE
   if (Object.keys(results).length > 0 && env.SHARED_DATA) {
     try {
       const cachePayload = JSON.stringify({ data: results, timestamp: Date.now() });
