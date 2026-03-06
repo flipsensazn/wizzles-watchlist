@@ -1,4 +1,49 @@
 // functions/quote.js
+
+const KV_CRUMB_KEY = "yahooSession_v1";
+const CRUMB_TTL_MS = 55 * 60 * 1000; // 55 minutes
+const USER_AGENT   = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
+
+// ── CRUMB HELPER ─────────────────────────────────────────────────────────────
+// Shared with prices.js — reads from KV first, fetches fresh only when stale.
+// Both functions use the same KV_CRUMB_KEY so they share the cached session.
+async function getYahooSession(env) {
+  if (env.SHARED_DATA) {
+    try {
+      const cached = await env.SHARED_DATA.get(KV_CRUMB_KEY, "json");
+      if (cached && cached.timestamp && (Date.now() - cached.timestamp < CRUMB_TTL_MS)) {
+        return { cookie: cached.cookie, crumb: cached.crumb };
+      }
+    } catch (err) {
+      console.error("KV crumb read error:", err);
+    }
+  }
+
+  const cookieRes = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": USER_AGENT } });
+  const rawCookie = cookieRes.headers.get("set-cookie");
+  const cookie    = rawCookie ? rawCookie.split(";")[0] : "";
+
+  const crumbRes = await fetch("https://query1.finance.yahoo.com/v1/test/getcrumb", {
+    headers: { "User-Agent": USER_AGENT, "Cookie": cookie }
+  });
+  const crumb = await crumbRes.text();
+
+  if (env.SHARED_DATA) {
+    try {
+      await env.SHARED_DATA.put(
+        KV_CRUMB_KEY,
+        JSON.stringify({ cookie, crumb, timestamp: Date.now() }),
+        { expirationTtl: 3600 }
+      );
+    } catch (err) {
+      console.error("KV crumb write error:", err);
+    }
+  }
+
+  return { cookie, crumb };
+}
+
+// ── REQUEST HANDLER ──────────────────────────────────────────────────────────
 export async function onRequest(context) {
   const { request, env } = context;
 
@@ -27,40 +72,40 @@ export async function onRequest(context) {
     return new Response(JSON.stringify({ error: "No ticker provided" }), { status: 400, headers });
   }
 
-  const USER_AGENT = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
-
   try {
-    const cookieRes = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": USER_AGENT } });
-    const rawCookie = cookieRes.headers.get("set-cookie");
-    const cookie = rawCookie ? rawCookie.split(";")[0] : "";
-
-    const crumbRes = await fetch("https://query1.finance.yahoo.com/v1/test/getcrumb", {
-      headers: { "User-Agent": USER_AGENT, "Cookie": cookie }
-    });
-    const crumb = await crumbRes.text();
+    // getYahooSession() uses KV — no extra round trips when the crumb is warm
+    const { cookie, crumb } = await getYahooSession(env);
 
     const modules = "assetProfile,summaryDetail,price,financialData,defaultKeyStatistics";
-    
+
     // Fetch Quote Summary, 1-Month Chart, AND Latest News simultaneously
     const quoteUrl = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${modules}&crumb=${crumb}`;
     const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=1mo&interval=1d&crumb=${crumb}`;
-    const newsUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(ticker)}&quotesCount=0&newsCount=1&crumb=${crumb}`;
-    
+    const newsUrl  = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(ticker)}&quotesCount=0&newsCount=1&crumb=${crumb}`;
+
     const [quoteRes, chartRes, newsRes] = await Promise.all([
       fetch(quoteUrl, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } }),
       fetch(chartUrl, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } }),
-      fetch(newsUrl, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } })
+      fetch(newsUrl,  { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } }),
     ]);
-    
+
+    // If Yahoo rejects the crumb, evict it so the next request fetches fresh
+    if (quoteRes.status === 401 || quoteRes.status === 403) {
+      if (env.SHARED_DATA) {
+        try { await env.SHARED_DATA.delete(KV_CRUMB_KEY); } catch {}
+      }
+      return new Response(JSON.stringify({ error: "Yahoo session expired, please retry" }), { status: 503, headers });
+    }
+
     const quoteData = await quoteRes.json();
     const chartData = await chartRes.json();
-    const newsData = await newsRes.json();
+    const newsData  = await newsRes.json();
 
     // Merge responses into a single payload
     return new Response(JSON.stringify({
       quoteSummary: quoteData.quoteSummary,
-      chart: chartData.chart,
-      news: newsData?.news?.[0] || null // Extract the single latest news item
+      chart:        chartData.chart,
+      news:         newsData?.news?.[0] || null, // Extract the single latest news item
     }), { status: 200, headers });
 
   } catch (err) {
