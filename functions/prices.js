@@ -1,6 +1,6 @@
 // functions/prices.js
 
-const CACHE_TTL_SECONDS = 30;
+const CACHE_TTL_SECONDS = 120; // 2 minutes — keeps KV writes well under the 1,000/day free tier limit
 // v2 key ensures any old REGULAR-session snapshots are not served after this deploy
 const KV_CACHE_KEY  = "priceCache_v2";
 // Crumb is valid for hours — cache it in KV to eliminate 2 serial round trips
