@@ -818,6 +818,19 @@ function TrackPane({ track, prices, isAdmin, onAddTicker, onRemoveTicker, onTick
 }
 
 // ── HEAT MAP ──────────────────────────────────────────────
+// Returns proximity info if ticker's current price is within 25% above its 52W low.
+// Uses data from the prices feed (available immediately on load — no click required).
+function getNear52WLowInfo(priceEntry) {
+  if (!priceEntry) return null;
+  const { price, week52Low } = priceEntry;
+  if (price == null || week52Low == null || week52Low <= 0) return null;
+  const pctAboveLow = ((price - week52Low) / week52Low) * 100;
+  if (pctAboveLow >= 0 && pctAboveLow <= 25) {
+    return { raw52Low: week52Low };
+  }
+  return null;
+}
+
 function HeatMap({ prices, capexData, onTickerClick }) {
   const [tooltip, setTooltip] = useState(null);
 
@@ -849,6 +862,10 @@ function HeatMap({ prices, capexData, onTickerClick }) {
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Portfolio Heat Map</h3>
           <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>All tracked tickers · color = 1D performance</p>
         </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: "#64748b" }}>
+          <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(251,191,36,0.25)", border: "1px solid #f59e0b", boxShadow: "0 0 6px #f59e0b88" }} />
+          <span>within 25% of 52W low</span>
+        </div>
       </div>
       {trackCells.map(({ track, cells }) => {
         return (
@@ -867,18 +884,38 @@ function HeatMap({ prices, capexData, onTickerClick }) {
                 const sessionLabel = session === "POST" || session === "CLOSED" ? "AH" : session === "PRE" ? "PM" : null;
                 const bg = getHeatColor(change);
                 const pos = change === undefined || change >= 0;
+                const near52W = getNear52WLowInfo(entry);
                 return (
                   <div key={ticker}
-                    onMouseEnter={e => setTooltip({ ticker, change, price: currentPrice, session: sessionLabel, track: track.label, rect: e.currentTarget.getBoundingClientRect() })}
+                    onMouseEnter={e => setTooltip({ ticker, change, price: currentPrice, session: sessionLabel, track: track.label, near52W, rect: e.currentTarget.getBoundingClientRect() })}
                     onMouseLeave={() => setTooltip(null)}
                     onClick={e => { e.stopPropagation(); onTickerClick?.(ticker, e.currentTarget.getBoundingClientRect()); }}
-                    style={{ position: "relative", background: bg, borderRadius: 8, padding: "8px 12px", border: `1px solid ${bg === "rgba(255,255,255,0.04)" ? "rgba(255,255,255,0.06)" : bg}`, minWidth: 60, textAlign: "center", cursor: "pointer", transition: "filter .15s, transform .15s" }}
+                    style={{
+                      position: "relative",
+                      background: near52W
+                        ? `linear-gradient(135deg, ${bg} 60%, rgba(245,158,11,0.18) 100%)`
+                        : bg,
+                      borderRadius: 8,
+                      padding: "8px 12px",
+                      border: near52W
+                        ? "1px solid #f59e0b"
+                        : `1px solid ${bg === "rgba(255,255,255,0.04)" ? "rgba(255,255,255,0.06)" : bg}`,
+                      boxShadow: near52W ? "0 0 10px rgba(245,158,11,0.45), inset 0 0 12px rgba(245,158,11,0.08)" : "none",
+                      animation: near52W ? "glowPulse52W 2.4s ease-in-out infinite" : "none",
+                      minWidth: 60,
+                      textAlign: "center",
+                      cursor: "pointer",
+                      transition: "filter .15s, transform .15s",
+                    }}
                     onMouseOver={e => { e.currentTarget.style.filter = "brightness(1.4)"; e.currentTarget.style.transform = "scale(1.06)"; }}
                     onMouseOut={e => { e.currentTarget.style.filter = ""; e.currentTarget.style.transform = ""; }}>
-                    {sessionLabel && (
+                    {sessionLabel && !near52W && (
                       <div style={{ position: "absolute", top: 3, right: 4, fontSize: 7, fontWeight: 800, color: "rgba(255,255,255,0.55)", letterSpacing: "0.05em", lineHeight: 1 }}>{sessionLabel}</div>
                     )}
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#f1f5f9" }}>{ticker}</div>
+                    {near52W && (
+                      <div style={{ position: "absolute", top: 3, right: 4, fontSize: 7, fontWeight: 800, color: "#f59e0b", letterSpacing: "0.05em", lineHeight: 1 }}>▼52W</div>
+                    )}
+                    <div style={{ fontSize: 12, fontWeight: 700, color: near52W ? "#fef3c7" : "#f1f5f9" }}>{ticker}</div>
                     {change !== undefined && (
                       <div style={{ fontSize: 10, fontWeight: 600, color: pos ? "#a7f3d0" : "#fca5a5", marginTop: 2 }}>
                         {typeof change === 'number' ? (change >= 0 ? "+" : "") + change + "%" : "—"}
@@ -893,12 +930,20 @@ function HeatMap({ prices, capexData, onTickerClick }) {
       })}
       
       {tooltip && (
-        <div style={{ position: "fixed", top: tooltip.rect.top - 52, left: tooltip.rect.left, background: "rgba(18,18,18,0.95)", border: `1px solid ${(tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171"}44`, borderRadius: 8, padding: "7px 12px", pointerEvents: "none", zIndex: 1000, display: "flex", alignItems: "center", gap: 10 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{tooltip.ticker}</span>
-          {tooltip.price !== undefined && <span style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0" }}>${tooltip.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
-          {tooltip.change !== undefined && <span style={{ fontSize: 12, fontWeight: 700, color: (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171" }}>{typeof tooltip.change === 'number' ? (tooltip.change >= 0 ? "+" : "") + tooltip.change + "%" : "—"}</span>}
-          {tooltip.session && <span style={{ fontSize: 9, fontWeight: 700, color: "#64748b", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.05em" }}>{tooltip.session}</span>}
-          <span style={{ fontSize: 10, color: "#475569" }}>{tooltip.track}</span>
+        <div style={{ position: "fixed", top: tooltip.rect.top - (tooltip.near52W ? 68 : 52), left: tooltip.rect.left, background: "rgba(18,18,18,0.95)", border: `1px solid ${tooltip.near52W ? "#f59e0b" : (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171"}44`, borderRadius: 8, padding: "7px 12px", pointerEvents: "none", zIndex: 1000, display: "flex", flexDirection: "column", gap: 4, minWidth: 140 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{tooltip.ticker}</span>
+            {tooltip.price !== undefined && <span style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0" }}>${tooltip.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+            {tooltip.change !== undefined && <span style={{ fontSize: 12, fontWeight: 700, color: (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171" }}>{typeof tooltip.change === 'number' ? (tooltip.change >= 0 ? "+" : "") + tooltip.change + "%" : "—"}</span>}
+            {tooltip.session && <span style={{ fontSize: 9, fontWeight: 700, color: "#64748b", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.05em" }}>{tooltip.session}</span>}
+            <span style={{ fontSize: 10, color: "#475569" }}>{tooltip.track}</span>
+          </div>
+          {tooltip.near52W && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 8, fontWeight: 800, color: "#f59e0b", background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.4)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.08em" }}>▼ 52W LOW ZONE</span>
+              <span style={{ fontSize: 10, color: "#f59e0b" }}>within 25% of ${Number(tooltip.near52W.raw52Low).toFixed(2)}</span>
+            </div>
+          )}
         </div>
       )}
     </div>
@@ -1467,6 +1512,10 @@ const GLOBAL_STYLES = `
   ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 4px; }
   @keyframes scroll-left { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
   @keyframes fadeSlideIn { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }
+  @keyframes glowPulse52W {
+    0%, 100% { box-shadow: 0 0 10px rgba(245,158,11,0.45), inset 0 0 12px rgba(245,158,11,0.08); border-color: rgba(245,158,11,0.7); }
+    50% { box-shadow: 0 0 18px rgba(245,158,11,0.75), 0 0 32px rgba(245,158,11,0.25), inset 0 0 16px rgba(245,158,11,0.14); border-color: #f59e0b; }
+  }
   @keyframes pulseDot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(.7); } }
   .ticker-tape { animation: scroll-left 80s linear infinite; white-space: nowrap; display: inline-flex; gap: 24px; }
   .pulse { animation: pulseDot 2s infinite; }

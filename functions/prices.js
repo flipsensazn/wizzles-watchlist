@@ -2,7 +2,7 @@
 
 const CACHE_TTL_SECONDS = 60; // 1 minutes — keeps KV writes well under the 1,000/day free tier limit
 // v2 key ensures any old REGULAR-session snapshots are not served after this deploy
-const KV_CACHE_KEY  = "priceCache_v2";
+const KV_CACHE_KEY  = "priceCache_v3";
 // Crumb is valid for hours — cache it in KV to eliminate 2 serial round trips
 // (fc.yahoo.com + getcrumb) on every price request.
 const KV_CRUMB_KEY  = "yahooSession_v1";
@@ -147,9 +147,10 @@ export async function onRequest(context) {
           }
 
           results[q.symbol] = {
-            price:   parseFloat(price.toFixed(2)),
-            change:  parseFloat(change.toFixed(2)),
+            price:    parseFloat(price.toFixed(2)),
+            change:   parseFloat(change.toFixed(2)),
             session,
+            week52Low: q.fiftyTwoWeekLow != null ? parseFloat(q.fiftyTwoWeekLow.toFixed(2)) : null,
           };
         }
       } else if (res.status === 401 || res.status === 403) {
