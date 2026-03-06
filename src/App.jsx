@@ -818,28 +818,21 @@ function TrackPane({ track, prices, isAdmin, onAddTicker, onRemoveTicker, onTick
 }
 
 // ── HEAT MAP ──────────────────────────────────────────────
-// Returns true if ticker's current price is within 25% above its 52W low,
-// based on data already loaded into the module-level quoteCache.
-function getNear52WLowInfo(ticker) {
-  const cached = quoteCache[ticker]?.data;
-  if (!cached) return null;
-  const { rawPrice, raw52Low } = cached;
-  if (rawPrice == null || raw52Low == null || raw52Low <= 0) return null;
-  const pctAboveLow = ((rawPrice - raw52Low) / raw52Low) * 100;
-  if (pctAboveLow <= 25) {
-    return { pctAboveLow: pctAboveLow.toFixed(1), raw52Low };
+// Returns proximity info if ticker's current price is within 25% above its 52W low.
+// Uses data from the prices feed (available immediately on load — no click required).
+function getNear52WLowInfo(priceEntry) {
+  if (!priceEntry) return null;
+  const { price, week52Low } = priceEntry;
+  if (price == null || week52Low == null || week52Low <= 0) return null;
+  const pctAboveLow = ((price - week52Low) / week52Low) * 100;
+  if (pctAboveLow >= 0 && pctAboveLow <= 25) {
+    return { pctAboveLow: pctAboveLow.toFixed(1), raw52Low: week52Low };
   }
   return null;
 }
 
 function HeatMap({ prices, capexData, onTickerClick }) {
   const [tooltip, setTooltip] = useState(null);
-  // Tick every 5s to pick up newly-cached quote data for the 52W glow
-  const [cacheTick, setCacheTick] = useState(0);
-  useEffect(() => {
-    const id = setInterval(() => setCacheTick(t => t + 1), 5000);
-    return () => clearInterval(id);
-  }, []);
 
   // Memoized: capexData changes rarely — no need to recompute cells on every price tick
   const trackCells = useMemo(() =>
@@ -891,7 +884,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
                 const sessionLabel = session === "POST" || session === "CLOSED" ? "AH" : session === "PRE" ? "PM" : null;
                 const bg = getHeatColor(change);
                 const pos = change === undefined || change >= 0;
-                const near52W = getNear52WLowInfo(ticker);
+                const near52W = getNear52WLowInfo(entry);
                 return (
                   <div key={ticker}
                     onMouseEnter={e => setTooltip({ ticker, change, price: currentPrice, session: sessionLabel, track: track.label, near52W, rect: e.currentTarget.getBoundingClientRect() })}
