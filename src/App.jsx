@@ -118,6 +118,7 @@ async function fetchQuoteSummary(ticker) {
 
 // ── DEFAULT CAPEX DATA ────────────────────────────────────
 const CAPEX_DATA = {
+  version: 2,
   companies: ["AMZN", "MSFT", "GOOG", "META", "ORCL"],
   tracks: [
     {
@@ -1398,7 +1399,7 @@ export default function App() {
 
     fetch("/capex")
       .then(res => res.json())
-      .then(data => { if (data.capexData) setCapexData(data.capexData); })
+      .then(data => { if (data.capexData && (data.capexData.version ?? 0) >= CAPEX_DATA.version) setCapexData(data.capexData); })
       .catch(e => console.log("Capex fetch failed"));
   }, []);
 
