@@ -826,7 +826,7 @@ function getNear52WLowInfo(priceEntry) {
   if (price == null || week52Low == null || week52Low <= 0) return null;
   const pctAboveLow = ((price - week52Low) / week52Low) * 100;
   if (pctAboveLow >= 0 && pctAboveLow <= 25) {
-    return { pctAboveLow: pctAboveLow.toFixed(1), raw52Low: week52Low };
+    return { raw52Low: week52Low };
   }
   return null;
 }
@@ -941,7 +941,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
           {tooltip.near52W && (
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontSize: 8, fontWeight: 800, color: "#f59e0b", background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.4)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.08em" }}>▼ 52W LOW ZONE</span>
-              <span style={{ fontSize: 10, color: "#f59e0b" }}>+{tooltip.near52W.pctAboveLow}% above ${Number(tooltip.near52W.raw52Low).toFixed(2)}</span>
+              <span style={{ fontSize: 10, color: "#f59e0b" }}>within 25% of ${Number(tooltip.near52W.raw52Low).toFixed(2)}</span>
             </div>
           )}
         </div>
