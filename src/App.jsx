@@ -525,21 +525,31 @@ function secsUntilNextEvent(date = new Date()) {
   const totalSecs = h * 3600 + m * 60 + s;
   const { state } = getMarketState(date);
 
-  // Seconds until the boundary that ends the current state
+  // During active sessions: count down to the closing boundary
   if (state === "pre")  return (9 * 3600 + 30 * 60) - totalSecs;
   if (state === "open") return (16 * 3600)           - totalSecs;
   if (state === "post") return (20 * 3600)           - totalSecs;
 
-  // Closed: find seconds until next 4:00am ET on a trading day
-  let msAhead = 0;
-  for (let d = 1; d <= 5; d++) {
+  // Closed/overnight: count down to 9:30am ET on the next trading day.
+  // Check today first (handles the overnight window before today's open),
+  // then look ahead up to 5 days for the next non-weekend, non-holiday day.
+  const openSecs = 9 * 3600 + 30 * 60; // 9:30am in seconds
+
+  // Is today itself a trading day and 9:30am hasn't passed yet?
+  const isWeekend = dow === "Sat" || dow === "Sun";
+  const isHoliday = NYSE_HOLIDAYS_2025_2026.has(dateStr);
+  if (!isWeekend && !isHoliday && totalSecs < openSecs) {
+    return openSecs - totalSecs;
+  }
+
+  // Otherwise find the next trading day
+  for (let d = 1; d <= 7; d++) {
     const candidate = new Date(date.getTime() + d * 86400000);
     const cny = getNYTime(candidate);
     if (cny.dow !== "Sat" && cny.dow !== "Sun" && !NYSE_HOLIDAYS_2025_2026.has(cny.dateStr)) {
-      // Seconds from now until 4:00am ET on that day
-      const secsToMidnight = 86400 - totalSecs;
-      const secsFromMidnightTo4am = 4 * 3600;
-      return secsToMidnight + (d - 1) * 86400 + secsFromMidnightTo4am;
+      // Seconds remaining today + full days until candidate + seconds to 9:30am
+      const secsLeftToday = 86400 - totalSecs;
+      return secsLeftToday + (d - 1) * 86400 + openSecs;
     }
   }
   return 0;
