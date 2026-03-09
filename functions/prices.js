@@ -81,11 +81,19 @@ export async function onRequest(context) {
   }
 
   // 2. KV PRICE CACHE CHECK
+  // Only serve the cached snapshot if every requested ticker is already in it.
+  // If any ticker is missing (e.g. a newly-added Shortlist symbol), bypass the
+  // cache so Yahoo is fetched fresh and the new ticker starts tracking immediately.
   if (env.SHARED_DATA) {
     try {
       const cached = await env.SHARED_DATA.get(KV_CACHE_KEY, "json");
       if (cached && cached.timestamp && (Date.now() - cached.timestamp < CACHE_TTL_SECONDS * 1000)) {
-        return new Response(JSON.stringify({ data: cached.data, cached: true }), { status: 200, headers });
+        const allPresent = tickers.every(t => cached.data && t in cached.data);
+        if (allPresent) {
+          return new Response(JSON.stringify({ data: cached.data, cached: true }), { status: 200, headers });
+        }
+        // Some tickers are missing from the cache — fall through to a fresh fetch
+        // but keep the cached data so we can merge results back in below.
       }
     } catch (err) {
       console.error("KV cache read error:", err);
@@ -201,9 +209,16 @@ export async function onRequest(context) {
   }
 
   // 5. WRITE BACK TO KV PRICE CACHE
+  // Merge new results with any existing cached data so that a partial fresh
+  // fetch (triggered by new tickers) doesn't evict previously-cached symbols.
   if (Object.keys(results).length > 0 && env.SHARED_DATA) {
     try {
-      const cachePayload = JSON.stringify({ data: results, timestamp: Date.now() });
+      let merged = results;
+      try {
+        const existing = await env.SHARED_DATA.get(KV_CACHE_KEY, "json");
+        if (existing && existing.data) merged = { ...existing.data, ...results };
+      } catch {}
+      const cachePayload = JSON.stringify({ data: merged, timestamp: Date.now() });
       await env.SHARED_DATA.put(KV_CACHE_KEY, cachePayload, { expirationTtl: CACHE_TTL_SECONDS * 4 });
     } catch (err) {
       console.error("KV cache write error:", err);
