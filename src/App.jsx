@@ -1607,7 +1607,7 @@ export default function App() {
 
     fetch("/shortlist")
       .then(res => res.json())
-      .then(data => { if (Array.isArray(data.tickers)) setShortList(data.tickers); })
+      .then(data => { if (Array.isArray(data.tickers)) { setShortList(data.tickers); shortListRef.current = data.tickers; } })
       .catch(e => console.log("Shortlist fetch failed"));
   }, []);
 
@@ -1674,7 +1674,7 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tickers: newList, password: adminPassword })
       });
-      if (res.ok) { setShortList(newList); refresh(); }
+      if (res.ok) { setShortList(newList); shortListRef.current = newList; refresh(); }
       else {
         const json = await res.json();
         alert(json.error || "Shortlist update failed.");
