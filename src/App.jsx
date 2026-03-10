@@ -1096,8 +1096,20 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
   const [tab, setTab]             = useState("watch");
   const [watchList, setWatchList] = useState(() => [...new Set(capexData.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))]);
   const [input, setInput]         = useState("");
+
   const [sortDir, setSortDir]     = useState("desc");
   const [filter, setFilter]       = useState("all");
+
+  // Sync watchList whenever capexData changes (e.g. a new ticker is added to a sub-sector).
+  // Only appends tickers that aren't already present so manually-removed entries are preserved.
+  useEffect(() => {
+    const capexTickers = [...new Set(capexData.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))];
+    setWatchList(prev => {
+      const prevSet = new Set(prev);
+      const incoming = capexTickers.filter(t => !prevSet.has(t));
+      return incoming.length ? [...prev, ...incoming] : prev;
+    });
+  }, [capexData]);
 
   const isShort = tab === "short";
   const list    = isShort ? shortList : watchList;
