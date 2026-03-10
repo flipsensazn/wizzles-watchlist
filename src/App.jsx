@@ -842,6 +842,8 @@ function getNear52WHighInfo(priceEntry) {
   }
   return null;
 }
+
+function HeatMap({ prices, capexData, onTickerClick }) {
   const [tooltip, setTooltip] = useState(null);
 
   // Memoized: capexData changes rarely — no need to recompute cells on every price tick
@@ -986,6 +988,7 @@ function getNear52WHighInfo(priceEntry) {
       )}
     </div>
   );
+}
 
 // ── DONUT CHART ───────────────────────────────────────────
 function DonutChart({ prices, capexData }) {
