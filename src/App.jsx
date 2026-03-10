@@ -986,7 +986,6 @@ function getNear52WHighInfo(priceEntry) {
       )}
     </div>
   );
-}
 
 // ── DONUT CHART ───────────────────────────────────────────
 function DonutChart({ prices, capexData }) {
