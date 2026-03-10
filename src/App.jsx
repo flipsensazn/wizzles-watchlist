@@ -1560,6 +1560,7 @@ export default function App() {
   // dep array) so the interval never tears down and restarts when KV data loads.
   const capexDataRef   = useRef(capexData);
   const scannerPoolRef = useRef(scannerPool);
+  const shortListRef   = useRef([]);
   const [marketData, setMarketData] = useState({});
   const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
@@ -1590,6 +1591,7 @@ export default function App() {
   // without needing them as dependencies (which would restart the interval).
   useEffect(() => { capexDataRef.current   = capexData;   }, [capexData]);
   useEffect(() => { scannerPoolRef.current = scannerPool; }, [scannerPool]);
+  useEffect(() => { shortListRef.current   = shortList;   }, [shortList]);
 
   // Mount: Fetch Global Data for both panels
   useEffect(() => {
@@ -1621,7 +1623,7 @@ export default function App() {
   const refresh = useCallback(async () => {
     setRefreshing(true);
     const marketTickers = [...INDEX_TICKERS, ...CRYPTO_TICKERS, ...HYPERSCALER_TICKERS];
-    const allTickers = [...new Set([...getAllTickers(capexDataRef.current), ...scannerPoolRef.current, ...marketTickers])];
+    const allTickers = [...new Set([...getAllTickers(capexDataRef.current), ...scannerPoolRef.current, ...shortListRef.current, ...marketTickers])];
 
     // Single HTTP round trip — split result into prices vs marketData on the frontend
     const allData = await fetchAllPrices(allTickers);
@@ -1672,7 +1674,7 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tickers: newList, password: adminPassword })
       });
-      if (res.ok) { setShortList(newList); }
+      if (res.ok) { setShortList(newList); refresh(); }
       else {
         const json = await res.json();
         alert(json.error || "Shortlist update failed.");
