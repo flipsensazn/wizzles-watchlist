@@ -831,6 +831,18 @@ function getNear52WLowInfo(priceEntry) {
   return null;
 }
 
+// Returns proximity info if ticker's current price is within 10% below its 52W high.
+function getNear52WHighInfo(priceEntry) {
+  if (!priceEntry) return null;
+  const { price, week52High } = priceEntry;
+  if (price == null || week52High == null || week52High <= 0) return null;
+  const pctBelowHigh = ((week52High - price) / week52High) * 100;
+  if (pctBelowHigh >= 0 && pctBelowHigh <= 10) {
+    return { raw52High: week52High };
+  }
+  return null;
+}
+
 function HeatMap({ prices, capexData, onTickerClick }) {
   const [tooltip, setTooltip] = useState(null);
 
@@ -862,9 +874,15 @@ function HeatMap({ prices, capexData, onTickerClick }) {
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Portfolio Heat Map</h3>
           <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>All tracked tickers · color = 1D performance</p>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 10, color: "#64748b" }}>
-          <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(251,191,36,0.25)", border: "1px solid #f59e0b", boxShadow: "0 0 6px #f59e0b88" }} />
-          <span>within 25% of 52W low</span>
+        <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 10, color: "#64748b" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(251,191,36,0.25)", border: "1px solid #f59e0b", boxShadow: "0 0 6px #f59e0b88" }} />
+            <span>within 25% of 52W low</span>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(52,211,153,0.25)", border: "1px solid #34d399", boxShadow: "0 0 6px #34d39988" }} />
+            <span>within 10% of 52W high</span>
+          </div>
         </div>
       </div>
       {trackCells.map(({ track, cells }) => {
@@ -885,23 +903,36 @@ function HeatMap({ prices, capexData, onTickerClick }) {
                 const bg = getHeatColor(change);
                 const pos = change === undefined || change >= 0;
                 const near52W = getNear52WLowInfo(entry);
+                const near52WH = !near52W ? getNear52WHighInfo(entry) : null;
                 return (
                   <div key={ticker}
-                    onMouseEnter={e => setTooltip({ ticker, change, price: currentPrice, session: sessionLabel, track: track.label, near52W, rect: e.currentTarget.getBoundingClientRect() })}
+                    onMouseEnter={e => setTooltip({ ticker, change, price: currentPrice, session: sessionLabel, track: track.label, near52W, near52WH, rect: e.currentTarget.getBoundingClientRect() })}
                     onMouseLeave={() => setTooltip(null)}
                     onClick={e => { e.stopPropagation(); onTickerClick?.(ticker, e.currentTarget.getBoundingClientRect()); }}
                     style={{
                       position: "relative",
                       background: near52W
                         ? `linear-gradient(135deg, ${bg} 60%, rgba(245,158,11,0.18) 100%)`
+                        : near52WH
+                        ? `linear-gradient(135deg, ${bg} 60%, rgba(52,211,153,0.18) 100%)`
                         : bg,
                       borderRadius: 8,
                       padding: "8px 12px",
                       border: near52W
                         ? "1px solid #f59e0b"
+                        : near52WH
+                        ? "1px solid #34d399"
                         : `1px solid ${bg === "rgba(255,255,255,0.04)" ? "rgba(255,255,255,0.06)" : bg}`,
-                      boxShadow: near52W ? "0 0 10px rgba(245,158,11,0.45), inset 0 0 12px rgba(245,158,11,0.08)" : "none",
-                      animation: near52W ? "glowPulse52W 2.4s ease-in-out infinite" : "none",
+                      boxShadow: near52W
+                        ? "0 0 10px rgba(245,158,11,0.45), inset 0 0 12px rgba(245,158,11,0.08)"
+                        : near52WH
+                        ? "0 0 10px rgba(52,211,153,0.45), inset 0 0 12px rgba(52,211,153,0.08)"
+                        : "none",
+                      animation: near52W
+                        ? "glowPulse52W 2.4s ease-in-out infinite"
+                        : near52WH
+                        ? "glowPulse52WH 2.4s ease-in-out infinite"
+                        : "none",
                       minWidth: 60,
                       textAlign: "center",
                       cursor: "pointer",
@@ -909,13 +940,16 @@ function HeatMap({ prices, capexData, onTickerClick }) {
                     }}
                     onMouseOver={e => { e.currentTarget.style.filter = "brightness(1.4)"; e.currentTarget.style.transform = "scale(1.06)"; }}
                     onMouseOut={e => { e.currentTarget.style.filter = ""; e.currentTarget.style.transform = ""; }}>
-                    {sessionLabel && !near52W && (
+                    {sessionLabel && !near52W && !near52WH && (
                       <div style={{ position: "absolute", top: 3, right: 4, fontSize: 7, fontWeight: 800, color: "rgba(255,255,255,0.55)", letterSpacing: "0.05em", lineHeight: 1 }}>{sessionLabel}</div>
                     )}
                     {near52W && (
                       <div style={{ position: "absolute", top: 3, right: 4, fontSize: 7, fontWeight: 800, color: "#f59e0b", letterSpacing: "0.05em", lineHeight: 1 }}>▼52W</div>
                     )}
-                    <div style={{ fontSize: 12, fontWeight: 700, color: near52W ? "#fef3c7" : "#f1f5f9" }}>{ticker}</div>
+                    {near52WH && (
+                      <div style={{ position: "absolute", top: 3, right: 4, fontSize: 7, fontWeight: 800, color: "#34d399", letterSpacing: "0.05em", lineHeight: 1 }}>▲52W</div>
+                    )}
+                    <div style={{ fontSize: 12, fontWeight: 700, color: near52W ? "#fef3c7" : near52WH ? "#d1fae5" : "#f1f5f9" }}>{ticker}</div>
                     {change !== undefined && (
                       <div style={{ fontSize: 10, fontWeight: 600, color: pos ? "#a7f3d0" : "#fca5a5", marginTop: 2 }}>
                         {typeof change === 'number' ? (change >= 0 ? "+" : "") + change + "%" : "—"}
@@ -930,7 +964,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
       })}
       
       {tooltip && (
-        <div style={{ position: "fixed", top: tooltip.rect.top - (tooltip.near52W ? 68 : 52), left: tooltip.rect.left, background: "rgba(18,18,18,0.95)", border: `1px solid ${tooltip.near52W ? "#f59e0b" : (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171"}44`, borderRadius: 8, padding: "7px 12px", pointerEvents: "none", zIndex: 1000, display: "flex", flexDirection: "column", gap: 4, minWidth: 140 }}>
+        <div style={{ position: "fixed", top: tooltip.rect.top - (tooltip.near52W || tooltip.near52WH ? 68 : 52), left: tooltip.rect.left, background: "rgba(18,18,18,0.95)", border: `1px solid ${tooltip.near52W ? "#f59e0b" : tooltip.near52WH ? "#34d399" : (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171"}44`, borderRadius: 8, padding: "7px 12px", pointerEvents: "none", zIndex: 1000, display: "flex", flexDirection: "column", gap: 4, minWidth: 140 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{tooltip.ticker}</span>
             {tooltip.price !== undefined && <span style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0" }}>${tooltip.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
@@ -942,6 +976,12 @@ function HeatMap({ prices, capexData, onTickerClick }) {
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontSize: 8, fontWeight: 800, color: "#f59e0b", background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.4)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.08em" }}>▼ 52W LOW ZONE</span>
               <span style={{ fontSize: 10, color: "#f59e0b" }}>within 25% of ${Number(tooltip.near52W.raw52Low).toFixed(2)}</span>
+            </div>
+          )}
+          {tooltip.near52WH && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 8, fontWeight: 800, color: "#34d399", background: "rgba(52,211,153,0.15)", border: "1px solid rgba(52,211,153,0.4)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.08em" }}>▲ 52W HIGH ZONE</span>
+              <span style={{ fontSize: 10, color: "#34d399" }}>within 10% of ${Number(tooltip.near52WH.raw52High).toFixed(2)}</span>
             </div>
           )}
         </div>
@@ -1515,6 +1555,10 @@ const GLOBAL_STYLES = `
   @keyframes glowPulse52W {
     0%, 100% { box-shadow: 0 0 10px rgba(245,158,11,0.45), inset 0 0 12px rgba(245,158,11,0.08); border-color: rgba(245,158,11,0.7); }
     50% { box-shadow: 0 0 18px rgba(245,158,11,0.75), 0 0 32px rgba(245,158,11,0.25), inset 0 0 16px rgba(245,158,11,0.14); border-color: #f59e0b; }
+  }
+  @keyframes glowPulse52WH {
+    0%, 100% { box-shadow: 0 0 10px rgba(52,211,153,0.45), inset 0 0 12px rgba(52,211,153,0.08); border-color: rgba(52,211,153,0.7); }
+    50% { box-shadow: 0 0 18px rgba(52,211,153,0.75), 0 0 32px rgba(52,211,153,0.25), inset 0 0 16px rgba(52,211,153,0.14); border-color: #34d399; }
   }
   @keyframes pulseDot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(.7); } }
   .ticker-tape { animation: scroll-left 80s linear infinite; white-space: nowrap; display: inline-flex; gap: 24px; }
