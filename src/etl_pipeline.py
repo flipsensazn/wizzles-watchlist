@@ -27,6 +27,8 @@ def get_us_universe():
 
 def apply_gates(symbols):
     candidates = []
+    # Strip symbols with dots (ETFs, foreign ordinaries) to cut ~4000 irrelevant tickers
+    symbols = [s for s in symbols if '.' not in s and len(s) <= 5]
     for i, symbol in enumerate(symbols):
         try:
             quote = requests.get(f"{FINNHUB_BASE}/quote",
