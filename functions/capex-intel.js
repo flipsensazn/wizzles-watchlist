@@ -48,20 +48,19 @@ const SECTORS = [
 function buildPrompt() {
   return `You are a financial analyst specialising in AI infrastructure capital expenditure.
 
-The five primary hyperscalers—Amazon (AWS), Microsoft (Azure), Alphabet/Google, Meta, and Oracle—have collectively announced roughly $600 billion or more in AI-related capex for 2025-2026.
+The five primary hyperscalers—Amazon (AWS), Microsoft (Azure), Alphabet/Google, Meta, and Oracle—have collectively announced roughly $600 billion or more in AI-related capex for 2025-2026, based on their most recent earnings calls, investor-day presentations, and SEC filings.
 
-Using web search, find their most recent earnings calls, investor-day presentations, SEC filings, and credible news coverage to estimate how this total spend flows across the following six infrastructure sectors. Use search queries like "Amazon AWS 2025 capex data center spending", "Microsoft Azure AI infrastructure capex 2026", "Google capex AI servers 2025 earnings", "Meta data center spending 2025", "Oracle cloud capex 2025".
+Based on your knowledge of their public guidance and capital allocation priorities, estimate how this total spend flows across the following six infrastructure sectors.
 
 Sectors to allocate:
 ${SECTORS.map(s => `• ${s.id} — "${s.label}": ${s.description}`).join("\n")}
 
 Guidelines:
-- Base numbers on the most recent public guidance or trailing-twelve-month actuals where available.
 - The six sectors should sum to roughly 600 (i.e., $600 B total).
 - "Compute & Silicon" (chips + foundry + equipment) typically absorbs the largest share (~25-35%).
 - "Neoclouds & Data Centers" (physical build-out) is the second-largest (~18-22%).
-- Use your best estimate for sectors where direct figures are unavailable.
-- Include a one-sentence rationale citing at least one recent source for each sector.
+- Use your best estimate for sectors where direct figures are unavailable, flagging confidence accordingly.
+- Include a one-sentence rationale citing the basis for each sector's allocation.
 
 Respond with ONLY a valid JSON array — no markdown fences, no preamble, no explanation outside the JSON:
 
@@ -70,7 +69,7 @@ Respond with ONLY a valid JSON array — no markdown fences, no preamble, no exp
     "id": "compute",
     "capex": <integer, billions USD>,
     "value": "<display string e.g. ~$185B>",
-    "rationale": "<one sentence with source/date>",
+    "rationale": "<one sentence explaining the basis for this allocation>",
     "confidence": "high|medium|low"
   },
   ...six objects total...
@@ -146,13 +145,10 @@ export async function onRequest(context) {
           "Content-Type":      "application/json",
           "x-api-key":         anthropicKey,
           "anthropic-version": "2023-06-01",
-          // Enable the web-search tool so Claude can look up current filings/news
-          "anthropic-beta":    "web-search-2025-03-05",
         },
         body: JSON.stringify({
           model:      MODEL,
           max_tokens: 1500,
-          tools: [{ type: "web_search_20250305", name: "web_search" }],
           messages: [{ role: "user", content: buildPrompt() }],
         }),
       });
