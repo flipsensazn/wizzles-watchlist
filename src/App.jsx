@@ -1312,84 +1312,92 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
 function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTickerClick }) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
   const [newTicker, setNewTicker] = useState("");
   const [showImport, setShowImport] = useState(false);
   const [importText, setImportText] = useState("");
-  const fetchIdRef = useRef(0);
+  const [sectorFilter, setSectorFilter] = useState("");
+  const [lastUpdated, setLastUpdated] = useState(null);
+  const [usingFallback, setUsingFallback] = useState(false);
 
-  useEffect(() => {
-    const currentFetchId = ++fetchIdRef.current;
+  // Fetch from Neon via /scanner-ranked
+  const fetchRanked = async (sector = "") => {
+    setLoading(true);
+    setError(null);
+    try {
+      const url = sector ? `/scanner-ranked?sector=${encodeURIComponent(sector)}` : "/scanner-ranked";
+      const res = await fetch(url);
+      const json = await res.json();
 
-    // Uses the module-level fetchQuoteSummary which has a 5-min LRU cache.
-    // Only fetches tickers not already present in `data`, so adding a single
-    // ticker to the pool doesn't re-fetch the entire list.
-    async function getFundamentals() {
-      const alreadyLoaded = new Set(data.map(d => d.ticker));
-      const toFetch = scannerPool.filter(t => !alreadyLoaded.has(t));
-
-      if (toFetch.length === 0) {
-        // All tickers already loaded — just re-sort in case pool order changed
-        setData(prev => [...prev].filter(d => scannerPool.includes(d.ticker)).sort((a, b) => b.score - a.score));
-        return;
+      if (json.success && json.data?.length > 0) {
+        setData(json.data);
+        setUsingFallback(false);
+        setLastUpdated(new Date().toLocaleDateString());
+      } else {
+        // DB returned no rows — fall back to legacy Yahoo scoring
+        setUsingFallback(true);
+        await fetchFallback();
       }
+    } catch (err) {
+      setError("Could not reach scanner API.");
+      setUsingFallback(true);
+      await fetchFallback();
+    } finally {
+      setLoading(false);
+    }
+  };
 
-      if (data.length === 0) setLoading(true);
-      const CONCURRENCY = 4;
+  // Legacy fallback: per-ticker Yahoo fetch (original behavior)
+  const fetchFallback = async () => {
+    const CONCURRENCY = 4;
+    const results = [];
+    const queue = [...scannerPool];
 
-      async function processOne(ticker) {
-        // fetchQuoteSummary uses the quoteCache — no network hit if called within 5 min
-        const q = await fetchQuoteSummary(ticker);
-        if (currentFetchId !== fetchIdRef.current) return null;
-        if (!q) return null;
+    async function processOne(ticker) {
+      try {
+        const res = await fetch(`/quote?ticker=${encodeURIComponent(ticker)}`);
+        const json = await res.json();
+        const r = json?.quoteSummary?.result?.[0];
+        if (!r) return null;
+        const fcf = r.financialData?.freeCashflow?.raw || 0;
+        const marketCapRaw = r.price?.marketCap?.raw || 1;
+        const roa = (r.financialData?.returnOnAssets?.raw || 0) * 100;
+        const pb = r.defaultKeyStatistics?.priceToBook?.raw || 0;
+        const pe = r.summaryDetail?.trailingPE?.raw || null;
+        const fcfYield = (fcf / marketCapRaw) * 100;
+        const bookToMarket = pb > 0 ? (1 / pb) : 0;
+        const score = (fcfYield * 15) + (bookToMarket * 10) + (roa * 2);
+        return {
+          ticker,
+          fcf_yield: fcfYield,
+          roa,
+          book_to_market: bookToMarket,
+          pe,
+          market_cap: fmtMarketCap(marketCapRaw),
+          composite_score: score,
+          rank_overall: null,
+        };
+      } catch { return null; }
+    }
 
-        // fetchQuoteSummary returns formatted strings; we need raw numbers for scoring.
-        // Re-fetch raw values from the cache's stored data by calling the endpoint
-        // directly only when cache is cold — the cache will be warm for the popup.
-        try {
-          const res = await fetch(`/quote?ticker=${encodeURIComponent(ticker)}`);
-          if (currentFetchId !== fetchIdRef.current) return null;
-          const json = await res.json();
-          const r = json?.quoteSummary?.result?.[0];
-          if (!r) return null;
-
-          const fcf = r.financialData?.freeCashflow?.raw || 0;
-          const marketCapRaw = r.price?.marketCap?.raw || 1;
-          const roa = (r.financialData?.returnOnAssets?.raw || 0) * 100;
-          const pb = r.defaultKeyStatistics?.priceToBook?.raw || 0;
-          const pe = r.summaryDetail?.trailingPE?.raw || null;
-
-          const fcfYield = (fcf / marketCapRaw) * 100;
-          const bookToMarket = pb > 0 ? (1 / pb) : 0;
-          const marketCapFmt = fmtMarketCap(marketCapRaw);
-          const score = (fcfYield * 15) + (bookToMarket * 10) + (roa * 2);
-
-          return { ticker, fcfYield, roa, bookToMarket, pe, marketCapFmt, score };
-        } catch { return null; }
-      }
-
-      // Concurrency-limited runner — only runs for the new tickers
-      const newResults = [];
-      const queue = [...toFetch];
-      async function worker() {
-        while (queue.length > 0) {
-          const ticker = queue.shift();
-          const result = await processOne(ticker);
-          if (currentFetchId !== fetchIdRef.current) return;
-          if (result) newResults.push(result);
-        }
-      }
-      await Promise.all(Array.from({ length: CONCURRENCY }, worker));
-
-      if (currentFetchId === fetchIdRef.current) {
-        // Merge new results with existing, filter removed tickers, re-sort
-        setData(prev => {
-          const merged = [...prev.filter(d => scannerPool.includes(d.ticker)), ...newResults];
-          return merged.sort((a, b) => b.score - a.score);
-        });
-        setLoading(false);
+    async function worker() {
+      while (queue.length > 0) {
+        const ticker = queue.shift();
+        const result = await processOne(ticker);
+        if (result) results.push(result);
       }
     }
-    getFundamentals();
+    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
+    setData(results.sort((a, b) => b.composite_score - a.composite_score));
+  };
+
+  useEffect(() => {
+    fetchRanked(sectorFilter);
+  }, [sectorFilter]);
+
+  // Re-fetch when scannerPool changes (admin adds/removes tickers)
+  useEffect(() => {
+    if (usingFallback) fetchFallback();
   }, [scannerPool]);
 
   const addTicker = () => {
@@ -1399,59 +1407,103 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
 
   const handleImport = () => {
     const words = importText.toUpperCase().match(/\b[A-Z]{1,5}\b/g) || [];
-    const ignoreList = ["INC", "CORP", "CO", "LTD", "PLC", "LLC", "USD", "EUR", "CAD", "M", "B", "K", "TRUE", "FALSE"];
-    const foundTickers = [...new Set(words)].filter(w => !ignoreList.includes(w));
-    if (foundTickers.length > 0) { onSaveScanner(foundTickers); setShowImport(false); setImportText(""); } else { alert("No valid tickers found."); }
+    const ignoreList = ["INC","CORP","CO","LTD","PLC","LLC","USD","EUR","CAD","M","B","K","TRUE","FALSE"];
+    const found = [...new Set(words)].filter(w => !ignoreList.includes(w));
+    if (found.length > 0) { onSaveScanner(found); setShowImport(false); setImportText(""); }
+    else { alert("No valid tickers found."); }
   };
 
   const removeTicker = (ticker) => { onSaveScanner(scannerPool.filter(t => t !== ticker)); };
-  
+
   const getScoreColor = (score) => {
-    if (score > 40) return "#34d399"; 
-    if (score > 15) return "#fbbf24"; 
-    return "#f87171"; 
+    if (score > 0.7) return "#34d399";
+    if (score > 0.4) return "#fbbf24";
+    return "#f87171";
   };
+
+  // Unique sectors from current data for the filter dropdown
+  const sectors = [...new Set(data.map(d => d.sector).filter(Boolean))];
 
   return (
     <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, display: "flex", flexDirection: "column", height: "100%" }}>
+      
+      {/* HEADER */}
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12, flexShrink: 0 }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24" }}>Small-cap Scanner</h3>
+            {usingFallback ? (
+              <span style={{ fontSize: 9, color: "#f59e0b", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 4, padding: "2px 7px", fontWeight: 700, letterSpacing: "0.1em" }}>LIVE SCORING</span>
+            ) : (
+              <span style={{ fontSize: 9, color: "#34d399", background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.3)", borderRadius: 4, padding: "2px 7px", fontWeight: 700, letterSpacing: "0.1em" }}>
+                ● DB RANKED
+              </span>
+            )}
           </div>
-          <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Prioritizing FCF Yield, B/M, and ROA</p>
+          <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>
+            {usingFallback
+              ? "Live scoring — FCF Yield, B/M, ROA"
+              : `ETL-ranked universe · updated ${lastUpdated ?? "weekly"}`}
+          </p>
         </div>
-        {isAdmin && (
-          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <button onClick={() => setShowImport(!showImport)} style={{ background: "transparent", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.3)", borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
-              {showImport ? "Close Import" : "⎘ Smart Import"}
-            </button>
-            <input value={newTicker} onChange={e => setNewTicker(e.target.value.toUpperCase())}
-              onKeyDown={e => e.key === "Enter" && addTicker()} placeholder="Add ticker..." 
-              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 12, outline: "none", width: 100 }} />
-            <button onClick={addTicker} style={{ background: "#fbbf24", color: "#000", borderRadius: 8, padding: "6px 12px", fontWeight: 700, cursor: "pointer", border: "none" }}>+</button>
-          </div>
-        )}
+
+        <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+          {/* Sector filter */}
+          {sectors.length > 0 && (
+            <select
+              value={sectorFilter}
+              onChange={e => setSectorFilter(e.target.value)}
+              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 10px", color: "#e2e8f0", fontSize: 11, fontFamily: "inherit", cursor: "pointer", outline: "none" }}
+            >
+              <option value="">All Sectors</option>
+              {sectors.map(s => <option key={s} value={s}>{s}</option>)}
+            </select>
+          )}
+
+          {/* Refresh button */}
+          <button
+            onClick={() => fetchRanked(sectorFilter)}
+            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b", borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}
+          >↻ Refresh</button>
+
+          {isAdmin && (
+            <>
+              <button onClick={() => setShowImport(!showImport)} style={{ background: "transparent", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.3)", borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
+                {showImport ? "Close Import" : "⎘ Smart Import"}
+              </button>
+              <input value={newTicker} onChange={e => setNewTicker(e.target.value.toUpperCase())}
+                onKeyDown={e => e.key === "Enter" && addTicker()} placeholder="Add ticker..."
+                style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 12, outline: "none", width: 100 }} />
+              <button onClick={addTicker} style={{ background: "#fbbf24", color: "#000", borderRadius: 8, padding: "6px 12px", fontWeight: 700, cursor: "pointer", border: "none" }}>+</button>
+            </>
+          )}
+        </div>
       </div>
 
+      {/* SMART IMPORT */}
       {showImport && isAdmin && (
         <div style={{ marginBottom: 16, background: "rgba(0,0,0,0.2)", padding: 12, borderRadius: 12, border: "1px dashed rgba(255,255,255,0.1)", animation: "fadeSlideIn .2s ease-out", flexShrink: 0 }}>
           <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 8 }}>Paste raw tickers below to instantly update the dashboard globally.</div>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
-            <textarea value={importText} onChange={e => setImportText(e.target.value)} placeholder="e.g. NVDA, MSFT, AAPL" style={{ flex: 1, height: 60, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: 8, color: "#e2e8f0", fontSize: 12, fontFamily: "monospace", outline: "none", resize: "vertical" }} />
+            <textarea value={importText} onChange={e => setImportText(e.target.value)} placeholder="e.g. NVDA, MSFT, AAPL"
+              style={{ flex: 1, height: 60, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: 8, color: "#e2e8f0", fontSize: 12, fontFamily: "monospace", outline: "none", resize: "vertical" }} />
             <button onClick={handleImport} style={{ background: "#60a5fa", color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>Update Global</button>
           </div>
         </div>
       )}
 
+      {/* TABLE */}
       <div style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingRight: 4 }}>
+        {error && (
+          <div style={{ padding: "12px 8px", color: "#f87171", fontSize: 12 }}>⚠ {error} — showing live-scored fallback.</div>
+        )}
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, textAlign: "left" }}>
           <thead>
             <tr style={{ color: "#475569", borderBottom: "1px solid rgba(255,255,255,0.05)", position: "sticky", top: 0, background: "rgba(14,17,23,0.95)", zIndex: 10 }}>
+              <th style={{ padding: "10px 8px" }}>#</th>
               <th style={{ padding: "10px 8px" }}>TICKER</th>
               <th style={{ padding: "10px 8px" }}>PRICE</th>
               <th style={{ padding: "10px 8px" }}>MKT CAP</th>
-              <th style={{ padding: "10px 8px" }}>P/E</th>
               <th style={{ padding: "10px 8px" }}>FCF YLD</th>
               <th style={{ padding: "10px 8px" }}>B/M</th>
               <th style={{ padding: "10px 8px" }}>ROA</th>
@@ -1460,26 +1512,70 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
             </tr>
           </thead>
           <tbody>
-            {loading ? <tr><td colSpan="9" style={{ padding: 20, color: "#475569" }}>Fetching live data...</td></tr> : 
-             data.map((stock) => {
-              const change = prices[stock.ticker]?.change;
-              const currentPrice = Number(prices[stock.ticker]?.price);
-              const priceStr = !isNaN(currentPrice) && currentPrice !== 0 ? "$" + currentPrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—";
-              
+            {loading ? (
+              <tr><td colSpan="9" style={{ padding: 20, color: "#475569" }}>
+                {usingFallback ? "Fetching live data..." : "Loading ranked candidates..."}
+              </td></tr>
+            ) : data.length === 0 ? (
+              <tr><td colSpan="9" style={{ padding: 20, color: "#475569" }}>
+                No candidates found{sectorFilter ? ` in ${sectorFilter}` : ""}.
+              </td></tr>
+            ) : data.map((stock) => {
+              const priceEntry = prices[stock.ticker];
+              const livePrice = priceEntry?.price;
+              const change = priceEntry?.change;
+              const priceStr = livePrice
+                ? "$" + livePrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                : stock.price
+                ? "$" + Number(stock.price).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                : "—";
+              const marketCapStr = stock.market_cap
+                ? fmtMarketCap(stock.market_cap * 1_000_000)
+                : "—";
+              const score = Number(stock.composite_score);
+              const fcfYield = Number(stock.fcf_yield);
+              const bm = Number(stock.book_to_market);
+              const roa = Number(stock.roa);
+
               return (
-                <tr key={stock.ticker} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)" }}>
-                  <td onClick={(e) => onTickerClick(stock.ticker, e.currentTarget.getBoundingClientRect())} style={{ padding: "12px 8px", cursor: "pointer" }}>
+                <tr key={stock.ticker} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)", transition: "background .15s" }}
+                  onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.03)"}
+                  onMouseLeave={e => e.currentTarget.style.background = ""}>
+                  <td style={{ padding: "12px 8px", color: "#334155", fontSize: 10 }}>
+                    {stock.rank_overall ?? "—"}
+                  </td>
+                  <td onClick={e => onTickerClick(stock.ticker, e.currentTarget.getBoundingClientRect())}
+                    style={{ padding: "12px 8px", cursor: "pointer" }}>
                     <div style={{ fontWeight: 700, color: "#f1f5f9" }}>{stock.ticker}</div>
-                    <div style={{ fontSize: 9, color: (change >= 0 ? "#34d399" : "#f87171") }}>{typeof change === 'number' ? `${change >= 0 ? "+" : ""}${change}%` : "—"}</div>
+                    {stock.sector && <div style={{ fontSize: 9, color: "#475569", marginTop: 1 }}>{stock.sector}</div>}
+                    {change !== undefined && (
+                      <div style={{ fontSize: 9, color: change >= 0 ? "#34d399" : "#f87171" }}>
+                        {change >= 0 ? "+" : ""}{change}%
+                      </div>
+                    )}
                   </td>
                   <td style={{ padding: "12px 8px", color: "#e2e8f0", fontWeight: 600 }}>{priceStr}</td>
-                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{stock.marketCapFmt}</td>
-                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{typeof stock.pe === 'number' ? stock.pe.toFixed(1) : "—"}</td>
-                  <td style={{ padding: "12px 8px", color: stock.fcfYield > 8 ? "#34d399" : "#cbd5e1" }}>{typeof stock.fcfYield === 'number' && !isNaN(stock.fcfYield) ? stock.fcfYield.toFixed(2) + "%" : "—"}</td>
-                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{typeof stock.bookToMarket === 'number' && !isNaN(stock.bookToMarket) ? stock.bookToMarket.toFixed(2) : "—"}</td>
-                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{typeof stock.roa === 'number' && !isNaN(stock.roa) ? stock.roa.toFixed(1) + "%" : "—"}</td>
-                  <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(stock.score), fontSize: 13 }}>{typeof stock.score === 'number' && !isNaN(stock.score) ? stock.score.toFixed(1) : "—"}</td>
-                  {isAdmin && <td style={{ textAlign: "right" }}><button onClick={() => removeTicker(stock.ticker)} style={{ background: "none", border: "none", color: "#334155", cursor: "pointer", fontSize: 16 }}>×</button></td>}
+                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{marketCapStr}</td>
+                  <td style={{ padding: "12px 8px", color: fcfYield > 8 ? "#34d399" : "#cbd5e1" }}>
+                    {!isNaN(fcfYield) ? (fcfYield * 100).toFixed(2) + "%" : "—"}
+                  </td>
+                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>
+                    {!isNaN(bm) ? bm.toFixed(2) : "—"}
+                  </td>
+                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>
+                    {!isNaN(roa) ? (roa * 100).toFixed(1) + "%" : "—"}
+                  </td>
+                  <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(score), fontSize: 13 }}>
+                    {!isNaN(score) ? score.toFixed(3) : "—"}
+                  </td>
+                  {isAdmin && (
+                    <td style={{ textAlign: "right" }}>
+                      <button onClick={() => removeTicker(stock.ticker)}
+                        style={{ background: "none", border: "none", color: "#334155", cursor: "pointer", fontSize: 16, transition: "color .15s" }}
+                        onMouseEnter={e => e.currentTarget.style.color = "#ef4444"}
+                        onMouseLeave={e => e.currentTarget.style.color = "#334155"}>×</button>
+                    </td>
+                  )}
                 </tr>
               );
             })}
