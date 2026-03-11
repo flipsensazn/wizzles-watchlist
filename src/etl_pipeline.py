@@ -8,8 +8,8 @@ import os
 from datetime import date
 
 # --- Credentials from environment variables (GitHub Secrets inject these) ---
-FINNHUB_API_KEY = os.environ.get('d6jgcppr01qomr5gobu0d6jgcppr01qomr5gobug')
-DATABASE_URL    = os.environ.get('postgresql://neondb_owner:npg_F0HogvRLibh3@ep-cool-block-ad194ha9-pooler.c-2.us-east-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require')  # Full Neon connection string
+FINNHUB_API_KEY = os.environ.get('FINNHUB_API_KEY')
+DATABASE_URL    = os.environ.get('DATABASE_URL')
 FINNHUB_BASE    = 'https://finnhub.io/api/v1'
 SEC_HEADERS     = {'User-Agent': 'WizzlesWatchlist flipsensazn@gmail.com'}  # ← update this
 
