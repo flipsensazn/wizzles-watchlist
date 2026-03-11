@@ -9,7 +9,7 @@
 
 const CACHE_KEY   = "capexIntel";
 const CACHE_TTL   = 6 * 60 * 60 * 1000;   // 6 hours in ms
-const MODEL       = "claude-sonnet-4-20250514";
+const MODEL       = "claude-sonnet-4-6";
 
 // Mirror of the CAPEX_DATA sector IDs + labels in App.jsx so the prompt is precise.
 const SECTORS = [
