@@ -1,4 +1,5 @@
 // functions/scanner-ranked.js
+
 export async function onRequest(context) {
   const { request, env } = context;
 
@@ -37,14 +38,20 @@ export async function onRequest(context) {
 
   try {
     const { searchParams } = new URL(request.url);
-    const sector = searchParams.get("sector");
+    const sector = searchParams.get("sector") || null;
 
-    // Build query — filter by sector if provided
-    const sectorClause = sector
-      ? `AND sector = '${sector.replace(/'/g, "''")}'`
-      : "";
+    // Neon supports direct SQL over HTTP using the connection string
+    // Extract credentials from the DATABASE_URL
+    const url = new URL(DATABASE_URL.replace("postgresql://", "https://").replace("postgres://", "https://"));
+    const username = url.username;
+    const password = url.password;
+    const host = url.hostname;
+    const database = url.pathname.replace("/", "");
 
-    const query = `
+    const sectorFilter = sector ? `AND sector = $1` : "";
+    const queryParams  = sector ? [sector] : [];
+
+    const sqlQuery = `
       WITH LatestDate AS (
         SELECT MAX(as_of_date) AS max_date FROM ranked_candidates
       )
@@ -63,47 +70,43 @@ export async function onRequest(context) {
         composite_score
       FROM ranked_candidates
       WHERE as_of_date = (SELECT max_date FROM LatestDate)
-      ${sectorClause}
+      ${sectorFilter}
       ORDER BY rank_overall ASC
-      LIMIT 25;
+      LIMIT 25
     `;
 
-    // Use Neon's HTTP API — no driver needed in Cloudflare Workers
-    const neonRes = await fetch(DATABASE_URL.replace("postgresql://", "https://").split("@")[0].replace("https://", `https://${DATABASE_URL.split("@")[1]?.split("/")[0]}/sql`), {
+    // Neon HTTP SQL API endpoint
+    const neonEndpoint = `https://${host}/sql`;
+
+    const dbRes = await fetch(neonEndpoint, {
       method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ query }),
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": "Basic " + btoa(`${username}:${password}`),
+        "Neon-Connection-String": DATABASE_URL,
+      },
+      body: JSON.stringify({
+        query: sqlQuery,
+        params: queryParams,
+      }),
     });
 
-    // Neon serverless HTTP endpoint
-    const response = await fetch(
-      `https://${new URL(DATABASE_URL.replace("postgresql://", "https://")).host}/sql`,
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${DATABASE_URL.split(":")[2]?.split("@")[0]}`,
-          "Neon-Connection-String": DATABASE_URL,
-        },
-        body: JSON.stringify({ query }),
-      }
-    );
-
-    if (!response.ok) {
-      const errText = await response.text();
+    if (!dbRes.ok) {
+      const errText = await dbRes.text();
       return new Response(
-        JSON.stringify({ success: false, message: `DB error: ${errText}` }),
+        JSON.stringify({ success: false, message: `DB query failed: ${errText}` }),
         { status: 500, headers }
       );
     }
 
-    const result = await response.json();
+    const result = await dbRes.json();
     const rows = result.rows ?? [];
 
     return new Response(
       JSON.stringify({ success: true, count: rows.length, data: rows }),
       { status: 200, headers }
     );
+
   } catch (err) {
     return new Response(
       JSON.stringify({ success: false, message: err.message }),
