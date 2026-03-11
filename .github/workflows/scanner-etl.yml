@@ -30,6 +30,6 @@ jobs:
         env:
           FINNHUB_API_KEY: ${{ secrets.FINNHUB_API_KEY }}
           DATABASE_URL:    ${{ secrets.DATABASE_URL }}
-       run: |
+        run: |
           find . -name "etl_pipeline.py"
           python $(find . -name "etl_pipeline.py" | head -1)
