@@ -782,7 +782,12 @@ const TrackCard = memo(function TrackCard({ track, isActive, onClick }) {
         <div style={{ position: "absolute", top: -11, left: "50%", transform: "translateX(-50%)", background: `linear-gradient(90deg, ${track.borderColor}, ${track.color})`, color: "#000", fontSize: 9, fontWeight: 800, padding: "2px 10px", borderRadius: 20, letterSpacing: "0.2em", whiteSpace: "nowrap" }}>YOUR FOCUS</div>
       )}
       <div style={{ fontSize: 12, fontWeight: 700, color: isActive ? track.color : "#e2e8f0", lineHeight: 1.3 }}>{track.label}</div>
-      <div style={{ fontSize: 11, color: isActive ? track.color : "#94a3b8" }}>{track.value}</div>
+      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+        <div style={{ fontSize: 11, color: isActive ? track.color : "#94a3b8", fontWeight: track.isLiveIntel ? 700 : 400 }}>{track.value}</div>
+        {track.isLiveIntel && (
+          <span title="Updated by live intel" style={{ width: 5, height: 5, borderRadius: "50%", background: "#34d399", display: "inline-block", boxShadow: "0 0 5px #34d399", flexShrink: 0 }} />
+        )}
+      </div>
       <div style={{ fontSize: 10, color: "#475569" }}>{track.subsectors.flatMap(s => s.tickers).length} tickers</div>
       <div style={{ height: 2, borderRadius: 2, background: `linear-gradient(90deg,${track.borderColor},${track.color},transparent)`, opacity: isActive ? 1 : 0.3, marginTop: "auto" }} />
       <div style={{ fontSize: 10, color: isActive ? track.color : "#334155", textAlign: "center" }}>{isActive ? "▲ collapse" : "▼ expand"}</div>
@@ -1877,12 +1882,15 @@ export default function App() {
       tracks: capexData.tracks.map(track => {
         const intel = intelMap[track.id];
         if (!intel) return track;
+        // Always derive value from capex integer so it's never undefined
+        const liveValue = intel.value || (intel.capex ? `~$${intel.capex}B` : track.value);
         return {
           ...track,
-          capex:  intel.capex,
-          value:  intel.value,
-          rationale: intel.rationale,
+          capex:           intel.capex ?? track.capex,
+          value:           liveValue,
+          rationale:       intel.rationale,
           intelConfidence: intel.confidence,
+          isLiveIntel:     true,
         };
       }),
     };
