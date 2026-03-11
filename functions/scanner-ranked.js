@@ -37,20 +37,14 @@ export async function onRequest(context) {
   }
 
   try {
-    const { searchParams } = new URL(request.url);
-    const sector = searchParams.get("sector") || null;
-
-    // Neon supports direct SQL over HTTP using the connection string
     // Extract credentials from the DATABASE_URL
-    const url = new URL(DATABASE_URL.replace("postgresql://", "https://").replace("postgres://", "https://"));
+    const url      = new URL(DATABASE_URL.replace("postgresql://", "https://").replace("postgres://", "https://"));
     const username = url.username;
     const password = url.password;
-    const host = url.hostname;
-    const database = url.pathname.replace("/", "");
+    const host     = url.hostname;
 
-    const sectorFilter = sector ? `AND sector = $1` : "";
-    const queryParams  = sector ? [sector] : [];
-
+    // Fetch full unfiltered dataset — filtering is done client-side in the frontend
+    // so sector switching never requires a round-trip to the DB
     const sqlQuery = `
       WITH LatestDate AS (
         SELECT MAX(as_of_date) AS max_date FROM ranked_candidates
@@ -67,15 +61,18 @@ export async function onRequest(context) {
         book_to_market,
         roa,
         asset_growth_yoy,
-        composite_score
+        composite_score,
+        quality_penalty,
+        revenue_growth,
+        pct_above_52w_low,
+        week52_low,
+        week52_high
       FROM ranked_candidates
       WHERE as_of_date = (SELECT max_date FROM LatestDate)
-      ${sectorFilter}
       ORDER BY rank_overall ASC
-      LIMIT 25
+      LIMIT 200
     `;
 
-    // Neon HTTP SQL API endpoint
     const neonEndpoint = `https://${host}/sql`;
 
     const dbRes = await fetch(neonEndpoint, {
@@ -85,10 +82,7 @@ export async function onRequest(context) {
         "Authorization": "Basic " + btoa(`${username}:${password}`),
         "Neon-Connection-String": DATABASE_URL,
       },
-      body: JSON.stringify({
-        query: sqlQuery,
-        params: queryParams,
-      }),
+      body: JSON.stringify({ query: sqlQuery }),
     });
 
     if (!dbRes.ok) {
@@ -100,7 +94,7 @@ export async function onRequest(context) {
     }
 
     const result = await dbRes.json();
-    const rows = result.rows ?? [];
+    const rows   = result.rows ?? [];
 
     return new Response(
       JSON.stringify({ success: true, count: rows.length, data: rows }),

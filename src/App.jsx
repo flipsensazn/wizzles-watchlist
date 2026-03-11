@@ -1310,78 +1310,79 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
 
 // ── MULTIBAGGER PANEL ─────────────────────────────────────
 function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTickerClick }) {
-  const [allData, setAllData] = useState([]);   // full unfiltered dataset — never mutated by filter
-  const [data, setData] = useState([]);          // filtered view shown in table
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [newTicker, setNewTicker] = useState("");
-  const [showImport, setShowImport] = useState(false);
-  const [importText, setImportText] = useState("");
+  const [allData, setAllData]         = useState([]);  // full unfiltered dataset
+  const [data, setData]               = useState([]);  // filtered view shown in table
+  const [loading, setLoading]         = useState(true);
+  const [error, setError]             = useState(null);
+  const [newTicker, setNewTicker]     = useState("");
+  const [showImport, setShowImport]   = useState(false);
+  const [importText, setImportText]   = useState("");
   const [sectorFilter, setSectorFilter] = useState("");
   const [lastUpdated, setLastUpdated] = useState(null);
   const [usingFallback, setUsingFallback] = useState(false);
 
-  // ── PDF SCORING ALGORITHM ─────────────────────────────
-  // Composite = 0.45×FCF_rank + 0.20×BM_rank + 0.20×ROA_rank + 0.15×AssetGrowth_rank
-  // Ranks are percentile (0–1). Higher = better for all four factors.
+  // ── SCORING ALGORITHM (fallback mode) ────────────────
+  // Matches ETL: FCF(35%) B/M(20%) ROA(15%) AssetGrowth(15%) RevGrowth(15%)
+  // Relaxed ROA gate: allows down to -5% to catch near-profitable companies
   function computeCompositeScores(rawList) {
     if (rawList.length === 0) return [];
 
     function winsorizeAndRank(arr) {
-      const sorted = [...arr].sort((a, b) => a - b);
-      const lo = sorted[Math.floor(sorted.length * 0.05)] ?? sorted[0];
-      const hi = sorted[Math.ceil(sorted.length * 0.95) - 1] ?? sorted[sorted.length - 1];
-      const clipped = arr.map(v => Math.min(Math.max(v, lo), hi));
-      const ranked = clipped.map(v => {
+      const valid  = arr.filter(v => v != null && !isNaN(v));
+      if (valid.length === 0) return arr.map(() => 0.5);
+      const sorted = [...valid].sort((a, b) => a - b);
+      const lo     = sorted[Math.floor(sorted.length * 0.05)] ?? sorted[0];
+      const hi     = sorted[Math.ceil(sorted.length * 0.95) - 1] ?? sorted[sorted.length - 1];
+      const clipped = arr.map(v => (v == null || isNaN(v)) ? lo : Math.min(Math.max(v, lo), hi));
+      return clipped.map(v => {
         const below = clipped.filter(x => x < v).length;
-        return (below + 0.5) / clipped.length; // percentile rank
+        return (below + 0.5) / clipped.length;
       });
-      return ranked;
     }
 
     const fcfYields    = rawList.map(s => s._fcfYield);
     const bms          = rawList.map(s => s._bookToMarket);
     const roas         = rawList.map(s => s._roa);
     const assetGrowths = rawList.map(s => s._assetGrowth);
+    const revGrowths   = rawList.map(s => s._revGrowth ?? null);
 
-    const fcfRanks    = winsorizeAndRank(fcfYields);
-    const bmRanks     = winsorizeAndRank(bms);
-    const roaRanks    = winsorizeAndRank(roas);
-    const agRanks     = winsorizeAndRank(assetGrowths);
+    const fcfRanks = winsorizeAndRank(fcfYields);
+    const bmRanks  = winsorizeAndRank(bms);
+    const roaRanks = winsorizeAndRank(roas);
+    const agRanks  = winsorizeAndRank(assetGrowths);
+    const rgRanks  = winsorizeAndRank(revGrowths);
 
     return rawList.map((s, i) => ({
       ...s,
-      fcf_yield:      fcfYields[i],
-      book_to_market: bms[i],
-      roa:            roas[i],
+      fcf_yield:       fcfYields[i],
+      book_to_market:  bms[i],
+      roa:             roas[i],
+      revenue_growth:  revGrowths[i],
       composite_score:
-        0.45 * fcfRanks[i] +
+        0.35 * fcfRanks[i] +
         0.20 * bmRanks[i]  +
-        0.20 * roaRanks[i] +
-        0.15 * agRanks[i],
+        0.15 * roaRanks[i] +
+        0.15 * agRanks[i]  +
+        0.15 * rgRanks[i],
     }))
     .sort((a, b) => b.composite_score - a.composite_score)
     .map((s, i) => ({ ...s, rank_overall: i + 1 }));
   }
 
-  // ── FETCH FROM NEON ───────────────────────────────────
-  // Always fetches the full unfiltered dataset — sector filtering is done
-  // client-side so switching filters never triggers a new network request
-  // and "All Sectors" always restores the complete list instantly.
+  // ── FETCH FULL DATASET FROM NEON ─────────────────────
+  // Always fetches unfiltered — sector filter is applied client-side
   const fetchRanked = async () => {
     setLoading(true);
     setError(null);
     try {
       const res  = await fetch("/scanner-ranked");
       const json = await res.json();
-
       if (json.success && json.data?.length > 0) {
         setAllData(json.data);
         setData(json.data);
         setUsingFallback(false);
         setLastUpdated(new Date().toLocaleDateString());
       } else {
-        // DB empty or unavailable — fall back to live Yahoo scoring
         setUsingFallback(true);
         await fetchFallback();
       }
@@ -1394,7 +1395,7 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
     }
   };
 
-  // ── FALLBACK: live Yahoo fetch + PDF scoring algorithm ─
+  // ── FALLBACK: live Yahoo fetch ────────────────────────
   const fetchFallback = async () => {
     const CONCURRENCY = 4;
     const rawResults  = [];
@@ -1407,35 +1408,38 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
         const r    = json?.quoteSummary?.result?.[0];
         if (!r) return null;
 
-        const fcf          = r.financialData?.freeCashflow?.raw ?? 0;
-        const marketCapRaw = r.price?.marketCap?.raw ?? 1;
-        const roaRaw       = r.financialData?.returnOnAssets?.raw ?? 0;
-        const pb           = r.defaultKeyStatistics?.priceToBook?.raw ?? 0;
-        const pe           = r.summaryDetail?.trailingPE?.raw ?? null;
-        const totalAssets  = r.balanceSheetHistory?.balanceSheetStatements?.[0]?.totalAssets?.raw ?? 1;
+        const fcf             = r.financialData?.freeCashflow?.raw ?? 0;
+        const marketCapRaw    = r.price?.marketCap?.raw ?? 1;
+        const roaRaw          = r.financialData?.returnOnAssets?.raw ?? 0;
+        const pb              = r.defaultKeyStatistics?.priceToBook?.raw ?? 0;
+        const pe              = r.summaryDetail?.trailingPE?.raw ?? null;
+        const totalAssets     = r.balanceSheetHistory?.balanceSheetStatements?.[0]?.totalAssets?.raw ?? 1;
         const totalAssetsPrev = r.balanceSheetHistory?.balanceSheetStatements?.[1]?.totalAssets?.raw ?? totalAssets;
+        const revCurrent      = r.incomeStatementHistory?.incomeStatementHistory?.[0]?.totalRevenue?.raw ?? null;
+        const revPrev         = r.incomeStatementHistory?.incomeStatementHistory?.[1]?.totalRevenue?.raw ?? null;
 
         const fcfYield    = marketCapRaw > 0 ? fcf / marketCapRaw : 0;
         const bookToMarket = pb > 0 ? 1 / pb : 0;
-        const roa          = roaRaw; // already a ratio e.g. 0.08
-        // Asset growth YoY: (current - prev) / prev
+        const roa          = roaRaw;
         const assetGrowth  = totalAssetsPrev > 0
-          ? (totalAssets - totalAssetsPrev) / totalAssetsPrev
-          : 0.05; // MVP fallback matches ETL script
+          ? (totalAssets - totalAssetsPrev) / totalAssetsPrev : 0;
+        const revGrowth    = (revCurrent != null && revPrev != null && revPrev !== 0)
+          ? (revCurrent - revPrev) / Math.abs(revPrev) : null;
 
-        // Only include stocks passing the positive gates (matches ETL filter)
-        if (fcfYield <= 0 || bookToMarket <= 0 || roa <= 0) return null;
+        // Relaxed ROA gate: allow slightly negative (matches ETL -5% floor)
+        if (fcfYield <= 0 || bookToMarket <= 0 || roa < -0.05) return null;
 
         return {
           ticker,
-          market_cap:     marketCapRaw,           // raw dollars for fmtMarketCap
-          price:          r.price?.regularMarketPrice?.raw ?? null,
-          sector:         r.assetProfile?.sector ?? null,
+          market_cap:    marketCapRaw,
+          price:         r.price?.regularMarketPrice?.raw ?? null,
+          sector:        r.assetProfile?.sector ?? null,
           pe,
-          _fcfYield:      fcfYield,
-          _bookToMarket:  bookToMarket,
-          _roa:           roa,
-          _assetGrowth:   assetGrowth,
+          _fcfYield:     fcfYield,
+          _bookToMarket: bookToMarket,
+          _roa:          roa,
+          _assetGrowth:  assetGrowth,
+          _revGrowth:    revGrowth,
         };
       } catch { return null; }
     }
@@ -1447,7 +1451,6 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
         if (result) rawResults.push(result);
       }
     }
-
     await Promise.all(Array.from({ length: CONCURRENCY }, worker));
     const scored = computeCompositeScores(rawResults);
     setAllData(scored);
@@ -1457,7 +1460,7 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
   useEffect(() => { fetchRanked(); }, []);
   useEffect(() => { if (usingFallback) fetchFallback(); }, [scannerPool]);
 
-  // Client-side sector filter — slices allData, never re-fetches
+  // Client-side sector filter — no re-fetch needed
   useEffect(() => {
     if (sectorFilter) {
       setData(allData.filter(d => d.sector === sectorFilter));
@@ -1481,14 +1484,22 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
 
   const removeTicker = (ticker) => { onSaveScanner(scannerPool.filter(t => t !== ticker)); };
 
-  // Score displayed as 0–100 (composite × 100)
+  // Score displayed as 0–100 scale
   const getScoreColor = (score) => {
-    if (score >= 70) return "#34d399"; // top 30%
-    if (score >= 45) return "#fbbf24"; // middle
-    return "#f87171";                  // bottom
+    if (score >= 70) return "#34d399";
+    if (score >= 45) return "#fbbf24";
+    return "#f87171";
   };
 
-  const sectors = [...new Set(data.map(d => d.sector).filter(Boolean))];
+  // 52W proximity badge color
+  const get52wColor = (pct) => {
+    if (pct == null) return "#475569";
+    if (pct <= 20)  return "#34d399";   // near 52W low — most attractive
+    if (pct <= 50)  return "#fbbf24";
+    return "#64748b";
+  };
+
+  const sectors = [...new Set(allData.map(d => d.sector).filter(Boolean))].sort();
 
   return (
     <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, display: "flex", flexDirection: "column", height: "100%" }}>
@@ -1506,7 +1517,7 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
           </div>
           <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>
             {usingFallback
-              ? "Live scoring · FCF(45%) B/M(20%) ROA(20%) Growth(15%)"
+              ? "Live · FCF(35%) B/M(20%) ROA(15%) Growth(15%) Rev(15%)"
               : `ETL-ranked universe · updated ${lastUpdated ?? "weekly"}`}
           </p>
         </div>
@@ -1567,45 +1578,51 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
               <th style={{ padding: "10px 8px" }}>FCF YLD</th>
               <th style={{ padding: "10px 8px" }}>B/M</th>
               <th style={{ padding: "10px 8px" }}>ROA</th>
+              <th style={{ padding: "10px 8px" }}>REV GR</th>
+              <th style={{ padding: "10px 8px" }}>52W LOW</th>
               <th style={{ padding: "10px 8px", textAlign: "right" }}>SCORE</th>
               {isAdmin && <th style={{ width: 30 }}></th>}
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="9" style={{ padding: 20, color: "#475569" }}>
+              <tr><td colSpan="11" style={{ padding: 20, color: "#475569" }}>
                 {usingFallback ? "Fetching live data..." : "Loading ranked candidates..."}
               </td></tr>
             ) : data.length === 0 ? (
-              <tr><td colSpan="9" style={{ padding: 20, color: "#475569" }}>
+              <tr><td colSpan="11" style={{ padding: 20, color: "#475569" }}>
                 No candidates found{sectorFilter ? ` in ${sectorFilter}` : ""}.
               </td></tr>
             ) : data.map((stock) => {
-              const priceEntry  = prices[stock.ticker];
-              const livePrice   = priceEntry?.price;
-              const change      = priceEntry?.change;
+              const priceEntry = prices[stock.ticker];
+              const livePrice  = priceEntry?.price;
+              const change     = priceEntry?.change;
 
-              // Price: prefer live feed, fall back to DB/Yahoo value
               const priceStr = livePrice
                 ? "$" + livePrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                 : stock.price != null
                   ? "$" + Number(stock.price).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                   : "—";
 
-              // Market cap: DB stores in millions, fallback stores raw dollars
               const marketCapRaw = usingFallback
-                ? stock.market_cap                        // already raw dollars from Yahoo
-                : (stock.market_cap ?? 0) * 1_000_000;   // DB value is in millions
+                ? stock.market_cap
+                : (stock.market_cap ?? 0) * 1_000_000;
               const marketCapStr = marketCapRaw > 0 ? fmtMarketCap(marketCapRaw) : "—";
 
               const score    = Number(stock.composite_score);
-              const fcfYield = Number(usingFallback ? stock.fcf_yield : stock.fcf_yield);
+              const fcfYield = Number(stock.fcf_yield);
               const bm       = Number(stock.book_to_market);
               const roa      = Number(stock.roa);
+              const revGr    = stock.revenue_growth != null ? Number(stock.revenue_growth) : null;
+              const pct52w   = stock.pct_above_52w_low != null ? Number(stock.pct_above_52w_low) : null;
+              const penalty  = stock.quality_penalty ?? 0;
 
-              // FCF yield display: DB stores as ratio (0.08), fallback also ratio after fix
               const fcfDisplay = !isNaN(fcfYield) ? (fcfYield * 100).toFixed(2) + "%" : "—";
-              const roaDisplay = !isNaN(roa)      ? (roa * 100).toFixed(1)  + "%" : "—";
+              const roaDisplay = !isNaN(roa) ? (roa * 100).toFixed(1) + "%" : "—";
+              const revDisplay = revGr != null && !isNaN(revGr)
+                ? (revGr >= 0 ? "+" : "") + (revGr * 100).toFixed(1) + "%" : "—";
+              const pct52wDisplay = pct52w != null
+                ? "+" + pct52w.toFixed(1) + "%" : "—";
 
               return (
                 <tr key={stock.ticker}
@@ -1619,7 +1636,15 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
 
                   <td onClick={e => onTickerClick(stock.ticker, e.currentTarget.getBoundingClientRect())}
                     style={{ padding: "12px 8px", cursor: "pointer" }}>
-                    <div style={{ fontWeight: 700, color: "#f1f5f9" }}>{stock.ticker}</div>
+                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                      <span style={{ fontWeight: 700, color: "#f1f5f9" }}>{stock.ticker}</span>
+                      {penalty > 0 && (
+                        <span title={`Quality penalty: ${penalty} flag${penalty > 1 ? "s" : ""}`}
+                          style={{ fontSize: 9, color: "#f87171", fontWeight: 700 }}>
+                          {"⚑".repeat(penalty)}
+                        </span>
+                      )}
+                    </div>
                     {stock.sector && <div style={{ fontSize: 9, color: "#475569", marginTop: 1 }}>{stock.sector}</div>}
                     {change !== undefined && (
                       <div style={{ fontSize: 9, color: change >= 0 ? "#34d399" : "#f87171" }}>
@@ -1637,8 +1662,18 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
                   <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>
                     {!isNaN(bm) ? bm.toFixed(3) : "—"}
                   </td>
-                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>
+                  <td style={{ padding: "12px 8px", color: !isNaN(roa) && roa < 0 ? "#f87171" : "#cbd5e1" }}>
                     {roaDisplay}
+                  </td>
+
+                  {/* FEATURE 3: Revenue growth */}
+                  <td style={{ padding: "12px 8px", color: revGr != null && revGr > 0 ? "#34d399" : revGr != null && revGr < -0.1 ? "#f87171" : "#cbd5e1" }}>
+                    {revDisplay}
+                  </td>
+
+                  {/* FEATURE 4: 52W low proximity */}
+                  <td style={{ padding: "12px 8px", color: get52wColor(pct52w), fontWeight: pct52w != null && pct52w <= 20 ? 700 : 400 }}>
+                    {pct52wDisplay}
                   </td>
 
                   <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(score * 100), fontSize: 13 }}>
