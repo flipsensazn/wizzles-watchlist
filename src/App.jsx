@@ -1084,7 +1084,7 @@ function DonutChart({ prices, capexData, capexIntel, capexIntelStatus, capexInte
         </div>
         <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>
           {isLive ? "Claude web search · hyperscaler filings & earnings · hover to inspect"
-           : isError ? "Showing static estimates — check ANTHROPIC_API_KEY env var & redeploy capex-intel.js"
+           : isError ? "Showing static estimates — check GEMINI_API_KEY env var & redeploy capex-intel.js"
            : "Capex weight · hover to inspect avg performance"}
         </p>
       </div>
@@ -1717,16 +1717,17 @@ export default function App() {
       .then(data => { if (data.capexData && (data.capexData.version ?? 0) >= CAPEX_DATA.version) { setCapexData(data.capexData); capexDataRef.current = data.capexData; } })
       .catch(e => console.log("Capex fetch failed"));
 
-    // Fetch live capex intelligence (Claude + web search, cached 6h in KV)
+    // Fetch live capex intelligence (Gemini, cached 6h in KV) — 20s timeout
     setCapexIntelStatus("loading");
-    fetch("/capex-intel")
+    const intelController = new AbortController();
+    const intelTimeout = setTimeout(() => intelController.abort(), 20000);
+    fetch("/capex-intel", { signal: intelController.signal })
       .then(res => res.json())
       .then(data => {
+        clearTimeout(intelTimeout);
         if (data.error) {
           setCapexIntelStatus("error");
-          // Include detail (raw Anthropic response body) if present
           setCapexIntelError(data.detail ? `${data.error} — ${data.detail}` : data.error);
-        } else if (data.allocations?.length) {
         } else if (data.allocations?.length) {
           setCapexIntel(data);
           setCapexIntelStatus("success");
@@ -1736,8 +1737,9 @@ export default function App() {
         }
       })
       .catch(e => {
+        clearTimeout(intelTimeout);
         setCapexIntelStatus("error");
-        setCapexIntelError(e.message || "Network error — is capex-intel.js deployed?");
+        setCapexIntelError(e.name === "AbortError" ? "Request timed out — Gemini took too long" : (e.message || "Network error"));
       });
 
     fetch("/shortlist")
