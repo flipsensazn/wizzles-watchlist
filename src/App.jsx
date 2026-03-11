@@ -991,10 +991,22 @@ function HeatMap({ prices, capexData, onTickerClick }) {
 }
 
 // ── DONUT CHART ───────────────────────────────────────────
-function DonutChart({ prices, capexData }) {
+function DonutChart({ prices, capexData, capexIntel }) {
   const [hovered, setHovered] = useState(null);
   const total = useMemo(() => capexData.tracks.reduce((s, t) => s + (t.capex || 0), 0), [capexData]);
   const cx = 130, cy = 130, R = 90, r = 52;
+
+  const isLive = !!(capexIntel?.allocations?.length);
+  const intelAge = capexIntel?.fetchedAt
+    ? (() => {
+        const diffMs  = Date.now() - capexIntel.fetchedAt;
+        const diffMin = Math.floor(diffMs / 60000);
+        const diffHr  = Math.floor(diffMin / 60);
+        if (diffHr >= 1) return `${diffHr}h ago`;
+        if (diffMin >= 1) return `${diffMin}m ago`;
+        return "just now";
+      })()
+    : null;
 
   // Memoized: SVG path geometry only changes when capexData changes, not on every price tick.
   // avg performance (which uses prices) is kept separate in trackPerf below.
@@ -1038,8 +1050,23 @@ function DonutChart({ prices, capexData }) {
   return (
     <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20 }}>
       <div style={{ marginBottom: 16 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Sector Allocation</h3>
-        <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>Capex weight · hover to inspect avg performance</p>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
+          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Sector Allocation</h3>
+          {isLive ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", color: "#34d399", background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.3)", borderRadius: 4, padding: "2px 7px" }}>
+                <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#34d399", display: "inline-block", boxShadow: "0 0 5px #34d399" }} />
+                LIVE INTEL
+              </span>
+              {intelAge && <span style={{ fontSize: 9, color: "#475569" }}>{intelAge}</span>}
+            </div>
+          ) : (
+            <span style={{ fontSize: 9, color: "#475569", letterSpacing: "0.06em" }}>ESTIMATED</span>
+          )}
+        </div>
+        <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>
+          {isLive ? "Claude web search · hyperscaler filings & earnings · hover to inspect" : "Capex weight · hover to inspect avg performance"}
+        </p>
       </div>
       <div style={{ display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap" }}>
         <svg width="260" height="260">
@@ -1062,8 +1089,8 @@ function DonutChart({ prices, capexData }) {
           ) : (
             <>
               <text x={cx} y={cy - 8} textAnchor="middle" fill="#94a3b8" fontSize="10">TOTAL CAPEX</text>
-              <text x={cx} y={cy + 14} textAnchor="middle" fill="#fbbf24" fontSize="20" fontWeight="800">~$445B</text>
-              <text x={cx} y={cy + 30} textAnchor="middle" fill="#475569" fontSize="10">tracked</text>
+              <text x={cx} y={cy + 14} textAnchor="middle" fill="#fbbf24" fontSize="20" fontWeight="800">${total}B</text>
+              <text x={cx} y={cy + 30} textAnchor="middle" fill={isLive ? "#34d399" : "#475569"} fontSize="10">{isLive ? "live intel" : "tracked"}</text>
             </>
           )}
         </svg>
@@ -1074,15 +1101,21 @@ function DonutChart({ prices, capexData }) {
                 <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
                   <div style={{ width: 8, height: 8, borderRadius: "50%", background: track.color }} />
                   <span style={{ fontSize: 11, color: "#cbd5e1", fontWeight: 600 }}>{track.label}</span>
+                  {isLive && track.intelConfidence === "high" && (
+                    <span style={{ fontSize: 8, color: "#34d399", opacity: 0.7 }}>●</span>
+                  )}
                 </div>
                 <div style={{ display: "flex", gap: 8 }}>
-                  <span style={{ fontSize: 10, color: "#475569" }}>${track.capex}B</span>
+                  <span style={{ fontSize: 10, color: isLive ? "#94a3b8" : "#475569" }}>${track.capex}B</span>
                   <span style={{ fontSize: 11, fontWeight: 700, color: track.avg >= 0 ? "#34d399" : "#f87171", minWidth: 46, textAlign: "right" }}>{track.avg >= 0 ? "+" : ""}{track.avg.toFixed(1)}%</span>
                 </div>
               </div>
               <div style={{ height: 4, borderRadius: 4, background: "rgba(255,255,255,0.05)", overflow: "hidden" }}>
                 <div style={{ height: "100%", borderRadius: 4, width: `${(track.capex / total) * 100}%`, background: `linear-gradient(90deg,${track.borderColor},${track.color})`, transition: "width .6s cubic-bezier(.4,0,.2,1)" }} />
               </div>
+              {isLive && track.rationale && hovered === track.id && (
+                <div style={{ fontSize: 9, color: "#64748b", marginTop: 4, lineHeight: 1.4, fontStyle: "italic" }}>{track.rationale}</div>
+              )}
             </div>
           ))}
         </div>
@@ -1608,6 +1641,7 @@ export default function App() {
   const [scannerPool, setScannerPool] = useState(DEFAULT_MULTIBAGGER);
   const [shortList, setShortList] = useState([]);
   const [capexData, setCapexData] = useState(CAPEX_DATA);
+  const [capexIntel, setCapexIntel] = useState(null); // { allocations, fetchedAt, fromCache }
   
   const [activeTrack, setActiveTrack] = useState(null);
   const [prices, setPrices] = useState({});
@@ -1660,6 +1694,12 @@ export default function App() {
       .then(res => res.json())
       .then(data => { if (data.capexData && (data.capexData.version ?? 0) >= CAPEX_DATA.version) { setCapexData(data.capexData); capexDataRef.current = data.capexData; } })
       .catch(e => console.log("Capex fetch failed"));
+
+    // Fetch live capex intelligence (Claude + web search, cached 6h in KV)
+    fetch("/capex-intel")
+      .then(res => res.json())
+      .then(data => { if (data.allocations?.length) setCapexIntel(data); })
+      .catch(e => console.log("Capex intel fetch failed"));
 
     fetch("/shortlist")
       .then(res => res.json())
@@ -1794,12 +1834,33 @@ export default function App() {
   }
 
   const allTickerCount = useMemo(() => getAllTickers(capexData).length, [capexData]);
+
+  // Merge live intel allocations (capex + value) into capexData tracks when available.
+  // This keeps sector-structure & tickers from capexData while refreshing the $B figures.
+  const liveCapexData = useMemo(() => {
+    if (!capexIntel?.allocations?.length) return capexData;
+    const intelMap = Object.fromEntries(capexIntel.allocations.map(a => [a.id, a]));
+    return {
+      ...capexData,
+      tracks: capexData.tracks.map(track => {
+        const intel = intelMap[track.id];
+        if (!intel) return track;
+        return {
+          ...track,
+          capex:  intel.capex,
+          value:  intel.value,
+          rationale: intel.rationale,
+          intelConfidence: intel.confidence,
+        };
+      }),
+    };
+  }, [capexData, capexIntel]);
   // Count only the capex watchlist tickers — prices also contains market strip
   // tickers (indices, crypto, hyperscalers) which would inflate these counts.
   const watchlistTickers = useMemo(() => getAllTickers(capexData), [capexData]);
   const gainers = watchlistTickers.filter(t => (prices[t]?.change ?? prices[t]) > 0).length;
   const losers  = watchlistTickers.filter(t => (prices[t]?.change ?? prices[t]) < 0).length;
-  const activeData = capexData.tracks.find(t => t.id === activeTrack);
+  const activeData = liveCapexData.tracks.find(t => t.id === activeTrack);
   const tickerEntries = Object.entries(prices);
 
   return (
@@ -1894,7 +1955,7 @@ export default function App() {
           </div>
 
           <div className="track-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(0,1fr))", gap: 10, paddingTop: 8 }}>
-            {capexData.tracks.map(track => (
+            {liveCapexData.tracks.map(track => (
               <div key={track.id} style={{ paddingTop: activeTrack === track.id ? 14 : 0 }}>
                 <TrackCard track={track} isActive={activeTrack === track.id} onClick={() => setActiveTrack(p => p === track.id ? null : track.id)} />
               </div>
@@ -1914,14 +1975,14 @@ export default function App() {
             
             {bottomTab === "all" ? (
               <div className="bottom-grid-all">
-                <div className="span-2"><HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} /></div>
-                <div className="span-1 panel-wrapper"><div className="panel-inner"><Watchlist prices={prices} capexData={capexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} /></div></div>
-                <div className="span-1"><DonutChart prices={prices} capexData={capexData} /></div>
+                <div className="span-2"><HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} /></div>
+                <div className="span-1 panel-wrapper"><div className="panel-inner"><Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} /></div></div>
+                <div className="span-1"><DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} /></div>
                 <div className="span-2 panel-wrapper"><div className="panel-inner"><MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} /></div></div>
               </div>
-            ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={capexData} onTickerClick={openPopup} />
-              : bottomTab === "donut" ? <DonutChart prices={prices} capexData={capexData} />
-              : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={capexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} />
+            ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} />
+              : bottomTab === "donut" ? <DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} />
+              : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} />
               : <MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} />
             }
           </div>
