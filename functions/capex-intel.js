@@ -1,0 +1,213 @@
+// functions/capex-intel.js
+//
+// Dynamically queries Claude (with web search) to get the latest publicly-announced
+// hyperscaler AI capex allocations across the 6 infrastructure sectors.
+// Results are cached in Cloudflare KV for 6 hours to avoid hammering the API.
+//
+// GET  /capex-intel          → returns cached or freshly-fetched intel
+// POST /capex-intel          → admin-only force-refresh (busts the cache)
+
+const CACHE_KEY   = "capexIntel";
+const CACHE_TTL   = 6 * 60 * 60 * 1000;   // 6 hours in ms
+const MODEL       = "claude-sonnet-4-20250514";
+
+// Mirror of the CAPEX_DATA sector IDs + labels in App.jsx so the prompt is precise.
+const SECTORS = [
+  {
+    id:          "compute",
+    label:       "Compute & Silicon",
+    description: "GPU/AI accelerators (NVDA, AMD), memory & HBM (MU, WDC), custom ASICs/TPUs (AVGO, MRVL), leading-edge foundry (TSM), semiconductor equipment (AMAT, LRCX, ASML), advanced packaging",
+  },
+  {
+    id:          "networking",
+    label:       "Networking & Connectivity",
+    description: "Ethernet switching (ANET, CSCO), optical transceivers 400G/800G (LITE, COHR), cables & connectors, cybersecurity infrastructure (PANW, CRWD)",
+  },
+  {
+    id:          "photonics",
+    label:       "Photonics & Interconnects",
+    description: "Optical engines, InP substrate & epiwafers, epitaxy equipment (VECO), silicon photonics foundry, high-speed interconnects",
+  },
+  {
+    id:          "neoclouds",
+    label:       "Neoclouds & Data Centers",
+    description: "Hyperscale REIT construction (EQIX, DLR), GPU cloud operators / neoclouds (CoreWeave, IREN, APLD), AI server infrastructure (SMCI, VRT), MEP contractors (FIX, EME, MTZ)",
+  },
+  {
+    id:          "power",
+    label:       "Power & Cooling",
+    description: "Power generation & utilities (VST, NEE, BE), nuclear (OKLO, SMR), UPS/power management (ETN, VRT), liquid & immersion cooling",
+  },
+  {
+    id:          "frontier",
+    label:       "Frontier / Speculative",
+    description: "Quantum computing, neuromorphic AI, space (RKLB, ASTS), SaaS platforms (PLTR, SNOW, NOW), robotics, precious metals hedge",
+  },
+];
+
+function buildPrompt() {
+  return `You are a financial analyst specialising in AI infrastructure capital expenditure.
+
+The five primary hyperscalers—Amazon (AWS), Microsoft (Azure), Alphabet/Google, Meta, and Oracle—have collectively announced roughly $600 billion or more in AI-related capex for 2025-2026.
+
+Using web search, find their most recent earnings calls, investor-day presentations, SEC filings, and credible news coverage to estimate how this total spend flows across the following six infrastructure sectors. Use search queries like "Amazon AWS 2025 capex data center spending", "Microsoft Azure AI infrastructure capex 2026", "Google capex AI servers 2025 earnings", "Meta data center spending 2025", "Oracle cloud capex 2025".
+
+Sectors to allocate:
+${SECTORS.map(s => `• ${s.id} — "${s.label}": ${s.description}`).join("\n")}
+
+Guidelines:
+- Base numbers on the most recent public guidance or trailing-twelve-month actuals where available.
+- The six sectors should sum to roughly 600 (i.e., $600 B total).
+- "Compute & Silicon" (chips + foundry + equipment) typically absorbs the largest share (~25-35%).
+- "Neoclouds & Data Centers" (physical build-out) is the second-largest (~18-22%).
+- Use your best estimate for sectors where direct figures are unavailable.
+- Include a one-sentence rationale citing at least one recent source for each sector.
+
+Respond with ONLY a valid JSON array — no markdown fences, no preamble, no explanation outside the JSON:
+
+[
+  {
+    "id": "compute",
+    "capex": <integer, billions USD>,
+    "value": "<display string e.g. ~$185B>",
+    "rationale": "<one sentence with source/date>",
+    "confidence": "high|medium|low"
+  },
+  ...six objects total...
+]`;
+}
+
+export async function onRequest(context) {
+  const { request, env } = context;
+
+  const ALLOWED_ORIGIN = env.ALLOWED_ORIGIN || "";
+  const origin         = request.headers.get("Origin") || "";
+  const corsOrigin     = origin === ALLOWED_ORIGIN ? ALLOWED_ORIGIN : "";
+
+  const headers = {
+    "Access-Control-Allow-Origin": corsOrigin,
+    "Content-Type": "application/json",
+    "Vary": "Origin",
+  };
+
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        ...headers,
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    });
+  }
+
+  // ── POST: admin-only cache-bust + forced refresh ──────────────────────────
+  if (request.method === "POST") {
+    try {
+      const body = await request.json();
+      const adminPassword = env.ADMIN_PASSWORD;
+      if (!adminPassword || body.password !== adminPassword) {
+        return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers });
+      }
+      // Delete the KV cache so the next GET fetches fresh data
+      if (env.SHARED_DATA) await env.SHARED_DATA.delete(CACHE_KEY);
+      return new Response(JSON.stringify({ success: true, message: "Cache cleared — next GET will fetch live intel." }), { status: 200, headers });
+    } catch (err) {
+      return new Response(JSON.stringify({ error: err.message }), { status: 500, headers });
+    }
+  }
+
+  // ── GET: serve from cache or fetch fresh ─────────────────────────────────
+  if (request.method === "GET") {
+    try {
+      // 1. Try KV cache
+      if (env.SHARED_DATA) {
+        const cached = await env.SHARED_DATA.get(CACHE_KEY, "json");
+        if (cached?.fetchedAt && Date.now() - cached.fetchedAt < CACHE_TTL) {
+          return new Response(
+            JSON.stringify({ ...cached, fromCache: true }),
+            { status: 200, headers }
+          );
+        }
+      }
+
+      // 2. Cache miss — call Claude with web search
+      const anthropicKey = env.ANTHROPIC_API_KEY;
+      if (!anthropicKey) {
+        return new Response(
+          JSON.stringify({ error: "ANTHROPIC_API_KEY not set on server. Add it as a Cloudflare Pages environment variable." }),
+          { status: 500, headers }
+        );
+      }
+
+      const claudeRes = await fetch("https://api.anthropic.com/v1/messages", {
+        method:  "POST",
+        headers: {
+          "Content-Type":      "application/json",
+          "x-api-key":         anthropicKey,
+          "anthropic-version": "2023-06-01",
+          // Enable the web-search tool so Claude can look up current filings/news
+          "anthropic-beta":    "web-search-2025-03-05",
+        },
+        body: JSON.stringify({
+          model:      MODEL,
+          max_tokens: 1500,
+          tools: [{ type: "web_search_20250305", name: "web_search" }],
+          messages: [{ role: "user", content: buildPrompt() }],
+        }),
+      });
+
+      if (!claudeRes.ok) {
+        const errText = await claudeRes.text();
+        return new Response(
+          JSON.stringify({ error: `Claude API error ${claudeRes.status}`, detail: errText }),
+          { status: 502, headers }
+        );
+      }
+
+      const claudeData = await claudeRes.json();
+
+      // Extract the final text block (ignore tool_use / tool_result blocks)
+      const textContent = (claudeData.content ?? [])
+        .filter(b => b.type === "text")
+        .map(b => b.text)
+        .join("");
+
+      // Parse JSON — strip any accidental markdown fences
+      let allocations;
+      try {
+        const clean = textContent.replace(/^```json\s*/i, "").replace(/```\s*$/, "").trim();
+        allocations = JSON.parse(clean);
+        if (!Array.isArray(allocations)) throw new Error("Expected a JSON array");
+      } catch (parseErr) {
+        return new Response(
+          JSON.stringify({ error: "Failed to parse Claude response as JSON", raw: textContent }),
+          { status: 500, headers }
+        );
+      }
+
+      // Validate we got all 6 sectors; fall back gracefully for any missing ones
+      const validIds = new Set(SECTORS.map(s => s.id));
+      allocations = allocations.filter(a => a.id && validIds.has(a.id) && typeof a.capex === "number");
+
+      const result = {
+        allocations,
+        fetchedAt:  Date.now(),
+        model:      MODEL,
+        note:       "Allocations derived from Claude + web search of public hyperscaler filings and earnings calls.",
+      };
+
+      // 3. Persist to KV for 6 hours
+      if (env.SHARED_DATA) {
+        await env.SHARED_DATA.put(CACHE_KEY, JSON.stringify(result));
+      }
+
+      return new Response(JSON.stringify({ ...result, fromCache: false }), { status: 200, headers });
+
+    } catch (err) {
+      return new Response(JSON.stringify({ error: err.message }), { status: 500, headers });
+    }
+  }
+
+  return new Response("Method Not Allowed", { status: 405, headers });
+}
