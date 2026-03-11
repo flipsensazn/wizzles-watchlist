@@ -184,7 +184,7 @@ if __name__ == "__main__":
     print(f"\n{len(candidates)} candidates passed gates.")
 
     if candidates.empty:
-        print("No candidates — aborting.")
+        print("No candidates -- aborting.")
         exit(1)
 
     sec_data = fetch_sec_fundamentals(candidates)
@@ -194,4 +194,3 @@ if __name__ == "__main__":
     print(f"\nTop 5 ranked:\n{ranked[['ticker','composite_score','rank_overall']].head()}")
     load_to_db(ranked)
     print("=== ETL Complete ===")
-```
