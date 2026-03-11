@@ -1626,7 +1626,7 @@ const GLOBAL_STYLES = `
     50% { box-shadow: 0 0 18px rgba(52,211,153,0.75), 0 0 32px rgba(52,211,153,0.25), inset 0 0 16px rgba(52,211,153,0.14); border-color: #34d399; }
   }
   @keyframes pulseDot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(.7); } }
-  .ticker-tape { animation: scroll-left 80s linear infinite; white-space: nowrap; display: inline-flex; gap: 24px; }
+  .ticker-tape { animation: scroll-left 130s linear infinite; white-space: nowrap; display: inline-flex; gap: 24px; }
   .pulse { animation: pulseDot 2s infinite; }
   .bottom-grid-all { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
   .span-2 { grid-column: span 2; }
@@ -1912,25 +1912,6 @@ export default function App() {
       <style>{GLOBAL_STYLES}</style>
       <div style={{ position: "relative", zIndex: 1, minHeight: "100vh", color: "#fff" }}>
         
-        {/* TICKER TAPE — container always rendered to reserve height and prevent CLS */}
-        <div style={{ height: 34, overflow: "hidden", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(18,18,18,0.75)", padding: "6px 0" }}>
-          {tickerEntries.length > 0 && (
-            <div className="ticker-tape">
-              {[...tickerEntries, ...tickerEntries].map(([sym, val], i) => {
-                const chg = val?.change ?? val;
-                const sessionLabel = val?.session === "POST" || val?.session === "CLOSED" ? "AH" : val?.session === "PRE" ? "PM" : null;
-                return (
-                  <span key={`${sym}-${i}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "#64748b", fontSize: 11 }}>
-                    <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{sym}</span>
-                    {sessionLabel && <span style={{ fontSize: 8, fontWeight: 700, color: "#475569", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 2, padding: "0px 3px" }}>{sessionLabel}</span>}
-                    {chg !== undefined && <span style={{ color: chg >= 0 ? "#34d399" : "#f87171" }}>{chg >= 0 ? "▲" : "▼"} {Math.abs(chg).toFixed(2)}%</span>}
-                  </span>
-                )
-              })}
-            </div>
-          )}
-        </div>
-
         {/* HEADER */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
           <div>
@@ -2031,6 +2012,24 @@ export default function App() {
             }
           </div>
         </div>
+      </div>
+      {/* TICKER TAPE — bottom of page */}
+      <div style={{ position: "sticky", bottom: 0, zIndex: 50, height: 34, overflow: "hidden", borderTop: "1px solid rgba(255,255,255,.04)", background: "rgba(18,18,18,0.95)", padding: "6px 0" }}>
+        {tickerEntries.length > 0 && (
+          <div className="ticker-tape">
+            {[...tickerEntries, ...tickerEntries].map(([sym, val], i) => {
+              const chg = val?.change ?? val;
+              const sessionLabel = val?.session === "POST" || val?.session === "CLOSED" ? "AH" : val?.session === "PRE" ? "PM" : null;
+              return (
+                <span key={`${sym}-${i}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "#64748b", fontSize: 11 }}>
+                  <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{sym}</span>
+                  {sessionLabel && <span style={{ fontSize: 8, fontWeight: 700, color: "#475569", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 2, padding: "0px 3px" }}>{sessionLabel}</span>}
+                  {chg !== undefined && <span style={{ color: chg >= 0 ? "#34d399" : "#f87171" }}>{chg >= 0 ? "▲" : "▼"} {Math.abs(chg).toFixed(2)}%</span>}
+                </span>
+              )
+            })}
+          </div>
+        )}
       </div>
       {popup && <CompanyPopup ticker={popup.ticker} change={popup.change} anchorRect={popup.rect} onClose={() => setPopup(null)} />}
       {showAdminModal && (
