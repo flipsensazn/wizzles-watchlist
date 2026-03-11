@@ -155,8 +155,14 @@ export async function onRequest(context) {
 
       if (!claudeRes.ok) {
         const errText = await claudeRes.text();
+        let errDetail = errText;
+        try {
+          const errJson = JSON.parse(errText);
+          // Anthropic errors look like: { "type": "error", "error": { "type": "...", "message": "..." } }
+          errDetail = errJson?.error?.message || errJson?.message || errText;
+        } catch (_) {}
         return new Response(
-          JSON.stringify({ error: `Claude API error ${claudeRes.status}`, detail: errText }),
+          JSON.stringify({ error: `Claude API error ${claudeRes.status}`, detail: errDetail }),
           { status: 502, headers }
         );
       }
