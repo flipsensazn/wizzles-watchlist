@@ -1074,8 +1074,8 @@ function DonutChart({ prices, capexData, capexIntel, capexIntelStatus, capexInte
             </div>
           )}
           {isError && (
-            <span title={capexIntelError} style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", color: "#f87171", background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.3)", borderRadius: 4, padding: "2px 7px", cursor: "help", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>
-              ⚠ INTEL ERROR · {capexIntelError}
+            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", color: "#f87171", background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.3)", borderRadius: 4, padding: "2px 7px", display: "block", whiteSpace: "normal", lineHeight: 1.5 }}>
+              ⚠ {capexIntelError}
             </span>
           )}
           {!isLoading && !isLive && !isError && (
@@ -1724,7 +1724,9 @@ export default function App() {
       .then(data => {
         if (data.error) {
           setCapexIntelStatus("error");
-          setCapexIntelError(data.error);
+          // Include detail (raw Anthropic response body) if present
+          setCapexIntelError(data.detail ? `${data.error} — ${data.detail}` : data.error);
+        } else if (data.allocations?.length) {
         } else if (data.allocations?.length) {
           setCapexIntel(data);
           setCapexIntelStatus("success");
