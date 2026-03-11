@@ -991,12 +991,14 @@ function HeatMap({ prices, capexData, onTickerClick }) {
 }
 
 // ── DONUT CHART ───────────────────────────────────────────
-function DonutChart({ prices, capexData, capexIntel }) {
+function DonutChart({ prices, capexData, capexIntel, capexIntelStatus, capexIntelError }) {
   const [hovered, setHovered] = useState(null);
   const total = useMemo(() => capexData.tracks.reduce((s, t) => s + (t.capex || 0), 0), [capexData]);
   const cx = 130, cy = 130, R = 90, r = 52;
 
-  const isLive = !!(capexIntel?.allocations?.length);
+  const isLive    = capexIntelStatus === "success" && !!(capexIntel?.allocations?.length);
+  const isLoading = capexIntelStatus === "loading";
+  const isError   = capexIntelStatus === "error";
   const intelAge = capexIntel?.fetchedAt
     ? (() => {
         const diffMs  = Date.now() - capexIntel.fetchedAt;
@@ -1052,7 +1054,12 @@ function DonutChart({ prices, capexData, capexIntel }) {
       <div style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Sector Allocation</h3>
-          {isLive ? (
+          {isLoading && (
+            <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: "#f59e0b", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 4, padding: "2px 7px" }}>
+              ⟳ FETCHING LIVE INTEL…
+            </span>
+          )}
+          {isLive && (
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ display: "inline-flex", alignItems: "center", gap: 4, fontSize: 9, fontWeight: 700, letterSpacing: "0.12em", color: "#34d399", background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.3)", borderRadius: 4, padding: "2px 7px" }}>
                 <span style={{ width: 5, height: 5, borderRadius: "50%", background: "#34d399", display: "inline-block", boxShadow: "0 0 5px #34d399" }} />
@@ -1060,12 +1067,20 @@ function DonutChart({ prices, capexData, capexIntel }) {
               </span>
               {intelAge && <span style={{ fontSize: 9, color: "#475569" }}>{intelAge}</span>}
             </div>
-          ) : (
+          )}
+          {isError && (
+            <span title={capexIntelError} style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", color: "#f87171", background: "rgba(248,113,113,0.1)", border: "1px solid rgba(248,113,113,0.3)", borderRadius: 4, padding: "2px 7px", cursor: "help", maxWidth: 220, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", display: "block" }}>
+              ⚠ INTEL ERROR · {capexIntelError}
+            </span>
+          )}
+          {!isLoading && !isLive && !isError && (
             <span style={{ fontSize: 9, color: "#475569", letterSpacing: "0.06em" }}>ESTIMATED</span>
           )}
         </div>
         <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>
-          {isLive ? "Claude web search · hyperscaler filings & earnings · hover to inspect" : "Capex weight · hover to inspect avg performance"}
+          {isLive ? "Claude web search · hyperscaler filings & earnings · hover to inspect"
+           : isError ? "Showing static estimates — check ANTHROPIC_API_KEY env var & redeploy capex-intel.js"
+           : "Capex weight · hover to inspect avg performance"}
         </p>
       </div>
       <div style={{ display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap" }}>
@@ -1642,6 +1657,8 @@ export default function App() {
   const [shortList, setShortList] = useState([]);
   const [capexData, setCapexData] = useState(CAPEX_DATA);
   const [capexIntel, setCapexIntel] = useState(null); // { allocations, fetchedAt, fromCache }
+  const [capexIntelStatus, setCapexIntelStatus] = useState("idle"); // "idle"|"loading"|"success"|"error"
+  const [capexIntelError, setCapexIntelError] = useState(null);
   
   const [activeTrack, setActiveTrack] = useState(null);
   const [prices, setPrices] = useState({});
@@ -1696,10 +1713,25 @@ export default function App() {
       .catch(e => console.log("Capex fetch failed"));
 
     // Fetch live capex intelligence (Claude + web search, cached 6h in KV)
+    setCapexIntelStatus("loading");
     fetch("/capex-intel")
       .then(res => res.json())
-      .then(data => { if (data.allocations?.length) setCapexIntel(data); })
-      .catch(e => console.log("Capex intel fetch failed"));
+      .then(data => {
+        if (data.error) {
+          setCapexIntelStatus("error");
+          setCapexIntelError(data.error);
+        } else if (data.allocations?.length) {
+          setCapexIntel(data);
+          setCapexIntelStatus("success");
+        } else {
+          setCapexIntelStatus("error");
+          setCapexIntelError("No allocations returned from API.");
+        }
+      })
+      .catch(e => {
+        setCapexIntelStatus("error");
+        setCapexIntelError(e.message || "Network error — is capex-intel.js deployed?");
+      });
 
     fetch("/shortlist")
       .then(res => res.json())
@@ -1977,11 +2009,11 @@ export default function App() {
               <div className="bottom-grid-all">
                 <div className="span-2"><HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} /></div>
                 <div className="span-1 panel-wrapper"><div className="panel-inner"><Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} /></div></div>
-                <div className="span-1"><DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} /></div>
+                <div className="span-1"><DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} capexIntelStatus={capexIntelStatus} capexIntelError={capexIntelError} /></div>
                 <div className="span-2 panel-wrapper"><div className="panel-inner"><MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} /></div></div>
               </div>
             ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} />
-              : bottomTab === "donut" ? <DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} />
+              : bottomTab === "donut" ? <DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} capexIntelStatus={capexIntelStatus} capexIntelError={capexIntelError} />
               : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} />
               : <MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} />
             }
