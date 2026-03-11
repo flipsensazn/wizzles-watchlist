@@ -1310,7 +1310,8 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
 
 // ── MULTIBAGGER PANEL ─────────────────────────────────────
 function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTickerClick }) {
-  const [data, setData] = useState([]);
+  const [allData, setAllData] = useState([]);   // full unfiltered dataset — never mutated by filter
+  const [data, setData] = useState([]);          // filtered view shown in table
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [newTicker, setNewTicker] = useState("");
@@ -1364,17 +1365,18 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
   }
 
   // ── FETCH FROM NEON ───────────────────────────────────
-  const fetchRanked = async (sector = "") => {
+  // Always fetches the full unfiltered dataset — sector filtering is done
+  // client-side so switching filters never triggers a new network request
+  // and "All Sectors" always restores the complete list instantly.
+  const fetchRanked = async () => {
     setLoading(true);
     setError(null);
     try {
-      const url = sector
-        ? `/scanner-ranked?sector=${encodeURIComponent(sector)}`
-        : "/scanner-ranked";
-      const res  = await fetch(url);
+      const res  = await fetch("/scanner-ranked");
       const json = await res.json();
 
       if (json.success && json.data?.length > 0) {
+        setAllData(json.data);
         setData(json.data);
         setUsingFallback(false);
         setLastUpdated(new Date().toLocaleDateString());
@@ -1448,11 +1450,21 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
 
     await Promise.all(Array.from({ length: CONCURRENCY }, worker));
     const scored = computeCompositeScores(rawResults);
+    setAllData(scored);
     setData(scored);
   };
 
-  useEffect(() => { fetchRanked(sectorFilter); }, [sectorFilter]);
+  useEffect(() => { fetchRanked(); }, []);
   useEffect(() => { if (usingFallback) fetchFallback(); }, [scannerPool]);
+
+  // Client-side sector filter — slices allData, never re-fetches
+  useEffect(() => {
+    if (sectorFilter) {
+      setData(allData.filter(d => d.sector === sectorFilter));
+    } else {
+      setData(allData);
+    }
+  }, [sectorFilter, allData]);
 
   const addTicker = () => {
     const sym = newTicker.trim().toUpperCase();
@@ -1469,11 +1481,11 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
 
   const removeTicker = (ticker) => { onSaveScanner(scannerPool.filter(t => t !== ticker)); };
 
-  // Score is 0–1 percentile composite — color thresholds updated accordingly
+  // Score displayed as 0–100 (composite × 100)
   const getScoreColor = (score) => {
-    if (score >= 0.70) return "#34d399"; // top 30%
-    if (score >= 0.45) return "#fbbf24"; // middle
-    return "#f87171";                    // bottom
+    if (score >= 70) return "#34d399"; // top 30%
+    if (score >= 45) return "#fbbf24"; // middle
+    return "#f87171";                  // bottom
   };
 
   const sectors = [...new Set(data.map(d => d.sector).filter(Boolean))];
@@ -1507,7 +1519,7 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
               {sectors.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           )}
-          <button onClick={() => fetchRanked(sectorFilter)}
+          <button onClick={() => fetchRanked()}
             style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b", borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>
             ↻ Refresh
           </button>
@@ -1629,8 +1641,8 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
                     {roaDisplay}
                   </td>
 
-                  <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(score), fontSize: 13 }}>
-                    {!isNaN(score) ? score.toFixed(3) : "—"}
+                  <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(score * 100), fontSize: 13 }}>
+                    {!isNaN(score) ? (score * 100).toFixed(1) : "—"}
                   </td>
 
                   {isAdmin && (
