@@ -2,8 +2,8 @@ name: Weekly Small-Cap Scanner ETL
 
 on:
   schedule:
-    # Runs at 10:00 UTC (6:00 AM EDT) every Sunday — ready for Monday open
-    - cron: '0 10 * * 0'
+    # Runs at 6:00 UTC (2:00 AM EDT) every Sunday — ready for Monday open
+    - cron: '0 6 * * 0'
   
   # Lets you manually trigger a run from the GitHub UI for testing
   workflow_dispatch:
