@@ -9,7 +9,7 @@
 
 const CACHE_KEY = "capexIntel";
 const CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours in ms
-const MODEL     = "gemini-3.1-flash-lite-preview";
+const MODEL     = "gemini-3.1-flash";
 
 const SECTORS = [
   {
@@ -125,7 +125,7 @@ export async function onRequest(context) {
         }
       }
 
-      // 2. Cache miss — call Gemini
+      // 2. Cache miss — call Gemini (15s timeout)
       const geminiKey = env.GEMINI_API_KEY;
       if (!geminiKey) {
         return new Response(
@@ -134,20 +134,32 @@ export async function onRequest(context) {
         );
       }
 
-      const geminiRes = await fetch(
-        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${geminiKey}`,
-        {
-          method:  "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            contents: [{ parts: [{ text: buildPrompt() }] }],
-            generationConfig: {
-              temperature:     0.2,
-              maxOutputTokens: 1500,
-            },
-          }),
-        }
-      );
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 15000);
+
+      let geminiRes;
+      try {
+        geminiRes = await fetch(
+          `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${geminiKey}`,
+          {
+            method:  "POST",
+            signal:  controller.signal,
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents: [{ parts: [{ text: buildPrompt() }] }],
+              generationConfig: {
+                temperature:     0.2,
+                maxOutputTokens: 1500,
+              },
+            }),
+          }
+        );
+      } catch (fetchErr) {
+        const msg = fetchErr.name === "AbortError" ? "Gemini request timed out after 15s" : fetchErr.message;
+        return new Response(JSON.stringify({ error: msg }), { status: 502, headers });
+      } finally {
+        clearTimeout(timeout);
+      }
 
       if (!geminiRes.ok) {
         const errText = await geminiRes.text();
