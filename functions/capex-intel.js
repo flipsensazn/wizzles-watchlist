@@ -9,7 +9,7 @@
 
 const CACHE_KEY = "capexIntel";
 const CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours in ms
-const MODEL     = "gemini-2.0-flash";  // available on Google AI free + Pro tiers
+const MODEL     = "gemini-3.1-flash";
 
 const SECTORS = [
   {
