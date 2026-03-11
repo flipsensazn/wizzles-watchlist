@@ -1320,13 +1320,58 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
   const [lastUpdated, setLastUpdated] = useState(null);
   const [usingFallback, setUsingFallback] = useState(false);
 
-  // Fetch from Neon via /scanner-ranked
+  // ── PDF SCORING ALGORITHM ─────────────────────────────
+  // Composite = 0.45×FCF_rank + 0.20×BM_rank + 0.20×ROA_rank + 0.15×AssetGrowth_rank
+  // Ranks are percentile (0–1). Higher = better for all four factors.
+  function computeCompositeScores(rawList) {
+    if (rawList.length === 0) return [];
+
+    function winsorizeAndRank(arr) {
+      const sorted = [...arr].sort((a, b) => a - b);
+      const lo = sorted[Math.floor(sorted.length * 0.05)] ?? sorted[0];
+      const hi = sorted[Math.ceil(sorted.length * 0.95) - 1] ?? sorted[sorted.length - 1];
+      const clipped = arr.map(v => Math.min(Math.max(v, lo), hi));
+      const ranked = clipped.map(v => {
+        const below = clipped.filter(x => x < v).length;
+        return (below + 0.5) / clipped.length; // percentile rank
+      });
+      return ranked;
+    }
+
+    const fcfYields    = rawList.map(s => s._fcfYield);
+    const bms          = rawList.map(s => s._bookToMarket);
+    const roas         = rawList.map(s => s._roa);
+    const assetGrowths = rawList.map(s => s._assetGrowth);
+
+    const fcfRanks    = winsorizeAndRank(fcfYields);
+    const bmRanks     = winsorizeAndRank(bms);
+    const roaRanks    = winsorizeAndRank(roas);
+    const agRanks     = winsorizeAndRank(assetGrowths);
+
+    return rawList.map((s, i) => ({
+      ...s,
+      fcf_yield:      fcfYields[i],
+      book_to_market: bms[i],
+      roa:            roas[i],
+      composite_score:
+        0.45 * fcfRanks[i] +
+        0.20 * bmRanks[i]  +
+        0.20 * roaRanks[i] +
+        0.15 * agRanks[i],
+    }))
+    .sort((a, b) => b.composite_score - a.composite_score)
+    .map((s, i) => ({ ...s, rank_overall: i + 1 }));
+  }
+
+  // ── FETCH FROM NEON ───────────────────────────────────
   const fetchRanked = async (sector = "") => {
     setLoading(true);
     setError(null);
     try {
-      const url = sector ? `/scanner-ranked?sector=${encodeURIComponent(sector)}` : "/scanner-ranked";
-      const res = await fetch(url);
+      const url = sector
+        ? `/scanner-ranked?sector=${encodeURIComponent(sector)}`
+        : "/scanner-ranked";
+      const res  = await fetch(url);
       const json = await res.json();
 
       if (json.success && json.data?.length > 0) {
@@ -1334,7 +1379,7 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
         setUsingFallback(false);
         setLastUpdated(new Date().toLocaleDateString());
       } else {
-        // DB returned no rows — fall back to legacy Yahoo scoring
+        // DB empty or unavailable — fall back to live Yahoo scoring
         setUsingFallback(true);
         await fetchFallback();
       }
@@ -1347,35 +1392,48 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
     }
   };
 
-  // Legacy fallback: per-ticker Yahoo fetch (original behavior)
+  // ── FALLBACK: live Yahoo fetch + PDF scoring algorithm ─
   const fetchFallback = async () => {
     const CONCURRENCY = 4;
-    const results = [];
-    const queue = [...scannerPool];
+    const rawResults  = [];
+    const queue       = [...scannerPool];
 
     async function processOne(ticker) {
       try {
-        const res = await fetch(`/quote?ticker=${encodeURIComponent(ticker)}`);
+        const res  = await fetch(`/quote?ticker=${encodeURIComponent(ticker)}`);
         const json = await res.json();
-        const r = json?.quoteSummary?.result?.[0];
+        const r    = json?.quoteSummary?.result?.[0];
         if (!r) return null;
-        const fcf = r.financialData?.freeCashflow?.raw || 0;
-        const marketCapRaw = r.price?.marketCap?.raw || 1;
-        const roa = (r.financialData?.returnOnAssets?.raw || 0) * 100;
-        const pb = r.defaultKeyStatistics?.priceToBook?.raw || 0;
-        const pe = r.summaryDetail?.trailingPE?.raw || null;
-        const fcfYield = (fcf / marketCapRaw) * 100;
-        const bookToMarket = pb > 0 ? (1 / pb) : 0;
-        const score = (fcfYield * 15) + (bookToMarket * 10) + (roa * 2);
+
+        const fcf          = r.financialData?.freeCashflow?.raw ?? 0;
+        const marketCapRaw = r.price?.marketCap?.raw ?? 1;
+        const roaRaw       = r.financialData?.returnOnAssets?.raw ?? 0;
+        const pb           = r.defaultKeyStatistics?.priceToBook?.raw ?? 0;
+        const pe           = r.summaryDetail?.trailingPE?.raw ?? null;
+        const totalAssets  = r.balanceSheetHistory?.balanceSheetStatements?.[0]?.totalAssets?.raw ?? 1;
+        const totalAssetsPrev = r.balanceSheetHistory?.balanceSheetStatements?.[1]?.totalAssets?.raw ?? totalAssets;
+
+        const fcfYield    = marketCapRaw > 0 ? fcf / marketCapRaw : 0;
+        const bookToMarket = pb > 0 ? 1 / pb : 0;
+        const roa          = roaRaw; // already a ratio e.g. 0.08
+        // Asset growth YoY: (current - prev) / prev
+        const assetGrowth  = totalAssetsPrev > 0
+          ? (totalAssets - totalAssetsPrev) / totalAssetsPrev
+          : 0.05; // MVP fallback matches ETL script
+
+        // Only include stocks passing the positive gates (matches ETL filter)
+        if (fcfYield <= 0 || bookToMarket <= 0 || roa <= 0) return null;
+
         return {
           ticker,
-          fcf_yield: fcfYield,
-          roa,
-          book_to_market: bookToMarket,
+          market_cap:     marketCapRaw,           // raw dollars for fmtMarketCap
+          price:          r.price?.regularMarketPrice?.raw ?? null,
+          sector:         r.assetProfile?.sector ?? null,
           pe,
-          market_cap: fmtMarketCap(marketCapRaw),
-          composite_score: score,
-          rank_overall: null,
+          _fcfYield:      fcfYield,
+          _bookToMarket:  bookToMarket,
+          _roa:           roa,
+          _assetGrowth:   assetGrowth,
         };
       } catch { return null; }
     }
@@ -1384,21 +1442,17 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
       while (queue.length > 0) {
         const ticker = queue.shift();
         const result = await processOne(ticker);
-        if (result) results.push(result);
+        if (result) rawResults.push(result);
       }
     }
+
     await Promise.all(Array.from({ length: CONCURRENCY }, worker));
-    setData(results.sort((a, b) => b.composite_score - a.composite_score));
+    const scored = computeCompositeScores(rawResults);
+    setData(scored);
   };
 
-  useEffect(() => {
-    fetchRanked(sectorFilter);
-  }, [sectorFilter]);
-
-  // Re-fetch when scannerPool changes (admin adds/removes tickers)
-  useEffect(() => {
-    if (usingFallback) fetchFallback();
-  }, [scannerPool]);
+  useEffect(() => { fetchRanked(sectorFilter); }, [sectorFilter]);
+  useEffect(() => { if (usingFallback) fetchFallback(); }, [scannerPool]);
 
   const addTicker = () => {
     const sym = newTicker.trim().toUpperCase();
@@ -1415,18 +1469,18 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
 
   const removeTicker = (ticker) => { onSaveScanner(scannerPool.filter(t => t !== ticker)); };
 
+  // Score is 0–1 percentile composite — color thresholds updated accordingly
   const getScoreColor = (score) => {
-    if (score > 0.7) return "#34d399";
-    if (score > 0.4) return "#fbbf24";
-    return "#f87171";
+    if (score >= 0.70) return "#34d399"; // top 30%
+    if (score >= 0.45) return "#fbbf24"; // middle
+    return "#f87171";                    // bottom
   };
 
-  // Unique sectors from current data for the filter dropdown
   const sectors = [...new Set(data.map(d => d.sector).filter(Boolean))];
 
   return (
     <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, display: "flex", flexDirection: "column", height: "100%" }}>
-      
+
       {/* HEADER */}
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12, flexShrink: 0 }}>
         <div>
@@ -1435,46 +1489,39 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
             {usingFallback ? (
               <span style={{ fontSize: 9, color: "#f59e0b", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 4, padding: "2px 7px", fontWeight: 700, letterSpacing: "0.1em" }}>LIVE SCORING</span>
             ) : (
-              <span style={{ fontSize: 9, color: "#34d399", background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.3)", borderRadius: 4, padding: "2px 7px", fontWeight: 700, letterSpacing: "0.1em" }}>
-                ● DB RANKED
-              </span>
+              <span style={{ fontSize: 9, color: "#34d399", background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.3)", borderRadius: 4, padding: "2px 7px", fontWeight: 700, letterSpacing: "0.1em" }}>● DB RANKED</span>
             )}
           </div>
           <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>
             {usingFallback
-              ? "Live scoring — FCF Yield, B/M, ROA"
+              ? "Live scoring · FCF(45%) B/M(20%) ROA(20%) Growth(15%)"
               : `ETL-ranked universe · updated ${lastUpdated ?? "weekly"}`}
           </p>
         </div>
 
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-          {/* Sector filter */}
           {sectors.length > 0 && (
-            <select
-              value={sectorFilter}
-              onChange={e => setSectorFilter(e.target.value)}
-              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 10px", color: "#e2e8f0", fontSize: 11, fontFamily: "inherit", cursor: "pointer", outline: "none" }}
-            >
+            <select value={sectorFilter} onChange={e => setSectorFilter(e.target.value)}
+              style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 10px", color: "#e2e8f0", fontSize: 11, fontFamily: "inherit", cursor: "pointer", outline: "none" }}>
               <option value="">All Sectors</option>
               {sectors.map(s => <option key={s} value={s}>{s}</option>)}
             </select>
           )}
-
-          {/* Refresh button */}
-          <button
-            onClick={() => fetchRanked(sectorFilter)}
-            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b", borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}
-          >↻ Refresh</button>
-
+          <button onClick={() => fetchRanked(sectorFilter)}
+            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b", borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>
+            ↻ Refresh
+          </button>
           {isAdmin && (
             <>
-              <button onClick={() => setShowImport(!showImport)} style={{ background: "transparent", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.3)", borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
+              <button onClick={() => setShowImport(!showImport)}
+                style={{ background: "transparent", color: "#60a5fa", border: "1px solid rgba(96,165,250,0.3)", borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontWeight: 700 }}>
                 {showImport ? "Close Import" : "⎘ Smart Import"}
               </button>
               <input value={newTicker} onChange={e => setNewTicker(e.target.value.toUpperCase())}
                 onKeyDown={e => e.key === "Enter" && addTicker()} placeholder="Add ticker..."
                 style={{ background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "6px 12px", color: "#fff", fontSize: 12, outline: "none", width: 100 }} />
-              <button onClick={addTicker} style={{ background: "#fbbf24", color: "#000", borderRadius: 8, padding: "6px 12px", fontWeight: 700, cursor: "pointer", border: "none" }}>+</button>
+              <button onClick={addTicker}
+                style={{ background: "#fbbf24", color: "#000", borderRadius: 8, padding: "6px 12px", fontWeight: 700, cursor: "pointer", border: "none" }}>+</button>
             </>
           )}
         </div>
@@ -1483,11 +1530,12 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
       {/* SMART IMPORT */}
       {showImport && isAdmin && (
         <div style={{ marginBottom: 16, background: "rgba(0,0,0,0.2)", padding: 12, borderRadius: 12, border: "1px dashed rgba(255,255,255,0.1)", animation: "fadeSlideIn .2s ease-out", flexShrink: 0 }}>
-          <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 8 }}>Paste raw tickers below to instantly update the dashboard globally.</div>
+          <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 8 }}>Paste raw tickers to instantly update the dashboard globally.</div>
           <div style={{ display: "flex", gap: 10, alignItems: "flex-start" }}>
             <textarea value={importText} onChange={e => setImportText(e.target.value)} placeholder="e.g. NVDA, MSFT, AAPL"
               style={{ flex: 1, height: 60, background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: 8, color: "#e2e8f0", fontSize: 12, fontFamily: "monospace", outline: "none", resize: "vertical" }} />
-            <button onClick={handleImport} style={{ background: "#60a5fa", color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>Update Global</button>
+            <button onClick={handleImport}
+              style={{ background: "#60a5fa", color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>Update Global</button>
           </div>
         </div>
       )}
@@ -1521,29 +1569,42 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
                 No candidates found{sectorFilter ? ` in ${sectorFilter}` : ""}.
               </td></tr>
             ) : data.map((stock) => {
-              const priceEntry = prices[stock.ticker];
-              const livePrice = priceEntry?.price;
-              const change = priceEntry?.change;
+              const priceEntry  = prices[stock.ticker];
+              const livePrice   = priceEntry?.price;
+              const change      = priceEntry?.change;
+
+              // Price: prefer live feed, fall back to DB/Yahoo value
               const priceStr = livePrice
                 ? "$" + livePrice.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                : stock.price
-                ? "$" + Number(stock.price).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
-                : "—";
-              const marketCapStr = stock.market_cap
-                ? fmtMarketCap(stock.market_cap * 1_000_000)
-                : "—";
-              const score = Number(stock.composite_score);
-              const fcfYield = Number(stock.fcf_yield);
-              const bm = Number(stock.book_to_market);
-              const roa = Number(stock.roa);
+                : stock.price != null
+                  ? "$" + Number(stock.price).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                  : "—";
+
+              // Market cap: DB stores in millions, fallback stores raw dollars
+              const marketCapRaw = usingFallback
+                ? stock.market_cap                        // already raw dollars from Yahoo
+                : (stock.market_cap ?? 0) * 1_000_000;   // DB value is in millions
+              const marketCapStr = marketCapRaw > 0 ? fmtMarketCap(marketCapRaw) : "—";
+
+              const score    = Number(stock.composite_score);
+              const fcfYield = Number(usingFallback ? stock.fcf_yield : stock.fcf_yield);
+              const bm       = Number(stock.book_to_market);
+              const roa      = Number(stock.roa);
+
+              // FCF yield display: DB stores as ratio (0.08), fallback also ratio after fix
+              const fcfDisplay = !isNaN(fcfYield) ? (fcfYield * 100).toFixed(2) + "%" : "—";
+              const roaDisplay = !isNaN(roa)      ? (roa * 100).toFixed(1)  + "%" : "—";
 
               return (
-                <tr key={stock.ticker} style={{ borderBottom: "1px solid rgba(255,255,255,0.03)", transition: "background .15s" }}
+                <tr key={stock.ticker}
+                  style={{ borderBottom: "1px solid rgba(255,255,255,0.03)", transition: "background .15s" }}
                   onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.03)"}
                   onMouseLeave={e => e.currentTarget.style.background = ""}>
+
                   <td style={{ padding: "12px 8px", color: "#334155", fontSize: 10 }}>
                     {stock.rank_overall ?? "—"}
                   </td>
+
                   <td onClick={e => onTickerClick(stock.ticker, e.currentTarget.getBoundingClientRect())}
                     style={{ padding: "12px 8px", cursor: "pointer" }}>
                     <div style={{ fontWeight: 700, color: "#f1f5f9" }}>{stock.ticker}</div>
@@ -1554,20 +1615,24 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
                       </div>
                     )}
                   </td>
+
                   <td style={{ padding: "12px 8px", color: "#e2e8f0", fontWeight: 600 }}>{priceStr}</td>
                   <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{marketCapStr}</td>
-                  <td style={{ padding: "12px 8px", color: fcfYield > 8 ? "#34d399" : "#cbd5e1" }}>
-                    {!isNaN(fcfYield) ? (fcfYield * 100).toFixed(2) + "%" : "—"}
+
+                  <td style={{ padding: "12px 8px", color: !isNaN(fcfYield) && fcfYield > 0.08 ? "#34d399" : "#cbd5e1" }}>
+                    {fcfDisplay}
                   </td>
                   <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>
-                    {!isNaN(bm) ? bm.toFixed(2) : "—"}
+                    {!isNaN(bm) ? bm.toFixed(3) : "—"}
                   </td>
                   <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>
-                    {!isNaN(roa) ? (roa * 100).toFixed(1) + "%" : "—"}
+                    {roaDisplay}
                   </td>
+
                   <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(score), fontSize: 13 }}>
                     {!isNaN(score) ? score.toFixed(3) : "—"}
                   </td>
+
                   {isAdmin && (
                     <td style={{ textAlign: "right" }}>
                       <button onClick={() => removeTicker(stock.ticker)}
