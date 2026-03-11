@@ -1469,11 +1469,11 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
 
   const removeTicker = (ticker) => { onSaveScanner(scannerPool.filter(t => t !== ticker)); };
 
-  // Score is 0–1 percentile composite — color thresholds updated accordingly
+  // Score displayed as 0–100 (composite × 100)
   const getScoreColor = (score) => {
-    if (score >= 0.70) return "#34d399"; // top 30%
-    if (score >= 0.45) return "#fbbf24"; // middle
-    return "#f87171";                    // bottom
+    if (score >= 70) return "#34d399"; // top 30%
+    if (score >= 45) return "#fbbf24"; // middle
+    return "#f87171";                  // bottom
   };
 
   const sectors = [...new Set(data.map(d => d.sector).filter(Boolean))];
@@ -1629,8 +1629,8 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
                     {roaDisplay}
                   </td>
 
-                  <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(score), fontSize: 13 }}>
-                    {!isNaN(score) ? score.toFixed(3) : "—"}
+                  <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(score * 100), fontSize: 13 }}>
+                    {!isNaN(score) ? (score * 100).toFixed(1) : "—"}
                   </td>
 
                   {isAdmin && (
