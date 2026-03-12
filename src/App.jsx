@@ -14,9 +14,6 @@ const DEFAULT_MULTIBAGGER = [
 ];
 
 // ── PRICE FETCHING ────────────────────────────────────────
-// Single unified fetch — callers pass ALL tickers they need and split the
-// result themselves. This replaces the old fetchLivePrices + fetchMarketData
-// pair which fired two separate HTTP round trips on every refresh.
 async function fetchAllPrices(tickers) {
   try {
     const res = await fetch(`/prices?tickers=${tickers.join(",")}`);
@@ -28,7 +25,6 @@ async function fetchAllPrices(tickers) {
 }
 
 // ── SHARED UTILITIES ──────────────────────────────────────
-// Defined first so fetchQuoteSummary (and MultibaggerPanel) can both use it.
 function fmtMarketCap(n) {
   if (n == null || isNaN(n)) return "—";
   const num = Number(n);
@@ -40,12 +36,11 @@ function fmtMarketCap(n) {
 
 // ── QUOTE SUMMARY (for company popup) ────────────────────
 const quoteCache = {};
-const QUOTE_CACHE_TTL = 5 * 60 * 1000; // 5 minutes
-const QUOTE_CACHE_MAX = 50; // max entries before evicting the oldest
+const QUOTE_CACHE_TTL = 5 * 60 * 1000;
+const QUOTE_CACHE_MAX = 50;
 
 async function fetchQuoteSummary(ticker) {
   const now = Date.now();
-  // Check if we have cached data AND if it is less than 5 minutes old
   if (quoteCache[ticker] && (now - quoteCache[ticker].timestamp < QUOTE_CACHE_TTL)) {
     return quoteCache[ticker].data;
   }
@@ -57,7 +52,7 @@ async function fetchQuoteSummary(ticker) {
     const payload = json.data ? json.data : json;
     const r = payload?.quoteSummary?.result?.[0];
     const chartResult = payload?.chart?.result?.[0];
-    const newsResult = payload?.news; // Extract the news payload
+    const newsResult = payload?.news;
     if (!r) return null;
 
     const profile = r.assetProfile ?? {};
@@ -103,13 +98,12 @@ async function fetchQuoteSummary(ticker) {
                     } : null
     };
 
-    // Evict oldest entry if cache is at capacity
     const cacheKeys = Object.keys(quoteCache);
     if (cacheKeys.length >= QUOTE_CACHE_MAX) {
       const oldest = cacheKeys.reduce((a, b) => quoteCache[a].timestamp < quoteCache[b].timestamp ? a : b);
       delete quoteCache[oldest];
     }
-    quoteCache[ticker] = { data, timestamp: now }; // Store with timestamp
+    quoteCache[ticker] = { data, timestamp: now };
     return data;
   } catch (err) {
     return null;
@@ -257,7 +251,6 @@ const Badge = memo(function Badge({ text, color }) {
 
 function MiniChart({ data, dates, color, ticker }) {
   if (!data || data.length < 2) return null;
-  // Use reduce instead of spread to avoid call-stack limit on large arrays
   const min = data.reduce((a, b) => Math.min(a, b), Infinity);
   const max = data.reduce((a, b) => Math.max(a, b), -Infinity);
   const padding = (max - min) * 0.1 || 1; 
@@ -271,7 +264,6 @@ function MiniChart({ data, dates, color, ticker }) {
   }).join(" ");
 
   const cleanColor = color ? color.replace(/[^#0-9a-fA-F]/g, '') : "ffffff";
-  // Use ticker in the gradient id to guarantee uniqueness across all chart instances
   const gradientId = `grad-${ticker || "x"}-${cleanColor}`;
   const priceLabels = Array.from({ length: 10 }, (_, i) => max - (i * (max - min) / 9));
 
@@ -328,7 +320,6 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
     return () => document.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  // Height increased to 400 to accommodate the news banner without squishing the chart
   const POPUP_W = 500, POPUP_H = 400; 
   const vw = window.innerWidth, vh = window.innerHeight;
   let left = anchorRect ? anchorRect.left : vw / 2 - POPUP_W / 2;
@@ -481,10 +472,6 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
 }
 
 // ── MARKET CLOCK ─────────────────────────────────────────
-// NYSE hours: 9:30am–4:00pm ET, Mon–Fri, excluding US federal holidays.
-// Pre-market: 4:00am–9:30am ET. After-hours: 4:00pm–8:00pm ET.
-// Uses Intl.DateTimeFormat to convert UTC → America/New_York without any lib.
-
 const NYSE_HOLIDAYS_2025_2026 = new Set([
   "2025-01-01","2025-01-20","2025-02-17","2025-04-18",
   "2025-05-26","2025-06-19","2025-07-04","2025-09-01",
@@ -495,7 +482,6 @@ const NYSE_HOLIDAYS_2025_2026 = new Set([
 ]);
 
 function getNYTime(date = new Date()) {
-  // Returns { h, m, s, dow, dateStr } in America/New_York
   const parts = new Intl.DateTimeFormat("en-US", {
     timeZone: "America/New_York",
     hour: "numeric", minute: "numeric", second: "numeric",
@@ -504,7 +490,7 @@ function getNYTime(date = new Date()) {
   }).formatToParts(date);
   const get = type => parts.find(p => p.type === type)?.value;
   const h = parseInt(get("hour")), m = parseInt(get("minute")), s = parseInt(get("second"));
-  const dow = get("weekday"); // "Mon","Tue",...
+  const dow = get("weekday");
   const month = get("month"), day = get("day"), year = get("year");
   const dateStr = `${year}-${month}-${day}`;
   return { h, m, s, dow, dateStr };
@@ -529,29 +515,22 @@ function secsUntilNextEvent(date = new Date()) {
   const totalSecs = h * 3600 + m * 60 + s;
   const { state } = getMarketState(date);
 
-  // During active sessions: count down to the closing boundary
   if (state === "pre")  return (9 * 3600 + 30 * 60) - totalSecs;
   if (state === "open") return (16 * 3600)           - totalSecs;
   if (state === "post") return (20 * 3600)           - totalSecs;
 
-  // Closed/overnight: count down to 9:30am ET on the next trading day.
-  // Check today first (handles the overnight window before today's open),
-  // then look ahead up to 5 days for the next non-weekend, non-holiday day.
-  const openSecs = 9 * 3600 + 30 * 60; // 9:30am in seconds
+  const openSecs = 9 * 3600 + 30 * 60;
 
-  // Is today itself a trading day and 9:30am hasn't passed yet?
   const isWeekend = dow === "Sat" || dow === "Sun";
   const isHoliday = NYSE_HOLIDAYS_2025_2026.has(dateStr);
   if (!isWeekend && !isHoliday && totalSecs < openSecs) {
     return openSecs - totalSecs;
   }
 
-  // Otherwise find the next trading day
   for (let d = 1; d <= 7; d++) {
     const candidate = new Date(date.getTime() + d * 86400000);
     const cny = getNYTime(candidate);
     if (cny.dow !== "Sat" && cny.dow !== "Sun" && !NYSE_HOLIDAYS_2025_2026.has(cny.dateStr)) {
-      // Seconds remaining today + full days until candidate + seconds to 9:30am
       const secsLeftToday = 86400 - totalSecs;
       return secsLeftToday + (d - 1) * 86400 + openSecs;
     }
@@ -580,7 +559,6 @@ function MarketClock() {
   const secsLeft = secsUntilNextEvent(now);
   const countdown = fmtCountdown(secsLeft);
 
-  // Current ET time display
   const { h, m, s } = getNYTime(now);
   const etTime = `${String(h % 12 || 12).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")} ${h >= 12 ? "PM" : "AM"} ET`;
 
@@ -596,7 +574,6 @@ function MarketClock() {
 
   return (
     <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 6 }}>
-      {/* Status row */}
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
         <span style={{
           width: 6, height: 6, borderRadius: "50%", background: dotColor, display: "inline-block",
@@ -606,7 +583,6 @@ function MarketClock() {
         <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.18em", color: labelColor, textTransform: "uppercase" }}>{label}</span>
       </div>
 
-      {/* Countdown */}
       <div style={{ fontFamily: "'DM Mono','Fira Code',monospace" }}>
         <span style={{ fontSize: 10, color: "#334155", letterSpacing: "0.05em" }}>{subLabel} </span>
         <span style={{ fontSize: 18, fontWeight: 800, letterSpacing: "0.08em", color: isOpen ? "#34d399" : isExtended ? "#f59e0b" : "#475569" }}>
@@ -614,7 +590,6 @@ function MarketClock() {
         </span>
       </div>
 
-      {/* ET clock */}
       <div style={{ fontSize: 9, color: "#2d3a52", fontFamily: "'DM Mono','Fira Code',monospace", letterSpacing: "0.05em" }}>{etTime}</div>
     </div>
   );
@@ -688,7 +663,6 @@ const TickerChip = memo(function TickerChip({ symbol, changeData, onRemove, onTi
       <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{symbol}</span>
       {change !== undefined ? <span style={{ fontSize: 11, fontWeight: 600, color: changeColor }}>{pos ? "+" : ""}{change}%</span> : <span style={{ fontSize: 11, color: "#475569" }}>…</span>}
       {sessionLabel && <span style={{ fontSize: 8, fontWeight: 700, color: "#64748b", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 2, padding: "1px 3px", letterSpacing: "0.05em" }}>{sessionLabel}</span>}
-      {/* Hide delete button if onRemove is not provided (User is not Admin) */}
       {hovered && onRemove && (
         <button
           onClick={e => { e.stopPropagation(); onRemove(); }}
@@ -748,7 +722,6 @@ function SubsectorCard({ sub, prices, isAdmin, onAddTicker, onRemoveTicker, onTi
         </div>
       )}
       
-      {/* ADD TICKER CONTROLS - ONLY SHOW IF ADMIN IS LOGGED IN */}
       <div style={{ marginTop: 2 }}>
         {isAdmin && (
           !addingTicker ? (
@@ -823,8 +796,6 @@ function TrackPane({ track, prices, isAdmin, onAddTicker, onRemoveTicker, onTick
 }
 
 // ── HEAT MAP ──────────────────────────────────────────────
-// Returns proximity info if ticker's current price is within 25% above its 52W low.
-// Uses data from the prices feed (available immediately on load — no click required).
 function getNear52WLowInfo(priceEntry) {
   if (!priceEntry) return null;
   const { price, week52Low } = priceEntry;
@@ -836,7 +807,6 @@ function getNear52WLowInfo(priceEntry) {
   return null;
 }
 
-// Returns proximity info if ticker's current price is within 10% below its 52W high.
 function getNear52WHighInfo(priceEntry) {
   if (!priceEntry) return null;
   const { price, week52High } = priceEntry;
@@ -851,7 +821,6 @@ function getNear52WHighInfo(priceEntry) {
 function HeatMap({ prices, capexData, onTickerClick }) {
   const [tooltip, setTooltip] = useState(null);
 
-  // Memoized: capexData changes rarely — no need to recompute cells on every price tick
   const trackCells = useMemo(() =>
     capexData.tracks.map(track => ({
       track,
@@ -1015,8 +984,6 @@ function DonutChart({ prices, capexData, capexIntel, capexIntelStatus, capexInte
       })()
     : null;
 
-  // Memoized: SVG path geometry only changes when capexData changes, not on every price tick.
-  // avg performance (which uses prices) is kept separate in trackPerf below.
   const segmentShapes = useMemo(() => {
     let cumAngle = -Math.PI / 2;
     return capexData.tracks.map(track => {
@@ -1034,7 +1001,6 @@ function DonutChart({ prices, capexData, capexIntel, capexIntelStatus, capexInte
     });
   }, [capexData, total]);
 
-  // Memoized: avg performance changes with prices, so depends on both
   const trackPerf = useMemo(() =>
     capexData.tracks.map(track => {
       const tickers = [...new Set(track.subsectors.flatMap(s => s.tickers))];
@@ -1044,7 +1010,6 @@ function DonutChart({ prices, capexData, capexIntel, capexIntelStatus, capexInte
     }).sort((a, b) => b.avg - a.avg),
   [capexData, prices]);
 
-  // Merge avg performance into segments for rendering
   const segments = useMemo(() =>
     segmentShapes.map(s => {
       const perf = trackPerf.find(t => t.id === s.track.id);
@@ -1153,8 +1118,6 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
   const [sortDir, setSortDir]     = useState("desc");
   const [filter, setFilter]       = useState("all");
 
-  // Sync watchList whenever capexData changes (e.g. a new ticker is added to a sub-sector).
-  // Only appends tickers that aren't already present so manually-removed entries are preserved.
   useEffect(() => {
     const capexTickers = [...new Set(capexData.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))];
     setWatchList(prev => {
@@ -1168,10 +1131,8 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
   const list    = isShort ? shortList : watchList;
   const accent  = isShort ? "#f59e0b" : "#60a5fa";
 
-  // Reset filter when switching tabs
   function switchTab(t) { setTab(t); setFilter("all"); setInput(""); }
 
-  // Mutate the appropriate list
   function addTicker(sym) {
     if (!sym || list.includes(sym)) return;
     if (isShort) { onSaveShortlist([...shortList, sym]); }
@@ -1182,7 +1143,6 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
     else { setWatchList(l => l.filter(x => x !== sym)); }
   }
 
-  // Memoized O(1) sector lookup
   const sectorMap = useMemo(() => {
     const map = {};
     for (const track of capexData.tracks)
@@ -1210,7 +1170,6 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
   return (
     <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, display: "flex", flexDirection: "column", gap: 14, height: "100%" }}>
 
-      {/* ── TAB ROW ── */}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <div style={{ display: "flex", gap: 2, background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: 3 }}>
           {[["watch","👁 Watchlist"],["short","⭐ Shortlist"]].map(([id, label]) => (
@@ -1223,7 +1182,6 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
             }}>{label}</button>
           ))}
         </div>
-        {/* Stats */}
         <div style={{ display: "flex", gap: 12, fontSize: 12 }}>
           <div style={{ textAlign: "center" }}><div style={{ color: "#34d399", fontWeight: 700 }}>{filtered.filter(x => (typeof x.change === 'number' ? x.change : -1) >= 0).length}</div><div style={{ color: "#475569", fontSize: 10 }}>UP</div></div>
           <div style={{ textAlign: "center" }}><div style={{ color: "#f87171", fontWeight: 700 }}>{filtered.filter(x => (typeof x.change === 'number' ? x.change : 0) < 0).length}</div><div style={{ color: "#475569", fontSize: 10 }}>DOWN</div></div>
@@ -1231,14 +1189,12 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
         </div>
       </div>
 
-      {/* Shortlist description */}
       {isShort && (
         <p style={{ fontSize: 11, color: "#64748b", margin: 0, marginTop: -6 }}>
           Potential investment opportunities · shared with all users
         </p>
       )}
 
-      {/* ── ADD ROW — locked for Shortlist unless admin ── */}
       {isShort && !isAdmin ? (
         <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", borderRadius: 8, padding: "10px 14px" }}>
           <span style={{ fontSize: 14 }}>🔒</span>
@@ -1257,7 +1213,6 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
         </div>
       )}
 
-      {/* ── SECTOR FILTER + SORT ── */}
       <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
         <button onClick={() => setFilter("all")} style={{ background: filter === "all" ? "rgba(255,255,255,0.08)" : "transparent", border: `1px solid ${filter === "all" ? "rgba(255,255,255,0.15)" : "transparent"}`, color: filter === "all" ? "#e2e8f0" : "#475569", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>All</button>
         {capexData.tracks.map(track => {
@@ -1270,7 +1225,6 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
         <button onClick={() => setSortDir(d => d === "desc" ? "asc" : "desc")} style={{ marginLeft: "auto", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>Sort {sortDir === "desc" ? "↓" : "↑"}</button>
       </div>
 
-      {/* ── TICKER ROWS ── */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, overflowY: "auto", minHeight: 0, paddingRight: 4 }}>
         {sorted.length === 0 && (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: "#334155", fontSize: 12 }}>
@@ -1310,8 +1264,8 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
 
 // ── MULTIBAGGER PANEL ─────────────────────────────────────
 function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTickerClick }) {
-  const [allData, setAllData]           = useState([]);  // full unfiltered dataset from Neon
-  const [data, setData]                 = useState([]);  // filtered view shown in table
+  const [allData, setAllData]           = useState([]);
+  const [data, setData]                 = useState([]);
   const [loading, setLoading]           = useState(true);
   const [error, setError]               = useState(null);
   const [newTicker, setNewTicker]       = useState("");
@@ -1320,10 +1274,6 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
   const [sectorFilter, setSectorFilter] = useState("");
   const [lastUpdated, setLastUpdated]   = useState(null);
 
-  // ── FETCH FULL DATASET FROM NEON ─────────────────────
-  // Neon is the sole data source — no Yahoo fallback.
-  // SEC EDGAR + Finnhub data from the weekly ETL is more accurate
-  // than per-ticker Yahoo quotes and uses the full 5-factor algorithm.
   const fetchRanked = async () => {
     setLoading(true);
     setError(null);
@@ -1350,7 +1300,6 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
 
   useEffect(() => { fetchRanked(); }, []);
 
-  // Client-side sector filter — no re-fetch needed
   useEffect(() => {
     if (sectorFilter) {
       setData(allData.filter(d => d.sector === sectorFilter));
@@ -1374,17 +1323,15 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
 
   const removeTicker = (ticker) => { onSaveScanner(scannerPool.filter(t => t !== ticker)); };
 
-  // Score displayed as 0–100 scale
   const getScoreColor = (score) => {
     if (score >= 70) return "#34d399";
     if (score >= 45) return "#fbbf24";
     return "#f87171";
   };
 
-  // 52W proximity badge color
   const get52wColor = (pct) => {
     if (pct == null) return "#475569";
-    if (pct <= 20)  return "#34d399";   // near 52W low — most attractive
+    if (pct <= 20)  return "#34d399";
     if (pct <= 50)  return "#fbbf24";
     return "#64748b";
   };
@@ -1394,7 +1341,6 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
   return (
     <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, display: "flex", flexDirection: "column", height: "100%" }}>
 
-      {/* HEADER */}
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12, flexShrink: 0 }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -1434,7 +1380,6 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
         </div>
       </div>
 
-      {/* SMART IMPORT */}
       {showImport && isAdmin && (
         <div style={{ marginBottom: 16, background: "rgba(0,0,0,0.2)", padding: 12, borderRadius: 12, border: "1px dashed rgba(255,255,255,0.1)", animation: "fadeSlideIn .2s ease-out", flexShrink: 0 }}>
           <div style={{ fontSize: 11, color: "#94a3b8", marginBottom: 8 }}>Paste raw tickers to instantly update the dashboard globally.</div>
@@ -1447,7 +1392,6 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
         </div>
       )}
 
-      {/* TABLE */}
       <div style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingRight: 4 }}>
         {error && (
           <div style={{ padding: "12px 8px", color: "#f87171", fontSize: 12 }}>⚠ {error} — showing live-scored fallback.</div>
@@ -1488,7 +1432,6 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
                   ? "$" + Number(stock.price).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                   : "—";
 
-              // Market cap: DB stores in millions — multiply by 1M for fmtMarketCap
               const marketCapRaw = (stock.market_cap ?? 0) * 1_000_000;
               const marketCapStr = marketCapRaw > 0 ? fmtMarketCap(marketCapRaw) : "—";
 
@@ -1549,12 +1492,10 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
                     {roaDisplay}
                   </td>
 
-                  {/* FEATURE 3: Revenue growth */}
                   <td style={{ padding: "12px 8px", color: revGr != null && revGr > 0 ? "#34d399" : revGr != null && revGr < -0.1 ? "#f87171" : "#cbd5e1" }}>
                     {revDisplay}
                   </td>
 
-                  {/* FEATURE 4: 52W low proximity */}
                   <td style={{ padding: "12px 8px", color: get52wColor(pct52w), fontWeight: pct52w != null && pct52w <= 20 ? 700 : 400 }}>
                     {pct52wDisplay}
                   </td>
@@ -1589,7 +1530,6 @@ function AdminModal({ onClose, onSuccess }) {
   const inputRef = useRef(null);
 
   useEffect(() => {
-    // Focus the input when modal opens
     const t = setTimeout(() => inputRef.current?.focus(), 50);
     return () => clearTimeout(t);
   }, []);
@@ -1604,9 +1544,6 @@ function AdminModal({ onClose, onSuccess }) {
     if (!pwd.trim()) return;
     setLoading(true);
     setError("");
-    // Validate the password by making a no-op POST to /scanner
-    // (an empty tickers array with the password — the server will reject
-    // bad passwords with 401 before touching KV)
     try {
       const res = await fetch("/scanner", {
         method: "POST",
@@ -1618,7 +1555,6 @@ function AdminModal({ onClose, onSuccess }) {
         setLoading(false);
         return;
       }
-      // 200 or 500 (missing tickers body) both mean the password was accepted
       onSuccess(pwd);
       onClose();
     } catch {
@@ -1697,7 +1633,7 @@ function AdminModal({ onClose, onSuccess }) {
   );
 }
 
-// ── GLOBAL STYLES (module scope — evaluated once, never recreated on re-render) ──
+// ── GLOBAL STYLES ─────────────────────────────────────────
 const GLOBAL_STYLES = `
   * { box-sizing: border-box; margin: 0; padding: 0; box-shadow: none !important; }
   html, body { background: #0E1117; font-family: 'Inter', sans-serif; }
@@ -1752,15 +1688,13 @@ export default function App() {
   const [scannerPool, setScannerPool] = useState(DEFAULT_MULTIBAGGER);
   const [shortList, setShortList] = useState([]);
   const [capexData, setCapexData] = useState(CAPEX_DATA);
-  const [capexIntel, setCapexIntel] = useState(null); // { allocations, fetchedAt, fromCache }
-  const [capexIntelStatus, setCapexIntelStatus] = useState("idle"); // "idle"|"loading"|"success"|"error"
+  const [capexIntel, setCapexIntel] = useState(null);
+  const [capexIntelStatus, setCapexIntelStatus] = useState("idle");
   const [capexIntelError, setCapexIntelError] = useState(null);
   
   const [activeTrack, setActiveTrack] = useState(null);
   const [prices, setPrices] = useState({});
-  const pricesRef = useRef({});  // ref so openPopup never needs to be recreated
-  // Refs for mutable values used inside refresh() — keeps refresh() stable (empty
-  // dep array) so the interval never tears down and restarts when KV data loads.
+  const pricesRef = useRef({});
   const capexDataRef   = useRef(capexData);
   const scannerPoolRef = useRef(scannerPool);
   const shortListRef   = useRef([]);
@@ -1770,11 +1704,6 @@ export default function App() {
   const [bottomTab, setBottomTab] = useState("all");
   const [popup, setPopup] = useState(null); 
 
-  // ── FAST PREFETCH: load the 11 visible market tickers immediately on mount.
-  // This is intentionally separate from refresh() so it fires right away,
-  // before the /scanner and /capex KV fetches complete and before the full
-  // ~100-ticker refresh() call returns. Users see the top-of-page strip
-  // populated within ~1-2 seconds instead of waiting for the full batch.
   useEffect(() => {
     const marketTickers = [...INDEX_TICKERS, ...CRYPTO_TICKERS, ...HYPERSCALER_TICKERS];
     fetchAllPrices(marketTickers).then(data => {
@@ -1788,15 +1717,12 @@ export default function App() {
       });
       setPrices(prev => { const next = { ...prev, ...data }; pricesRef.current = next; return next; });
     });
-  }, []); // runs once on mount only
+  }, []);
 
-  // Keep refs in sync with state so refresh() can always read the latest values
-  // without needing them as dependencies (which would restart the interval).
   useEffect(() => { capexDataRef.current   = capexData;   }, [capexData]);
   useEffect(() => { scannerPoolRef.current = scannerPool; }, [scannerPool]);
   useEffect(() => { shortListRef.current   = shortList;   }, [shortList]);
 
-  // Mount: Fetch Global Data for both panels
   useEffect(() => {
     fetch("/scanner")
       .then(res => res.json())
@@ -1808,7 +1734,6 @@ export default function App() {
       .then(data => { if (data.capexData && (data.capexData.version ?? 0) >= CAPEX_DATA.version) { setCapexData(data.capexData); capexDataRef.current = data.capexData; } })
       .catch(e => console.log("Capex fetch failed"));
 
-    // Fetch live capex intelligence (Gemini, cached 6h in KV) — 20s timeout
     setCapexIntelStatus("loading");
     const intelController = new AbortController();
     const intelTimeout = setTimeout(() => intelController.abort(), 20000);
@@ -1839,21 +1764,16 @@ export default function App() {
       .catch(e => console.log("Shortlist fetch failed"));
   }, []);
 
-  // Reads from pricesRef (not prices state) so this callback is stable and
-  // never needs to be recreated when prices update, avoiding refresh() churn.
   const openPopup = useCallback((ticker, rect) => {
     const change = pricesRef.current[ticker]?.change ?? pricesRef.current[ticker];
     setPopup(prev => (prev?.ticker === ticker ? null : { ticker, change, rect }));
-  }, []); // stable — no deps needed
+  }, []);
 
-  // refresh() reads from refs (not state) so it has a stable identity — the
-  // interval never tears down/restarts when capexData or scannerPool updates.
   const refresh = useCallback(async () => {
     setRefreshing(true);
     const marketTickers = [...INDEX_TICKERS, ...CRYPTO_TICKERS, ...HYPERSCALER_TICKERS];
     const allTickers = [...new Set([...getAllTickers(capexDataRef.current), ...scannerPoolRef.current, ...shortListRef.current, ...marketTickers])];
 
-    // Single HTTP round trip — split result into prices vs marketData on the frontend
     const allData = await fetchAllPrices(allTickers);
 
     setPrices(prev => { const next = { ...prev, ...allData }; pricesRef.current = next; return next; });
@@ -1868,7 +1788,7 @@ export default function App() {
     });
     setLastUpdated(new Date().toLocaleTimeString());
     setRefreshing(false);
-  }, []); // stable — reads capexDataRef/scannerPoolRef via refs
+  }, []);
 
   useEffect(() => {
     refresh();
@@ -1878,7 +1798,6 @@ export default function App() {
 
   const handleUnlock = () => setShowAdminModal(true);
 
-  // Admin save functions for the KV Databases
   const saveGlobalScanner = async (newList) => {
     try {
       const res = await fetch("/scanner", {
@@ -1967,8 +1886,6 @@ export default function App() {
 
   const allTickerCount = useMemo(() => getAllTickers(capexData).length, [capexData]);
 
-  // Merge live intel allocations (capex + value) into capexData tracks when available.
-  // This keeps sector-structure & tickers from capexData while refreshing the $B figures.
   const liveCapexData = useMemo(() => {
     if (!capexIntel?.allocations?.length) return capexData;
     const intelMap = Object.fromEntries(capexIntel.allocations.map(a => [a.id, a]));
@@ -1977,7 +1894,6 @@ export default function App() {
       tracks: capexData.tracks.map(track => {
         const intel = intelMap[track.id];
         if (!intel) return track;
-        // Always derive value from capex integer so it's never undefined
         const liveValue = intel.value || (intel.capex ? `~$${intel.capex}B` : track.value);
         return {
           ...track,
@@ -1990,8 +1906,7 @@ export default function App() {
       }),
     };
   }, [capexData, capexIntel]);
-  // Count only the capex watchlist tickers — prices also contains market strip
-  // tickers (indices, crypto, hyperscalers) which would inflate these counts.
+
   const watchlistTickers = useMemo(() => getAllTickers(capexData), [capexData]);
   const gainers = watchlistTickers.filter(t => (prices[t]?.change ?? prices[t]) > 0).length;
   const losers  = watchlistTickers.filter(t => (prices[t]?.change ?? prices[t]) < 0).length;
@@ -2009,7 +1924,9 @@ export default function App() {
             <div style={{ fontSize: 10, color: "#2d3a52", letterSpacing: "0.35em", textTransform: "uppercase", marginBottom: 3 }}>HOW ~$600B+ IN HYPERSCALER CAPEX FLOWS THROUGH AI INFRASTRUCTURE TRACKS</div>
             <div style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", letterSpacing: "-0.01em" }}>AI Capex Flow Intelligence</div>
           </div>
+
           <MarketClock />
+
           <div className="header-controls" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
             
             {!isAdmin ? (
@@ -2032,6 +1949,23 @@ export default function App() {
             <button onClick={refresh} disabled={refreshing} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 8, color: "#64748b", padding: "5px 12px", cursor: "pointer", fontSize: 11, fontFamily: "inherit", opacity: refreshing ? 0.5 : 1 }}>
               {refreshing ? "↻" : `↻${lastUpdated ? " · " + lastUpdated : ""}`}
             </button>
+            <a
+              href="https://wizzleswatchlist.substack.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                fontSize: 11, fontWeight: 700, color: "#f59e0b",
+                background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.3)",
+                borderRadius: 8, padding: "5px 13px", textDecoration: "none",
+                letterSpacing: "0.04em", transition: "all .18s",
+                fontFamily: "'DM Mono','Fira Code',monospace",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(245,158,11,0.16)"; e.currentTarget.style.borderColor = "rgba(245,158,11,0.6)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(245,158,11,0.08)"; e.currentTarget.style.borderColor = "rgba(245,158,11,0.3)"; }}
+            >
+              <span style={{ fontSize: 13 }}>✉</span> Wizzle's Watchlist ↗
+            </a>
           </div>
         </div>
 
@@ -2104,7 +2038,7 @@ export default function App() {
           </div>
         </div>
       </div>
-      {/* TICKER TAPE — bottom of page */}
+      {/* TICKER TAPE */}
       <div style={{ position: "sticky", bottom: 0, zIndex: 50, height: 34, overflow: "hidden", borderTop: "1px solid rgba(255,255,255,.04)", background: "rgba(18,18,18,0.95)", padding: "6px 0" }}>
         {tickerEntries.length > 0 && (
           <div className="ticker-tape">
