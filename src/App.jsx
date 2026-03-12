@@ -1285,7 +1285,8 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
         setData(json.data);
         setLastUpdated(new Date().toLocaleDateString());
       } else {
-        setError("No ranked data available yet. Run the ETL pipeline to populate the scanner.");
+        // Change this line to show the real API error if it fails
+        setError(json.message || "No ranked data available yet. Run the ETL pipeline to populate the scanner.");
         setAllData([]);
         setData([]);
       }
