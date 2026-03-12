@@ -354,7 +354,10 @@ def load_to_db(df):
             ADD COLUMN IF NOT EXISTS pct_above_52w_low   DOUBLE PRECISION,
             ADD COLUMN IF NOT EXISTS week52_low          DOUBLE PRECISION,
             ADD COLUMN IF NOT EXISTS week52_high         DOUBLE PRECISION,
-            ADD COLUMN IF NOT EXISTS total_debt          DOUBLE PRECISION;
+            ADD COLUMN IF NOT EXISTS total_debt          DOUBLE PRECISION,
+            ADD COLUMN IF NOT EXISTS company_name        VARCHAR(255),
+            ADD COLUMN IF NOT EXISTS sector              VARCHAR(255),
+            ADD COLUMN IF NOT EXISTS industry            VARCHAR(255);
     """
 
     df['as_of_date'] = date.today()
@@ -364,6 +367,9 @@ def load_to_db(df):
     col_map = [
         ('as_of_date',               'as_of_date'),
         ('ticker',                   'ticker'),
+        ('company_name',             'company_name'),   
+        ('sector',                   'sector'),        
+        ('industry',                 'industry'),       
         ('market_cap',               'market_cap'),
         ('price',                    'price'),
         ('avg_dollar_vol_20d',       'avg_dollar_vol_20d'),
