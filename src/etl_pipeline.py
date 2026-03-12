@@ -5,6 +5,7 @@ import psycopg2
 import psycopg2.extras
 import yfinance as yf
 import time
+import random
 import os
 from datetime import date
 
@@ -12,28 +13,74 @@ from datetime import date
 DATABASE_URL = os.environ.get('DATABASE_URL')
 SEC_HEADERS  = {'User-Agent': 'WizzlesWatchlist flipsensazn@gmail.com'}
 
-# Batch size for yfinance downloads — 500 is the practical sweet spot.
-# Too large and Yahoo silently drops tickers; too small and it's slow.
-YF_BATCH_SIZE = 500
+# Smaller batch size prevents Yahoo rate-limiting mid-batch.
+# 100 tickers per call is the safe sweet spot — still fast, rarely blocked.
+YF_BATCH_SIZE = 100
+
+# Pause between batches (seconds). Increase this if rate limits persist.
+YF_BATCH_PAUSE = 3
+
+
+# ── HELPERS ───────────────────────────────────────────────
+
+def yf_download_with_retry(tickers_str, max_retries=4):
+    """
+    Wraps yf.download() with exponential backoff.
+    On a 429 / YFRateLimitError, waits and retries up to max_retries times.
+    """
+    delay = 30  # start with 30s, doubles each retry: 30 → 60 → 120 → 240
+    for attempt in range(max_retries):
+        try:
+            raw = yf.download(
+                tickers_str,
+                period="1mo",
+                interval="1d",
+                group_by="ticker",
+                auto_adjust=True,
+                progress=False,
+                threads=False,   # serial mode — threading makes rate limits worse
+            )
+            return raw
+        except Exception as e:
+            err = str(e).lower()
+            if "rate" in err or "429" in err or "too many" in err:
+                wait = delay + random.uniform(0, 10)
+                print(f"    Rate limited — waiting {wait:.0f}s before retry {attempt + 1}/{max_retries}...")
+                time.sleep(wait)
+                delay *= 2
+            else:
+                raise  # non-rate-limit error — propagate immediately
+    print(f"    Giving up after {max_retries} retries.")
+    return None
+
+
+def fast_info_with_retry(symbol, max_retries=4):
+    """
+    Fetches yf.Ticker.fast_info with exponential backoff on rate limit errors.
+    Returns the fast_info object or None if all retries fail.
+    """
+    delay = 20
+    for attempt in range(max_retries):
+        try:
+            return yf.Ticker(symbol).fast_info
+        except Exception as e:
+            err = str(e).lower()
+            if "rate" in err or "429" in err or "too many" in err:
+                wait = delay + random.uniform(0, 5)
+                print(f"    {symbol}: rate limited — waiting {wait:.0f}s (retry {attempt + 1}/{max_retries})...")
+                time.sleep(wait)
+                delay *= 2
+            else:
+                return None  # non-rate-limit error — skip this ticker
+    return None
 
 
 # ── PHASE 1: UNIVERSE GATING (yfinance) ──────────────────
-#
-# Strategy:
-#   1. Fetch the full US ticker list + CIK map from SEC company_tickers.json
-#      (same file used for fundamentals — free, no key, one call)
-#   2. Pre-filter on symbol strings alone (no API calls)
-#   3. Batch-download price + volume via yfinance.download() — 500 tickers/call,
-#      no rate limit, full universe in ~20 batches taking ~5 minutes total
-#   4. Call yfinance Ticker.fast_info only on the ~300-500 vol/price survivors
-#      to get market cap + 52W range (lightweight, ~0.3s per ticker)
-#
-# Total runtime: ~30–45 minutes vs 6+ hours with Finnhub free tier.
 
 def get_us_universe():
     """
     Fetch full US ticker list and CIK map from SEC in a single call.
-    Reusing this for Phase 2 means zero duplicate network requests.
+    Reused by Phase 2 — no duplicate network requests.
     """
     print("Fetching US universe + CIK map from SEC...")
     res = requests.get("https://www.sec.gov/files/company_tickers.json",
@@ -48,8 +95,8 @@ def get_us_universe():
 
 def prefilter(symbols):
     """
-    Pure string-based filters — no API calls.
-    Cuts the raw ~12,000 symbol list down to ~7,000–8,000 before any fetch.
+    Pure string-based filters — zero API calls.
+    Cuts raw ~12,000 symbols to ~7,000 before touching Yahoo.
     """
     symbols = [s for s in symbols if '.' not in s]           # no dots (foreign/preferred)
     symbols = [s for s in symbols if len(s) <= 5]            # max 5 chars
@@ -62,55 +109,55 @@ def prefilter(symbols):
 
 def batch_download(symbols):
     """
-    Download 1-month daily OHLCV for all symbols in batches of 500.
+    Download 1-month daily OHLCV in batches of YF_BATCH_SIZE (100).
+    Uses serial mode (threads=False) + retry logic to avoid rate limits.
     Returns dict: { ticker -> {'price': float, 'avg_dollar_vol': float} }
     """
-    print(f"Batch downloading price/volume for {len(symbols)} symbols...")
+    print(f"Batch downloading price/volume for {len(symbols)} symbols "
+          f"(batches of {YF_BATCH_SIZE}, ~{len(symbols) // YF_BATCH_SIZE + 1} total)...")
     results = {}
     batches = [symbols[i:i + YF_BATCH_SIZE] for i in range(0, len(symbols), YF_BATCH_SIZE)]
+    total   = len(batches)
 
     for batch_num, batch in enumerate(batches):
-        print(f"  Batch {batch_num + 1}/{len(batches)} ({len(batch)} symbols)...")
-        try:
-            raw = yf.download(
-                " ".join(batch),
-                period="1mo",
-                interval="1d",
-                group_by="ticker",
-                auto_adjust=True,
-                progress=False,
-                threads=True,
-            )
+        print(f"  Batch {batch_num + 1}/{total} ({len(batch)} symbols)...")
 
-            for ticker in batch:
-                try:
-                    if len(batch) == 1:
-                        # Single-ticker download returns flat (non-MultiIndex) DataFrame
-                        close  = raw["Close"].dropna()
-                        volume = raw["Volume"].dropna()
-                    else:
-                        close  = raw[ticker]["Close"].dropna()
-                        volume = raw[ticker]["Volume"].dropna()
+        raw = yf_download_with_retry(" ".join(batch))
+        if raw is None or raw.empty:
+            print(f"  Batch {batch_num + 1} returned no data, skipping.")
+            time.sleep(YF_BATCH_PAUSE)
+            continue
 
-                    if close.empty or volume.empty:
+        for ticker in batch:
+            try:
+                if len(batch) == 1:
+                    # Single-ticker download has flat (non-MultiIndex) columns
+                    close  = raw["Close"].dropna()
+                    volume = raw["Volume"].dropna()
+                else:
+                    if ticker not in raw.columns.get_level_values(0):
                         continue
+                    close  = raw[ticker]["Close"].dropna()
+                    volume = raw[ticker]["Volume"].dropna()
 
-                    price       = float(close.iloc[-1])
-                    avg_vol_10d = float(volume.iloc[-10:].mean()) if len(volume) >= 10 else float(volume.mean())
-                    dollar_vol  = price * avg_vol_10d
-
-                    if price >= 2.0:
-                        results[ticker] = {
-                            'price':          price,
-                            'avg_dollar_vol': dollar_vol,
-                        }
-                except Exception:
+                if close.empty or volume.empty:
                     continue
 
-        except Exception as e:
-            print(f"  Batch {batch_num + 1} error: {e}")
+                price       = float(close.iloc[-1])
+                avg_vol_10d = float(volume.iloc[-10:].mean()) if len(volume) >= 10 else float(volume.mean())
+                dollar_vol  = price * avg_vol_10d
 
-        time.sleep(1)  # polite pause between batches
+                if price >= 2.0:
+                    results[ticker] = {
+                        'price':          price,
+                        'avg_dollar_vol': dollar_vol,
+                    }
+            except Exception:
+                continue
+
+        # Pause between batches — the single most effective rate-limit prevention
+        pause = YF_BATCH_PAUSE + random.uniform(0, 2)
+        time.sleep(pause)
 
     print(f"Price/volume data retrieved for {len(results)} symbols.")
     return results
@@ -119,26 +166,29 @@ def batch_download(symbols):
 def apply_gates(symbols):
     """
     Two-stage gate:
-      Gate 1 (batched): price >= $2 AND dollar volume >= $250K
-      Gate 2 (per-ticker): $25M <= market cap <= $2B
+      Gate 1 (batched yf.download): price >= $2 AND dollar volume >= $250K
+      Gate 2 (per-ticker fast_info): $25M <= market cap <= $2B
 
-    Returns DataFrame of candidates ready for SEC fundamentals.
+    Gate 2 is only called on price/volume survivors (~500–800 tickers),
+    keeping total fast_info calls manageable.
     """
     symbols = prefilter(symbols)
 
-    # Gate 1: price + volume — fast batched download
+    # Gate 1 — batched price/volume
     price_vol  = batch_download(symbols)
     vol_passed = [s for s, v in price_vol.items() if v['avg_dollar_vol'] >= 250_000]
     print(f"{len(vol_passed)} symbols passed price/volume gate.")
 
-    # Gate 2: market cap + 52W range via fast_info (called only on survivors)
+    # Gate 2 — market cap + 52W range, per surviving ticker with retry
     candidates = []
     print(f"Fetching market cap + 52W range for {len(vol_passed)} survivors...")
 
     for i, symbol in enumerate(vol_passed):
-        try:
-            fi = yf.Ticker(symbol).fast_info
+        fi = fast_info_with_retry(symbol)
+        if fi is None:
+            continue
 
+        try:
             cap_m       = (fi.market_cap or 0) / 1_000_000
             week52_low  = fi.year_low  or 0
             week52_high = fi.year_high or 0
@@ -161,14 +211,15 @@ def apply_gates(symbols):
                     'week52_high':        week52_high,
                     'pct_above_52w_low':  pct_above_52w_low,
                 })
-
         except Exception as e:
-            print(f"  fast_info error {symbol}: {e}")
+            print(f"  Error processing {symbol}: {e}")
             continue
 
-        # Brief pause every 50 tickers to be a polite Yahoo consumer
-        if i > 0 and i % 50 == 0:
-            time.sleep(2)
+        # Pause every 25 fast_info calls — Yahoo's per-connection limit is low
+        if i > 0 and i % 25 == 0:
+            pause = 5 + random.uniform(0, 3)
+            print(f"  ({i}/{len(vol_passed)}) Pausing {pause:.1f}s...")
+            time.sleep(pause)
 
     print(f"\n{len(candidates)} candidates passed all gates.")
     return pd.DataFrame(candidates)
@@ -210,7 +261,7 @@ def prev_year_gaap(facts, tags):
 def fetch_sec_fundamentals(df_candidates, cik_map):
     """
     Fetch XBRL fundamentals from SEC EDGAR for each candidate.
-    cik_map is passed in from get_us_universe() — no second SEC fetch needed.
+    cik_map reused from get_us_universe() — no second SEC fetch needed.
     """
     rows    = []
     tickers = df_candidates['ticker'].tolist()
@@ -288,7 +339,7 @@ def score(df):
         np.nan
     )
 
-    # Relaxed ROA gate: allow down to -5% to keep near-profitable companies
+    # Relaxed ROA gate: allow down to -5%
     df = df[
         (df['fcf_yield'] > 0) &
         (df['book_to_market'] > 0) &
@@ -435,7 +486,6 @@ def load_to_db(df):
 if __name__ == "__main__":
     print("=== Starting Weekly ETL ===")
 
-    # Phase 1: universe + CIK map in one SEC call — no Finnhub needed
     raw_symbols, cik_map = get_us_universe()
     candidates = apply_gates(raw_symbols)
 
@@ -443,11 +493,9 @@ if __name__ == "__main__":
         print("No candidates passed gates — aborting.")
         exit(1)
 
-    # Phase 2: SEC fundamentals (reuses cik_map from above — no second fetch)
     sec_data = fetch_sec_fundamentals(candidates, cik_map)
     merged   = pd.merge(candidates, sec_data, on='ticker', how='inner')
 
-    # Phase 3: score + rank
     ranked = score(merged)
 
     if ranked.empty:
@@ -459,6 +507,5 @@ if __name__ == "__main__":
                   'fcf_yield', 'revenue_growth',
                   'quality_penalty', 'pct_above_52w_low']].head(10).to_string())
 
-    # Phase 4: write to Neon
     load_to_db(ranked)
     print("=== ETL Complete ===")
