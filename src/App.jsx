@@ -2009,7 +2009,29 @@ export default function App() {
             <div style={{ fontSize: 10, color: "#2d3a52", letterSpacing: "0.35em", textTransform: "uppercase", marginBottom: 3 }}>HOW ~$600B+ IN HYPERSCALER CAPEX FLOWS THROUGH AI INFRASTRUCTURE TRACKS</div>
             <div style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", letterSpacing: "-0.01em" }}>AI Capex Flow Intelligence</div>
           </div>
-          <MarketClock />
+         <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+            <MarketClock />
+            
+              href="https://wizzleswatchlist.substack.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
+                color: "#f97316", background: "rgba(249,115,22,0.1)",
+                border: "1px solid rgba(249,115,22,0.35)", borderRadius: 6,
+                padding: "4px 12px", textDecoration: "none", transition: "all .2s",
+                fontFamily: "'Inter', sans-serif",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.2)"; e.currentTarget.style.borderColor = "rgba(249,115,22,0.65)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(249,115,22,0.1)"; e.currentTarget.style.borderColor = "rgba(249,115,22,0.35)"; }}
+            >
+              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
+                <path d="M22.539 8.242H1.46V5.406h21.08v2.836zM1.46 10.812V24L12 18.11 22.54 24V10.812H1.46zM22.54 0H1.46v2.836h21.08V0z"/>
+              </svg>
+              Newsletter ↗
+            </a>
+          </div>
           <div className="header-controls" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
             
             {!isAdmin ? (
