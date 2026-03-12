@@ -1925,27 +1925,7 @@ export default function App() {
             <div style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", letterSpacing: "-0.01em" }}>AI Capex Flow Intelligence</div>
           </div>
 
-          {/* ── MARKET CLOCK + SUBSTACK BUTTON ── */}
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-            <MarketClock />
-            <a
-              href="https://wizzleswatchlist.substack.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 6,
-                fontSize: 11, fontWeight: 700, color: "#f59e0b",
-                background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.3)",
-                borderRadius: 8, padding: "5px 13px", textDecoration: "none",
-                letterSpacing: "0.04em", transition: "all .18s",
-                fontFamily: "'DM Mono','Fira Code',monospace",
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = "rgba(245,158,11,0.16)"; e.currentTarget.style.borderColor = "rgba(245,158,11,0.6)"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "rgba(245,158,11,0.08)"; e.currentTarget.style.borderColor = "rgba(245,158,11,0.3)"; }}
-            >
-              <span style={{ fontSize: 13 }}>✉</span> Wizzle's Watchlist ↗
-            </a>
-          </div>
+          <MarketClock />
 
           <div className="header-controls" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
             
@@ -1969,6 +1949,23 @@ export default function App() {
             <button onClick={refresh} disabled={refreshing} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 8, color: "#64748b", padding: "5px 12px", cursor: "pointer", fontSize: 11, fontFamily: "inherit", opacity: refreshing ? 0.5 : 1 }}>
               {refreshing ? "↻" : `↻${lastUpdated ? " · " + lastUpdated : ""}`}
             </button>
+            <a
+              href="https://wizzleswatchlist.substack.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{
+                display: "inline-flex", alignItems: "center", gap: 6,
+                fontSize: 11, fontWeight: 700, color: "#f59e0b",
+                background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.3)",
+                borderRadius: 8, padding: "5px 13px", textDecoration: "none",
+                letterSpacing: "0.04em", transition: "all .18s",
+                fontFamily: "'DM Mono','Fira Code',monospace",
+              }}
+              onMouseEnter={e => { e.currentTarget.style.background = "rgba(245,158,11,0.16)"; e.currentTarget.style.borderColor = "rgba(245,158,11,0.6)"; }}
+              onMouseLeave={e => { e.currentTarget.style.background = "rgba(245,158,11,0.08)"; e.currentTarget.style.borderColor = "rgba(245,158,11,0.3)"; }}
+            >
+              <span style={{ fontSize: 13 }}>✉</span> Wizzle's Watchlist ↗
+            </a>
           </div>
         </div>
 
