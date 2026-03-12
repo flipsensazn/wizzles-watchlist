@@ -1310,67 +1310,20 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
 
 // ── MULTIBAGGER PANEL ─────────────────────────────────────
 function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTickerClick }) {
-  const [allData, setAllData]         = useState([]);  // full unfiltered dataset
-  const [data, setData]               = useState([]);  // filtered view shown in table
-  const [loading, setLoading]         = useState(true);
-  const [error, setError]             = useState(null);
-  const [newTicker, setNewTicker]     = useState("");
-  const [showImport, setShowImport]   = useState(false);
-  const [importText, setImportText]   = useState("");
+  const [allData, setAllData]           = useState([]);  // full unfiltered dataset from Neon
+  const [data, setData]                 = useState([]);  // filtered view shown in table
+  const [loading, setLoading]           = useState(true);
+  const [error, setError]               = useState(null);
+  const [newTicker, setNewTicker]       = useState("");
+  const [showImport, setShowImport]     = useState(false);
+  const [importText, setImportText]     = useState("");
   const [sectorFilter, setSectorFilter] = useState("");
-  const [lastUpdated, setLastUpdated] = useState(null);
-  const [usingFallback, setUsingFallback] = useState(false);
-
-  // ── SCORING ALGORITHM (fallback mode) ────────────────
-  // Matches ETL: FCF(35%) B/M(20%) ROA(15%) AssetGrowth(15%) RevGrowth(15%)
-  // Relaxed ROA gate: allows down to -5% to catch near-profitable companies
-  function computeCompositeScores(rawList) {
-    if (rawList.length === 0) return [];
-
-    function winsorizeAndRank(arr) {
-      const valid  = arr.filter(v => v != null && !isNaN(v));
-      if (valid.length === 0) return arr.map(() => 0.5);
-      const sorted = [...valid].sort((a, b) => a - b);
-      const lo     = sorted[Math.floor(sorted.length * 0.05)] ?? sorted[0];
-      const hi     = sorted[Math.ceil(sorted.length * 0.95) - 1] ?? sorted[sorted.length - 1];
-      const clipped = arr.map(v => (v == null || isNaN(v)) ? lo : Math.min(Math.max(v, lo), hi));
-      return clipped.map(v => {
-        const below = clipped.filter(x => x < v).length;
-        return (below + 0.5) / clipped.length;
-      });
-    }
-
-    const fcfYields    = rawList.map(s => s._fcfYield);
-    const bms          = rawList.map(s => s._bookToMarket);
-    const roas         = rawList.map(s => s._roa);
-    const assetGrowths = rawList.map(s => s._assetGrowth);
-    const revGrowths   = rawList.map(s => s._revGrowth ?? null);
-
-    const fcfRanks = winsorizeAndRank(fcfYields);
-    const bmRanks  = winsorizeAndRank(bms);
-    const roaRanks = winsorizeAndRank(roas);
-    const agRanks  = winsorizeAndRank(assetGrowths);
-    const rgRanks  = winsorizeAndRank(revGrowths);
-
-    return rawList.map((s, i) => ({
-      ...s,
-      fcf_yield:       fcfYields[i],
-      book_to_market:  bms[i],
-      roa:             roas[i],
-      revenue_growth:  revGrowths[i],
-      composite_score:
-        0.35 * fcfRanks[i] +
-        0.20 * bmRanks[i]  +
-        0.15 * roaRanks[i] +
-        0.15 * agRanks[i]  +
-        0.15 * rgRanks[i],
-    }))
-    .sort((a, b) => b.composite_score - a.composite_score)
-    .map((s, i) => ({ ...s, rank_overall: i + 1 }));
-  }
+  const [lastUpdated, setLastUpdated]   = useState(null);
 
   // ── FETCH FULL DATASET FROM NEON ─────────────────────
-  // Always fetches unfiltered — sector filter is applied client-side
+  // Neon is the sole data source — no Yahoo fallback.
+  // SEC EDGAR + Finnhub data from the weekly ETL is more accurate
+  // than per-ticker Yahoo quotes and uses the full 5-factor algorithm.
   const fetchRanked = async () => {
     setLoading(true);
     setError(null);
@@ -1380,85 +1333,22 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
       if (json.success && json.data?.length > 0) {
         setAllData(json.data);
         setData(json.data);
-        setUsingFallback(false);
         setLastUpdated(new Date().toLocaleDateString());
       } else {
-        setUsingFallback(true);
-        await fetchFallback();
+        setError("No ranked data available yet. Run the ETL pipeline to populate the scanner.");
+        setAllData([]);
+        setData([]);
       }
     } catch (err) {
-      setError("Could not reach scanner API.");
-      setUsingFallback(true);
-      await fetchFallback();
+      setError("Could not reach scanner API. Check your Cloudflare deployment.");
+      setAllData([]);
+      setData([]);
     } finally {
       setLoading(false);
     }
   };
 
-  // ── FALLBACK: live Yahoo fetch ────────────────────────
-  const fetchFallback = async () => {
-    const CONCURRENCY = 4;
-    const rawResults  = [];
-    const queue       = [...scannerPool];
-
-    async function processOne(ticker) {
-      try {
-        const res  = await fetch(`/quote?ticker=${encodeURIComponent(ticker)}`);
-        const json = await res.json();
-        const r    = json?.quoteSummary?.result?.[0];
-        if (!r) return null;
-
-        const fcf             = r.financialData?.freeCashflow?.raw ?? 0;
-        const marketCapRaw    = r.price?.marketCap?.raw ?? 1;
-        const roaRaw          = r.financialData?.returnOnAssets?.raw ?? 0;
-        const pb              = r.defaultKeyStatistics?.priceToBook?.raw ?? 0;
-        const pe              = r.summaryDetail?.trailingPE?.raw ?? null;
-        const totalAssets     = r.balanceSheetHistory?.balanceSheetStatements?.[0]?.totalAssets?.raw ?? 1;
-        const totalAssetsPrev = r.balanceSheetHistory?.balanceSheetStatements?.[1]?.totalAssets?.raw ?? totalAssets;
-        const revCurrent      = r.incomeStatementHistory?.incomeStatementHistory?.[0]?.totalRevenue?.raw ?? null;
-        const revPrev         = r.incomeStatementHistory?.incomeStatementHistory?.[1]?.totalRevenue?.raw ?? null;
-
-        const fcfYield    = marketCapRaw > 0 ? fcf / marketCapRaw : 0;
-        const bookToMarket = pb > 0 ? 1 / pb : 0;
-        const roa          = roaRaw;
-        const assetGrowth  = totalAssetsPrev > 0
-          ? (totalAssets - totalAssetsPrev) / totalAssetsPrev : 0;
-        const revGrowth    = (revCurrent != null && revPrev != null && revPrev !== 0)
-          ? (revCurrent - revPrev) / Math.abs(revPrev) : null;
-
-        // Relaxed ROA gate: allow slightly negative (matches ETL -5% floor)
-        if (fcfYield <= 0 || bookToMarket <= 0 || roa < -0.05) return null;
-
-        return {
-          ticker,
-          market_cap:    marketCapRaw,
-          price:         r.price?.regularMarketPrice?.raw ?? null,
-          sector:        r.assetProfile?.sector ?? null,
-          pe,
-          _fcfYield:     fcfYield,
-          _bookToMarket: bookToMarket,
-          _roa:          roa,
-          _assetGrowth:  assetGrowth,
-          _revGrowth:    revGrowth,
-        };
-      } catch { return null; }
-    }
-
-    async function worker() {
-      while (queue.length > 0) {
-        const ticker = queue.shift();
-        const result = await processOne(ticker);
-        if (result) rawResults.push(result);
-      }
-    }
-    await Promise.all(Array.from({ length: CONCURRENCY }, worker));
-    const scored = computeCompositeScores(rawResults);
-    setAllData(scored);
-    setData(scored);
-  };
-
   useEffect(() => { fetchRanked(); }, []);
-  useEffect(() => { if (usingFallback) fetchFallback(); }, [scannerPool]);
 
   // Client-side sector filter — no re-fetch needed
   useEffect(() => {
@@ -1509,16 +1399,10 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24" }}>Small-cap Scanner</h3>
-            {usingFallback ? (
-              <span style={{ fontSize: 9, color: "#f59e0b", background: "rgba(245,158,11,0.1)", border: "1px solid rgba(245,158,11,0.3)", borderRadius: 4, padding: "2px 7px", fontWeight: 700, letterSpacing: "0.1em" }}>LIVE SCORING</span>
-            ) : (
-              <span style={{ fontSize: 9, color: "#34d399", background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.3)", borderRadius: 4, padding: "2px 7px", fontWeight: 700, letterSpacing: "0.1em" }}>● DB RANKED</span>
-            )}
+            <span style={{ fontSize: 9, color: "#34d399", background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.3)", borderRadius: 4, padding: "2px 7px", fontWeight: 700, letterSpacing: "0.1em" }}>● DB RANKED</span>
           </div>
           <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>
-            {usingFallback
-              ? "Live · FCF(35%) B/M(20%) ROA(15%) Growth(15%) Rev(15%)"
-              : `ETL-ranked universe · updated ${lastUpdated ?? "weekly"}`}
+            ETL-ranked · FCF(35%) B/M(20%) ROA(15%) Growth(15%) Rev(15%) · updated {lastUpdated ?? "weekly"}
           </p>
         </div>
 
@@ -1587,7 +1471,7 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
           <tbody>
             {loading ? (
               <tr><td colSpan="11" style={{ padding: 20, color: "#475569" }}>
-                {usingFallback ? "Fetching live data..." : "Loading ranked candidates..."}
+                Loading ranked candidates from Neon...
               </td></tr>
             ) : data.length === 0 ? (
               <tr><td colSpan="11" style={{ padding: 20, color: "#475569" }}>
@@ -1604,9 +1488,8 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
                   ? "$" + Number(stock.price).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })
                   : "—";
 
-              const marketCapRaw = usingFallback
-                ? stock.market_cap
-                : (stock.market_cap ?? 0) * 1_000_000;
+              // Market cap: DB stores in millions — multiply by 1M for fmtMarketCap
+              const marketCapRaw = (stock.market_cap ?? 0) * 1_000_000;
               const marketCapStr = marketCapRaw > 0 ? fmtMarketCap(marketCapRaw) : "—";
 
               const score    = Number(stock.composite_score);
