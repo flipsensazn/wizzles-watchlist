@@ -43,8 +43,7 @@ export async function onRequest(context) {
     const password = url.password;
     const host     = url.hostname;
 
-    // Fetch full unfiltered dataset — filtering is done client-side in the frontend
-    // so sector switching never requires a round-trip to the DB
+   // Fetch full unfiltered dataset
     const sqlQuery = `
       WITH LatestDate AS (
         SELECT MAX(as_of_date) AS max_date FROM ranked_candidates
@@ -52,9 +51,6 @@ export async function onRequest(context) {
       SELECT
         rank_overall,
         ticker,
-        company_name,
-        sector,
-        industry,
         market_cap,
         price,
         fcf_yield,
@@ -72,7 +68,7 @@ export async function onRequest(context) {
       ORDER BY rank_overall ASC
       LIMIT 200
     `;
-
+    
     const neonEndpoint = `https://${host}/sql`;
 
     const dbRes = await fetch(neonEndpoint, {
