@@ -3,105 +3,157 @@ import pandas as pd
 import numpy as np
 import psycopg2
 import psycopg2.extras
+import yfinance as yf
 import time
 import os
 from datetime import date
 
 # --- Credentials from environment variables (GitHub Secrets inject these) ---
-FINNHUB_API_KEY = os.environ.get('FINNHUB_API_KEY')
-DATABASE_URL    = os.environ.get('DATABASE_URL')
-FINNHUB_BASE    = 'https://finnhub.io/api/v1'
-SEC_HEADERS     = {'User-Agent': 'WizzlesWatchlist flipsensazn@gmail.com'}
+DATABASE_URL = os.environ.get('DATABASE_URL')
+SEC_HEADERS  = {'User-Agent': 'WizzlesWatchlist flipsensazn@gmail.com'}
 
-# --- Symbol range for split runs (set by workflow env vars) ---
-# Part 1: SYMBOL_RANGE_START=A  SYMBOL_RANGE_END=N  (A–M)
-# Part 2: SYMBOL_RANGE_START=N  SYMBOL_RANGE_END=ZZZ (N–Z)
-# When running manually with no env vars set, processes the full universe.
-SYMBOL_RANGE_START = os.environ.get('SYMBOL_RANGE_START', 'A')
-SYMBOL_RANGE_END   = os.environ.get('SYMBOL_RANGE_END',   'ZZZ')
+# Batch size for yfinance downloads — 500 is the practical sweet spot.
+# Too large and Yahoo silently drops tickers; too small and it's slow.
+YF_BATCH_SIZE = 500
 
 
-# ── PHASE 1: FINNHUB UNIVERSE GATING ─────────────────────
+# ── PHASE 1: UNIVERSE GATING (yfinance) ──────────────────
+#
+# Strategy:
+#   1. Fetch the full US ticker list + CIK map from SEC company_tickers.json
+#      (same file used for fundamentals — free, no key, one call)
+#   2. Pre-filter on symbol strings alone (no API calls)
+#   3. Batch-download price + volume via yfinance.download() — 500 tickers/call,
+#      no rate limit, full universe in ~20 batches taking ~5 minutes total
+#   4. Call yfinance Ticker.fast_info only on the ~300-500 vol/price survivors
+#      to get market cap + 52W range (lightweight, ~0.3s per ticker)
+#
+# Total runtime: ~30–45 minutes vs 6+ hours with Finnhub free tier.
+
 def get_us_universe():
-    print("Fetching US symbol universe...")
-    res = requests.get(f"{FINNHUB_BASE}/stock/symbol",
-                       params={'exchange': 'US', 'token': FINNHUB_API_KEY})
+    """
+    Fetch full US ticker list and CIK map from SEC in a single call.
+    Reusing this for Phase 2 means zero duplicate network requests.
+    """
+    print("Fetching US universe + CIK map from SEC...")
+    res = requests.get("https://www.sec.gov/files/company_tickers.json",
+                       headers=SEC_HEADERS)
     res.raise_for_status()
-    symbols = res.json()
-    common = [s['symbol'] for s in symbols if s.get('type') == 'Common Stock']
-    print(f"Found {len(common)} common stocks.")
-    return common
+    data    = res.json()
+    tickers = [v['ticker'] for v in data.values()]
+    cik_map = {v['ticker']: str(v['cik_str']).zfill(10) for v in data.values()}
+    print(f"Found {len(tickers)} tickers in SEC universe.")
+    return tickers, cik_map
+
+
+def prefilter(symbols):
+    """
+    Pure string-based filters — no API calls.
+    Cuts the raw ~12,000 symbol list down to ~7,000–8,000 before any fetch.
+    """
+    symbols = [s for s in symbols if '.' not in s]           # no dots (foreign/preferred)
+    symbols = [s for s in symbols if len(s) <= 5]            # max 5 chars
+    symbols = [s for s in symbols if len(s) >= 3]            # min 3 chars (no indices)
+    junk_suffixes = ('W', 'R', 'U', 'Q', 'Z')                # warrants/rights/units/bankrupt
+    symbols = [s for s in symbols if not s.endswith(junk_suffixes)]
+    print(f"Pre-filtered to {len(symbols)} symbols.")
+    return symbols
+
+
+def batch_download(symbols):
+    """
+    Download 1-month daily OHLCV for all symbols in batches of 500.
+    Returns dict: { ticker -> {'price': float, 'avg_dollar_vol': float} }
+    """
+    print(f"Batch downloading price/volume for {len(symbols)} symbols...")
+    results = {}
+    batches = [symbols[i:i + YF_BATCH_SIZE] for i in range(0, len(symbols), YF_BATCH_SIZE)]
+
+    for batch_num, batch in enumerate(batches):
+        print(f"  Batch {batch_num + 1}/{len(batches)} ({len(batch)} symbols)...")
+        try:
+            raw = yf.download(
+                " ".join(batch),
+                period="1mo",
+                interval="1d",
+                group_by="ticker",
+                auto_adjust=True,
+                progress=False,
+                threads=True,
+            )
+
+            for ticker in batch:
+                try:
+                    if len(batch) == 1:
+                        # Single-ticker download returns flat (non-MultiIndex) DataFrame
+                        close  = raw["Close"].dropna()
+                        volume = raw["Volume"].dropna()
+                    else:
+                        close  = raw[ticker]["Close"].dropna()
+                        volume = raw[ticker]["Volume"].dropna()
+
+                    if close.empty or volume.empty:
+                        continue
+
+                    price       = float(close.iloc[-1])
+                    avg_vol_10d = float(volume.iloc[-10:].mean()) if len(volume) >= 10 else float(volume.mean())
+                    dollar_vol  = price * avg_vol_10d
+
+                    if price >= 2.0:
+                        results[ticker] = {
+                            'price':          price,
+                            'avg_dollar_vol': dollar_vol,
+                        }
+                except Exception:
+                    continue
+
+        except Exception as e:
+            print(f"  Batch {batch_num + 1} error: {e}")
+
+        time.sleep(1)  # polite pause between batches
+
+    print(f"Price/volume data retrieved for {len(results)} symbols.")
+    return results
 
 
 def apply_gates(symbols):
+    """
+    Two-stage gate:
+      Gate 1 (batched): price >= $2 AND dollar volume >= $250K
+      Gate 2 (per-ticker): $25M <= market cap <= $2B
+
+    Returns DataFrame of candidates ready for SEC fundamentals.
+    """
+    symbols = prefilter(symbols)
+
+    # Gate 1: price + volume — fast batched download
+    price_vol  = batch_download(symbols)
+    vol_passed = [s for s, v in price_vol.items() if v['avg_dollar_vol'] >= 250_000]
+    print(f"{len(vol_passed)} symbols passed price/volume gate.")
+
+    # Gate 2: market cap + 52W range via fast_info (called only on survivors)
     candidates = []
+    print(f"Fetching market cap + 52W range for {len(vol_passed)} survivors...")
 
-    # ── Pre-filters (no API calls — pure string filtering) ──────────────────
-
-    # Filter 1: Remove dots and long symbols (ETFs, foreign ordinaries)
-    symbols = [s for s in symbols if '.' not in s and len(s) <= 5]
-
-    # Filter 2: Remove single/double-char symbols (almost always large-caps or ETFs)
-    symbols = [s for s in symbols if len(s) >= 3]
-
-    # Filter 3: Remove warrant, rights, unit, bankruptcy, and when-issued suffixes
-    # These suffixes identify non-operating securities that will never pass our gates
-    junk_suffixes = ('W', 'R', 'U', 'Q', 'Z')
-    symbols = [s for s in symbols if not s.endswith(junk_suffixes)]
-
-    # Filter 4: Symbol range split — processes only the assigned alphabetical slice
-    # Allows the full universe to be covered across two GitHub Actions jobs
-    symbols = [s for s in symbols if SYMBOL_RANGE_START <= s < SYMBOL_RANGE_END]
-
-    print(f"Pre-filtered to {len(symbols)} symbols "
-          f"(range {SYMBOL_RANGE_START}–{SYMBOL_RANGE_END}, "
-          f"after removing dots/warrants/short symbols).")
-
-    # ── Finnhub API gating loop ──────────────────────────────────────────────
-    for i, symbol in enumerate(symbols):
+    for i, symbol in enumerate(vol_passed):
         try:
-            quote = requests.get(f"{FINNHUB_BASE}/quote",
-                                 params={'symbol': symbol, 'token': FINNHUB_API_KEY}).json()
-            price = quote.get('c', 0)
-            if not price or price < 2.0:
-                continue
+            fi = yf.Ticker(symbol).fast_info
 
-            metrics = requests.get(f"{FINNHUB_BASE}/stock/metric",
-                                   params={'symbol': symbol, 'metric': 'all',
-                                           'token': FINNHUB_API_KEY}).json().get('metric', {})
-            cap_m      = metrics.get('marketCapitalization', 0) or 0
-            avg_vol    = metrics.get('10DayAverageTradingVolume', 0) or 0
-            dollar_vol = price * (avg_vol * 1_000_000)
+            cap_m       = (fi.market_cap or 0) / 1_000_000
+            week52_low  = fi.year_low  or 0
+            week52_high = fi.year_high or 0
+            price       = price_vol[symbol]['price']
+            dollar_vol  = price_vol[symbol]['avg_dollar_vol']
 
-            # Capture 52-week range — already in the metrics payload, zero extra calls
-            week52_low        = metrics.get('52WeekLow', 0)  or 0
-            week52_high       = metrics.get('52WeekHigh', 0) or 0
-            pct_above_52w_low = round(((price - week52_low) / week52_low * 100), 2) if week52_low > 0 else None
+            pct_above_52w_low = (
+                round((price - week52_low) / week52_low * 100, 2)
+                if week52_low > 0 else None
+            )
 
-            if (25 <= cap_m <= 2000) and (dollar_vol >= 250_000):
-                print(f"PASSED: {symbol} | ${price} | ${cap_m}M")
-                
-                # Fetch company profile to get sector and name (only for passing candidates)
-                company_name = None
-                sector = None
-                try:
-                    prof_res = requests.get(f"{FINNHUB_BASE}/stock/profile2", 
-                                            params={'symbol': symbol, 'token': FINNHUB_API_KEY})
-                    if prof_res.status_code == 200:
-                        profile = prof_res.json()
-                        company_name = profile.get('name')
-                        sector       = profile.get('finnhubIndustry')
-                except Exception as e:
-                    print(f"  -> Profile error for {symbol}: {e}")
-                
-                # Extra sleep to respect Finnhub's 60 calls/min limit when fetching profiles
-                time.sleep(1.1) 
-
+            if 25 <= cap_m <= 2000:
+                print(f"  PASSED: {symbol} | ${price:.2f} | ${cap_m:.0f}M")
                 candidates.append({
                     'ticker':             symbol,
-                    'company_name':       company_name,
-                    'sector':             sector,
-                    'industry':           sector, # Finnhub combines these, map same to both
                     'price':              price,
                     'market_cap':         cap_m,
                     'avg_dollar_vol_20d': dollar_vol,
@@ -109,22 +161,20 @@ def apply_gates(symbols):
                     'week52_high':        week52_high,
                     'pct_above_52w_low':  pct_above_52w_low,
                 })
+
         except Exception as e:
-            print(f"Error {symbol}: {e}")
+            print(f"  fast_info error {symbol}: {e}")
+            continue
 
-        time.sleep(2.1)  # Finnhub free tier: 60 calls/min, 2 per symbol = 30/min
+        # Brief pause every 50 tickers to be a polite Yahoo consumer
+        if i > 0 and i % 50 == 0:
+            time.sleep(2)
 
+    print(f"\n{len(candidates)} candidates passed all gates.")
     return pd.DataFrame(candidates)
 
 
 # ── PHASE 2: SEC FUNDAMENTALS ────────────────────────────
-def get_cik_map():
-    print("Fetching CIK map from SEC...")
-    res = requests.get("https://www.sec.gov/files/company_tickers.json",
-                       headers=SEC_HEADERS)
-    res.raise_for_status()
-    return {v['ticker']: str(v['cik_str']).zfill(10) for v in res.json().values()}
-
 
 def latest_gaap(facts, tags):
     """Returns the most recent value for the first matching GAAP tag."""
@@ -142,33 +192,34 @@ def latest_gaap(facts, tags):
 
 
 def prev_year_gaap(facts, tags):
-    """
-    Returns the prior-year annual value for a GAAP tag (second most recent 10-K).
-    Used for real YoY growth calculations — asset growth and revenue growth.
-    """
+    """Returns the prior-year annual value (second most recent 10-K) for YoY calcs."""
     gaap = facts.get('facts', {}).get('us-gaap', {})
     for tag in tags:
         if tag in gaap:
             try:
                 usd_units = gaap[tag]['units']['USD']
-                # Filter to annual 10-K filings only to avoid mixing quarters with years
                 annual = [u for u in usd_units if u.get('form') in ('10-K', '10-K/A')]
                 if len(annual) >= 2:
                     annual_sorted = sorted(annual, key=lambda x: x['end'], reverse=True)
-                    return annual_sorted[1]['val']  # second most recent = prior year
+                    return annual_sorted[1]['val']
             except (KeyError, IndexError):
                 continue
     return np.nan
 
 
-def fetch_sec_fundamentals(df_candidates):
-    cik_map = get_cik_map()
-    rows = []
-    for _, row in df_candidates.iterrows():
-        ticker = row['ticker']
-        cik    = cik_map.get(ticker)
+def fetch_sec_fundamentals(df_candidates, cik_map):
+    """
+    Fetch XBRL fundamentals from SEC EDGAR for each candidate.
+    cik_map is passed in from get_us_universe() — no second SEC fetch needed.
+    """
+    rows    = []
+    tickers = df_candidates['ticker'].tolist()
+    print(f"Fetching SEC fundamentals for {len(tickers)} candidates...")
+
+    for ticker in tickers:
+        cik = cik_map.get(ticker)
         if not cik:
-            print(f"No CIK for {ticker}, skipping.")
+            print(f"  No CIK for {ticker}, skipping.")
             continue
         try:
             res = requests.get(
@@ -178,7 +229,6 @@ def fetch_sec_fundamentals(df_candidates):
                 continue
             facts = res.json()
 
-            # Core fundamentals
             cfo               = latest_gaap(facts, ['NetCashProvidedByUsedInOperatingActivities'])
             capex             = latest_gaap(facts, ['PaymentsToAcquirePropertyPlantAndEquipment',
                                                     'PaymentsToAcquireProductiveAssets'])
@@ -189,7 +239,6 @@ def fetch_sec_fundamentals(df_candidates):
             total_debt        = latest_gaap(facts, ['LongTermDebt',
                                                     'LongTermDebtAndCapitalLeaseObligation',
                                                     'DebtAndCapitalLeaseObligations'])
-
             rev_tags = [
                 'RevenueFromContractWithCustomerExcludingAssessedTax',
                 'Revenues',
@@ -212,35 +261,34 @@ def fetch_sec_fundamentals(df_candidates):
                 'revenue_prev':      revenue_prev,
             })
         except Exception as e:
-            print(f"SEC error {ticker}: {e}")
+            print(f"  SEC error {ticker}: {e}")
+
         time.sleep(0.15)  # SEC rate limit: 10 req/sec
+
     return pd.DataFrame(rows)
 
 
 # ── PHASE 3: SCORING ─────────────────────────────────────
-def score(df):
 
-    # Raw factor calculations
+def score(df):
     df['fcf']            = df['cfo'] - df['capex'].abs()
     df['fcf_yield']      = df['fcf'] / (df['market_cap'] * 1_000_000)
     df['book_to_market'] = df['book_equity'] / (df['market_cap'] * 1_000_000)
     df['roa']            = df['net_income'] / df['total_assets']
 
-    # Real asset growth YoY
     df['asset_growth_yoy'] = np.where(
         df['total_assets_prev'].notna() & (df['total_assets_prev'] != 0),
         (df['total_assets'] - df['total_assets_prev']) / df['total_assets_prev'].abs(),
         0.0
     )
 
-    # Revenue growth YoY
     df['revenue_growth'] = np.where(
         df['revenue_prev'].notna() & (df['revenue_prev'] != 0),
         (df['revenue_current'] - df['revenue_prev']) / df['revenue_prev'].abs(),
         np.nan
     )
 
-    # Relaxed ROA gate: allow down to -5% to catch near-profitable companies
+    # Relaxed ROA gate: allow down to -5% to keep near-profitable companies
     df = df[
         (df['fcf_yield'] > 0) &
         (df['book_to_market'] > 0) &
@@ -248,7 +296,7 @@ def score(df):
     ].copy()
 
     if df.empty:
-        print("No candidates survived the gates.")
+        print("No candidates survived the scoring gates.")
         return df
 
     # Winsorize + percentile rank all 5 factors
@@ -262,7 +310,7 @@ def score(df):
         winsorized = col.clip(lower=lo, upper=hi)
         df[f'{factor}_rank_pct'] = winsorized.rank(pct=True)
 
-    # Composite score: FCF(35%) B/M(20%) ROA(15%) AssetGrowth(15%) RevGrowth(15%)
+    # Composite: FCF(35%) B/M(20%) ROA(15%) AssetGrowth(15%) RevGrowth(15%)
     df['composite_score'] = (
         0.35 * df['fcf_yield_rank_pct']        +
         0.20 * df['book_to_market_rank_pct']   +
@@ -271,7 +319,7 @@ def score(df):
         0.15 * df['revenue_growth_rank_pct']
     )
 
-    # Quality penalty system
+    # Quality penalties
     df['quality_penalty'] = 0
 
     if 'total_debt' in df.columns:
@@ -297,53 +345,12 @@ def score(df):
 
     df['composite_score'] = (df['composite_score'] - (df['quality_penalty'] * 0.05)).clip(lower=0)
 
-    # NOTE: rank_overall is NOT assigned here — it is computed globally after
-    # both Part 1 and Part 2 have been written to Neon. A separate re-rank
-    # step runs at the end of Part 2 to assign final ranks across the full universe.
-    return df
-
-
-# ── PHASE 3b: GLOBAL RE-RANK (runs after Part 2 completes) ──
-def rerank_in_db():
-    """
-    Reads today's full scored universe from Neon, assigns rank_overall
-    based on composite_score across ALL tickers (both A-M and N-Z parts),
-    then writes the ranks back. Called only by Part 2 after its insert.
-    """
-    print("Re-ranking full universe across both parts...")
-    conn = None
-    try:
-        conn = psycopg2.connect(DATABASE_URL)
-        cur  = conn.cursor()
-        rerank_sql = """
-            WITH today_ranked AS (
-                SELECT ticker, as_of_date,
-                       RANK() OVER (
-                           PARTITION BY as_of_date
-                           ORDER BY composite_score DESC
-                       ) AS new_rank
-                FROM ranked_candidates
-                WHERE as_of_date = CURRENT_DATE
-            )
-            UPDATE ranked_candidates rc
-            SET rank_overall = tr.new_rank
-            FROM today_ranked tr
-            WHERE rc.ticker = tr.ticker
-              AND rc.as_of_date = tr.as_of_date;
-        """
-        cur.execute(rerank_sql)
-        conn.commit()
-        print(f"Re-rank complete. Rows updated: {cur.rowcount}")
-    except Exception as e:
-        print(f"Re-rank error: {e}")
-        if conn:
-            conn.rollback()
-    finally:
-        if conn:
-            conn.close()
+    df['rank_overall'] = df['composite_score'].rank(ascending=False, method='min').astype(int)
+    return df.sort_values('rank_overall')
 
 
 # ── PHASE 4: DATABASE LOAD ───────────────────────────────
+
 def load_to_db(df):
     print(f"Loading {len(df)} rows into Neon PostgreSQL...")
 
@@ -354,22 +361,15 @@ def load_to_db(df):
             ADD COLUMN IF NOT EXISTS pct_above_52w_low   DOUBLE PRECISION,
             ADD COLUMN IF NOT EXISTS week52_low          DOUBLE PRECISION,
             ADD COLUMN IF NOT EXISTS week52_high         DOUBLE PRECISION,
-            ADD COLUMN IF NOT EXISTS total_debt          DOUBLE PRECISION,
-            ADD COLUMN IF NOT EXISTS company_name        VARCHAR(255),
-            ADD COLUMN IF NOT EXISTS sector              VARCHAR(255),
-            ADD COLUMN IF NOT EXISTS industry            VARCHAR(255);
+            ADD COLUMN IF NOT EXISTS total_debt          DOUBLE PRECISION;
     """
 
     df['as_of_date'] = date.today()
-    df['rank_overall'] = 0  # placeholder — replaced by rerank_in_db() after Part 2
     df_clean = df.replace({np.nan: None})
 
     col_map = [
         ('as_of_date',               'as_of_date'),
         ('ticker',                   'ticker'),
-        ('company_name',             'company_name'),   
-        ('sector',                   'sector'),        
-        ('industry',                 'industry'),       
         ('market_cap',               'market_cap'),
         ('price',                    'price'),
         ('avg_dollar_vol_20d',       'avg_dollar_vol_20d'),
@@ -417,7 +417,7 @@ def load_to_db(df):
         cur  = conn.cursor()
         cur.execute(migration_sql)
         conn.commit()
-        print("Schema migration complete (new columns ensured).")
+        print("Schema migration complete.")
         psycopg2.extras.execute_values(cur, insert_sql, records, page_size=500)
         conn.commit()
         print("Database load successful.")
@@ -431,43 +431,34 @@ def load_to_db(df):
 
 
 # ── MAIN ─────────────────────────────────────────────────
-if __name__ == "__main__":
-    is_part2 = SYMBOL_RANGE_START == 'N'
-    part_label = "Part 2 (N–Z)" if is_part2 else \
-                 "Part 1 (A–M)" if SYMBOL_RANGE_END == 'N' else \
-                 "Full Universe"
 
-    print(f"=== Starting Weekly ETL — {part_label} ===")
-    universe   = get_us_universe()
-    candidates = apply_gates(universe)
-    print(f"\n{len(candidates)} candidates passed gates.")
+if __name__ == "__main__":
+    print("=== Starting Weekly ETL ===")
+
+    # Phase 1: universe + CIK map in one SEC call — no Finnhub needed
+    raw_symbols, cik_map = get_us_universe()
+    candidates = apply_gates(raw_symbols)
 
     if candidates.empty:
-        print("No candidates -- aborting.")
-        # If this is Part 2 and Part 1 loaded data, still re-rank what's there
-        if is_part2:
-            rerank_in_db()
-        exit(0)
+        print("No candidates passed gates — aborting.")
+        exit(1)
 
-    sec_data = fetch_sec_fundamentals(candidates)
+    # Phase 2: SEC fundamentals (reuses cik_map from above — no second fetch)
+    sec_data = fetch_sec_fundamentals(candidates, cik_map)
     merged   = pd.merge(candidates, sec_data, on='ticker', how='inner')
-    ranked   = score(merged)
+
+    # Phase 3: score + rank
+    ranked = score(merged)
 
     if ranked.empty:
-        print("No candidates survived scoring.")
-        if is_part2:
-            rerank_in_db()
-        exit(0)
+        print("No candidates survived scoring — aborting.")
+        exit(1)
 
-    print(f"\nTop 5 by composite score ({part_label}):")
-    print(ranked[['ticker', 'composite_score',
-                  'fcf_yield', 'revenue_growth', 'quality_penalty',
-                  'pct_above_52w_low']].head())
+    print(f"\nTop 10 ranked:")
+    print(ranked[['ticker', 'rank_overall', 'composite_score',
+                  'fcf_yield', 'revenue_growth',
+                  'quality_penalty', 'pct_above_52w_low']].head(10).to_string())
 
+    # Phase 4: write to Neon
     load_to_db(ranked)
-
-    # Part 2 triggers the global re-rank across the full universe
-    if is_part2:
-        rerank_in_db()
-
-    print(f"=== ETL Complete — {part_label} ===")
+    print("=== ETL Complete ===")
