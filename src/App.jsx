@@ -367,6 +367,7 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
           </div>
           {data?.name && data.name !== ticker && <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.4 }}>{data.name}</div>}
         </div>
+        
         {/* Top Right Controls */}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           {data?.earningsDate && (
@@ -379,6 +380,7 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
           )}
           <button onClick={onClose} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "#64748b", width: 24, height: 24, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit" }}>×</button>
         </div>
+      </div>
 
       <div style={{ padding: "12px 16px 14px" }}>
         {loading ? (
