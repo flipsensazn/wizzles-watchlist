@@ -1,0 +1,37 @@
+name: Weekly ETL — Part 2 (N–Z)
+
+on:
+  schedule:
+    # Sunday 8:00 AM EDT (12:00 UTC) — starts 6 hours after Part 1
+    # By this time Part 1 (A–M) will have finished and written to Neon.
+    # Part 2 processes N–Z then triggers a global re-rank across the full universe.
+    - cron: '0 12 * * 0'
+
+  # Manual trigger for testing
+  workflow_dispatch:
+
+jobs:
+  run-etl-part2:
+    runs-on: ubuntu-latest
+    timeout-minutes: 330  # 5.5 hour hard cap
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: pip install requests pandas numpy psycopg2-binary
+
+      - name: Run ETL Pipeline — Part 2 (N–Z)
+        env:
+          FINNHUB_API_KEY:      ${{ secrets.FINNHUB_API_KEY }}
+          DATABASE_URL:         ${{ secrets.DATABASE_URL }}
+          SYMBOL_RANGE_START:   "N"
+          SYMBOL_RANGE_END:     "ZZZ"
+        run: python src/etl_pipeline.py
