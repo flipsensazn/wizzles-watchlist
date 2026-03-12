@@ -58,6 +58,7 @@ async function fetchQuoteSummary(ticker) {
     const profile = r.assetProfile ?? {};
     const detail  = r.summaryDetail ?? {};
     const price   = r.price ?? {};
+    const events  = r.calendarEvents ?? {};
 
     let chartPoints = [], chartDates = [];
     if (chartResult && chartResult.indicators?.quote?.[0]?.close && chartResult.timestamp) {
@@ -91,6 +92,7 @@ async function fetchQuoteSummary(ticker) {
       rawPrice:     currentPriceRaw,
       raw52Low:     detail.fiftyTwoWeekLow?.raw,
       raw52High:    detail.fiftyTwoWeekHigh?.raw,
+      earningsDate: events.earnings?.earningsDate?.[0]?.raw ?? null,
       news:         newsResult ? {
                       title: newsResult.title,
                       link: newsResult.link,
@@ -365,8 +367,18 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
           </div>
           {data?.name && data.name !== ticker && <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.4 }}>{data.name}</div>}
         </div>
-        <button onClick={onClose} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "#64748b", width: 24, height: 24, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit" }}>×</button>
-      </div>
+        {/* Top Right Controls */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {data?.earningsDate && (
+            <div style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(192,132,252,0.12)", border: "1px solid rgba(192,132,252,0.3)", padding: "4px 8px", borderRadius: 6 }}>
+              <span style={{ fontSize: 9, fontWeight: 800, color: "#c084fc", letterSpacing: "0.05em" }}>EARNINGS:</span>
+              <span style={{ fontSize: 9, fontWeight: 700, color: "#e2e8f0" }}>
+                {new Date(data.earningsDate * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}
+              </span>
+            </div>
+          )}
+          <button onClick={onClose} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "#64748b", width: 24, height: 24, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit" }}>×</button>
+        </div>
 
       <div style={{ padding: "12px 16px 14px" }}>
         {loading ? (
@@ -1274,7 +1286,14 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
                       <>
                         <span>{w52L}</span>
                         <div style={{ flex: 1, position: "relative", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2 }}>
-                          <div style={{ position: "absolute", left: `${dotPos}%`, top: "50%", transform: "translate(-50%, -50%)", width: 8, height: 8, borderRadius: "50%", background: dotColor, boxShadow: `0 0 6px ${dotColor}88` }} />
+                          {/* Position wrapper perfectly centers the dot on the line */}
+                          <div style={{ position: "absolute", left: `${dotPos}%`, top: "50%", transform: "translate(-50%, -50%)", zIndex: 2 }}>
+                            {/* Price label placed directly above the dot */}
+                            <div style={{ position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)", marginBottom: 3, background: "rgba(24,24,24,0.85)", padding: "1px 5px", borderRadius: 4, fontSize: 8.5, fontWeight: 700, color: "#e2e8f0" }}>
+                              ${pLive.toFixed(2)}
+                            </div>
+                            <div style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, boxShadow: `0 0 6px ${dotColor}88` }} />
+                          </div>
                         </div>
                         <span>{w52H}</span>
                       </>
