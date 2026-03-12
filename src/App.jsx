@@ -610,6 +610,65 @@ function MarketClock() {
 }
 
 // ── MARKET STRIP (BLOOMBERG STYLE) ──────────────────────────
+function BloombergChart({ data, timestamps, color }) {
+  if (!data || !timestamps || data.length < 2) return (
+    <div style={{ height: 24, marginTop: 4, display: "flex", alignItems: "center", justifyContent: "center", borderTop: "1px dashed rgba(255,255,255,0.2)" }}>
+      <span style={{ fontSize: 8, color: "#475569" }}>NO CHART DATA</span>
+    </div>
+  );
+
+  const width = 160;
+  const height = 24;
+  
+  // Find the separator between yesterday and today
+  let splitIndex = -1;
+  let maxGap = 0;
+  for (let i = 1; i < timestamps.length; i++) {
+    const gap = timestamps[i] - timestamps[i-1];
+    if (gap > maxGap) { maxGap = gap; splitIndex = i; }
+  }
+  
+  // If no overnight gap exists (Crypto is 24/7), separate at exactly 24 hours ago
+  if (maxGap < 4 * 3600) {
+    const dayAgo = timestamps[timestamps.length - 1] - 24 * 3600;
+    splitIndex = timestamps.findIndex(t => t >= dayAgo);
+  }
+  if (splitIndex <= 0) splitIndex = Math.floor(data.length / 2);
+
+  const validData = [];
+  for(let i=0; i<data.length; i++) {
+    if (data[i] != null) validData.push({ val: data[i], idx: i });
+  }
+  if (validData.length < 2) return null;
+
+  const min = Math.min(...validData.map(d => d.val));
+  const max = Math.max(...validData.map(d => d.val));
+  const yRange = (max - min) || 1;
+  const yMin = min - (yRange * 0.1);
+  const yMax = max + (yRange * 0.1);
+  const scaleY = yMax - yMin;
+
+  const getX = (idx) => (idx / (data.length - 1)) * width;
+  const getY = (val) => height - ((val - yMin) / scaleY) * height;
+
+  const part1 = validData.filter(d => d.idx <= splitIndex);
+  const part2 = validData.filter(d => d.idx >= splitIndex); // Overlap so the line connects seamlessly
+
+  const path1 = part1.map((d, i) => `${i === 0 ? 'M' : 'L'}${getX(d.idx)},${getY(d.val)}`).join(" ");
+  const path2 = part2.map((d, i) => `${i === 0 ? 'M' : 'L'}${getX(d.idx)},${getY(d.val)}`).join(" ");
+  const splitX = getX(splitIndex);
+
+  return (
+    <div style={{ height, marginTop: 4, position: "relative", zIndex: 0 }}>
+      <svg width={width} height={height} style={{ overflow: "visible", display: "block" }}>
+        <line x1={splitX} y1={0} x2={splitX} y2={height} stroke="rgba(255,255,255,0.4)" strokeWidth="1" strokeDasharray="2,2" />
+        {path1 && <path d={path1} fill="none" stroke="#f8fafc" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />}
+        {path2 && <path d={path2} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />}
+      </svg>
+    </div>
+  );
+}
+
 function MarketStrip({ data, tickers, labels, colors }) {
   function formatPrice(p, ticker) {
     if (p === null || p === undefined) return "—";
@@ -621,20 +680,20 @@ function MarketStrip({ data, tickers, labels, colors }) {
   return (
     <div className="market-strip" style={{ display: "flex", flexDirection: "column", gap: 6, justifyContent: "center", padding: "0 10px" }}>
       {tickers.map((ticker, i) => {
-        const entry = data[ticker];
-        const price = entry?.price;
-        const changePct = entry?.change;
+        const entry = data[ticker] || {};
+        const price = entry.price;
+        const changePct = entry.change;
         const pos = (changePct ?? 0) >= 0;
         
         // Bloomberg uses very stark red/green
         const changeColor = changePct === undefined || changePct === null ? "#475569" : pos ? "#10b981" : "#ef4444";
 
-        // Reverse-engineer the absolute point change (since backend only provides percentage right now)
+        // Reverse-engineer absolute point change (since our backend only provides percentage)
         let absChange = "—";
         if (price != null && changePct != null) {
            const prevPrice = price / (1 + (changePct / 100));
            const diff = price - prevPrice;
-           absChange = (diff > 0 ? "+" : "") + diff.toFixed(2);
+           absChange = (diff >= 0 ? "+" : "") + diff.toFixed(2);
         }
         
         return (
@@ -646,7 +705,6 @@ function MarketStrip({ data, tickers, labels, colors }) {
             boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 2px 4px rgba(0,0,0,0.5)",
             fontFamily: "'Roboto Condensed', sans-serif"
           }}>
-            {/* Top Row: Label and Absolute Point Change */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
               <span style={{ fontSize: 13, fontWeight: 800, color: colors[i] || "#fbbf24", letterSpacing: "0.02em" }}>
                 {labels[i]}
@@ -656,7 +714,6 @@ function MarketStrip({ data, tickers, labels, colors }) {
               </span>
             </div>
             
-            {/* Bottom Row: Price and Percentage Change */}
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
               <span style={{ fontSize: 14, fontWeight: 700, color: "#f8fafc" }}>
                 {formatPrice(price, ticker)}
@@ -666,14 +723,7 @@ function MarketStrip({ data, tickers, labels, colors }) {
               </span>
             </div>
 
-            {/* Sparkline Chart Area */}
-            <div style={{ height: 24, marginTop: 4, borderTop: "1px dashed rgba(255,255,255,0.2)", position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
-               {/* Vertical dashed line mimicking the previous close separator */}
-               <div style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: 1, borderLeft: "1px dashed rgba(255,255,255,0.3)" }} />
-               <span style={{ fontSize: 8, color: "#475569", zIndex: 1, backgroundColor: "#0a0a0a", padding: "0 4px" }}>
-                 NO CHART DATA
-               </span>
-            </div>
+            <BloombergChart data={entry.chartData} timestamps={entry.chartTimestamps} color={changeColor} />
           </div>
         );
       })}
