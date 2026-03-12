@@ -35,17 +35,29 @@ def get_us_universe():
 
 def apply_gates(symbols):
     candidates = []
-    # Pre-filter 1: Remove dots and long symbols (ETFs, foreign ordinaries)
+
+    # ── Pre-filters (no API calls — pure string filtering) ──────────────────
+
+    # Filter 1: Remove dots and long symbols (ETFs, foreign ordinaries)
     symbols = [s for s in symbols if '.' not in s and len(s) <= 5]
 
-    # Pre-filter 2: Remove known non-operating suffixes that slip through
-    # W = warrants, R = rights, U = units, Q = bankruptcy, Z = when-issued
+    # Filter 2: Remove single/double-char symbols (almost always large-caps or ETFs)
+    symbols = [s for s in symbols if len(s) >= 3]
+
+    # Filter 3: Remove warrant, rights, unit, bankruptcy, and when-issued suffixes
+    # These suffixes identify non-operating securities that will never pass our gates
     junk_suffixes = ('W', 'R', 'U', 'Q', 'Z')
     symbols = [s for s in symbols if not s.endswith(junk_suffixes)]
 
-    # Pre-filter 3: Remove very short symbols (1-2 chars are almost always
-    # large-caps or ETFs that won't pass the $25M-$2B cap gate anyway)
-    symbols = [s for s in symbols if len(s) >= 3]
+    # Filter 4: Symbol range split — processes only the assigned alphabetical slice
+    # Allows the full universe to be covered across two GitHub Actions jobs
+    symbols = [s for s in symbols if SYMBOL_RANGE_START <= s < SYMBOL_RANGE_END]
+
+    print(f"Pre-filtered to {len(symbols)} symbols "
+          f"(range {SYMBOL_RANGE_START}–{SYMBOL_RANGE_END}, "
+          f"after removing dots/warrants/short symbols).")
+
+    # ── Finnhub API gating loop ──────────────────────────────────────────────
     for i, symbol in enumerate(symbols):
         try:
             quote = requests.get(f"{FINNHUB_BASE}/quote",
