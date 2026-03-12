@@ -209,6 +209,34 @@ export async function onRequest(context) {
       }
     }
   }
+  // 4b. FETCH 2-DAY INTRADAY CHARTS FOR MACRO TICKERS (For Bloomberg TV UI)
+  const MACRO_TICKERS = new Set(["^GSPC", "^DJI", "^IXIC", "BTC-USD", "ETH-USD", "XRP-USD"]);
+  const macrosToFetch = tickers.filter(t => MACRO_TICKERS.has(t));
+
+  if (macrosToFetch.length > 0) {
+    try {
+      const { cookie, crumb } = await getYahooSession(env);
+      await Promise.all(macrosToFetch.map(async (t) => {
+        try {
+          const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?range=2d&interval=15m&crumb=${crumb}`;
+          const res = await fetch(url, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } });
+          if (res.ok) {
+            const data = await res.json();
+            const result = data.chart?.result?.[0];
+            if (result && result.indicators?.quote?.[0]?.close) {
+               results[t] = results[t] || {};
+               results[t].chartData = result.indicators.quote[0].close;
+               results[t].chartTimestamps = result.timestamp;
+            }
+          }
+        } catch (e) {
+          console.error(`Chart fetch error for ${t}:`, e);
+        }
+      }));
+    } catch (err) {
+      console.error("Macro chart batch fetch error:", err);
+    }
+  }
 
   // 5. WRITE BACK TO KV PRICE CACHE
   // Merge new results with any existing cached data so that a partial fresh
