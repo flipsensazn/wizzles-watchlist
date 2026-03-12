@@ -298,6 +298,10 @@ def fetch_sec_fundamentals(df_candidates, cik_map):
             ]
             revenue_current = latest_gaap(facts, rev_tags)
             revenue_prev    = prev_year_gaap(facts, rev_tags)
+            # Fetch Operating Income (Proxy for EBITDA)
+            op_tags = ['OperatingIncomeLoss', 'IncomeLossFromContinuingOperationsBeforeIncomeTaxesMinorityInterestAndExtraordinaryItems']
+            op_inc_current = latest_gaap(facts, op_tags)
+            op_inc_prev    = prev_year_gaap(facts, op_tags)
 
             rows.append({
                 'ticker':            ticker,
@@ -310,6 +314,8 @@ def fetch_sec_fundamentals(df_candidates, cik_map):
                 'total_debt':        total_debt,
                 'revenue_current':   revenue_current,
                 'revenue_prev':      revenue_prev,
+                'op_inc_current':    op_inc_current, # <-- NEW
+                'op_inc_prev':       op_inc_prev,    # <-- NEW
             })
         except Exception as e:
             print(f"  SEC error {ticker}: {e}")
@@ -332,13 +338,18 @@ def score(df):
         (df['total_assets'] - df['total_assets_prev']) / df['total_assets_prev'].abs(),
         0.0
     )
-
+    # Revenue growth YoY (Existing)
     df['revenue_growth'] = np.where(
         df['revenue_prev'].notna() & (df['revenue_prev'] != 0),
         (df['revenue_current'] - df['revenue_prev']) / df['revenue_prev'].abs(),
         np.nan
     )
-
+    # EBITDA Proxy Growth YoY (NEW)
+    df['ebitda_growth'] = np.where(
+        df['op_inc_prev'].notna() & (df['op_inc_prev'] != 0),
+        (df['op_inc_current'] - df['op_inc_prev']) / df['op_inc_prev'].abs(),
+        np.nan
+    )
     # Relaxed ROA gate: allow down to -5%
     df = df[
         (df['fcf_yield'] > 0) &
@@ -393,6 +404,18 @@ def score(df):
     df.loc[microcap, 'quality_penalty'] += 1
     if microcap.sum() > 0:
         print(f"  Quality penalty (micro-cap <$30M): {microcap.sum()} stocks")
+
+    # NEW FLAG: Overbought (Price within 5% of 52-week high)
+    near_high = (df['price'].notna()) & (df['week52_high'].notna()) & (df['price'] >= df['week52_high'] * 0.95)
+    df.loc[near_high, 'quality_penalty'] += 1
+    if near_high.sum() > 0:
+        print(f"  Quality penalty (near 52w high): {near_high.sum()} stocks")
+
+    # NEW FLAG: Investment (Asset Growth) > EBITDA Growth
+    inv_exc_ebitda = (df['asset_growth_yoy'].notna()) & (df['ebitda_growth'].notna()) & (df['asset_growth_yoy'] > df['ebitda_growth'])
+    df.loc[inv_exc_ebitda, 'quality_penalty'] += 1
+    if inv_exc_ebitda.sum() > 0:
+        print(f"  Quality penalty (Inv > EBITDA growth): {inv_exc_ebitda.sum()} stocks")
 
     df['composite_score'] = (df['composite_score'] - (df['quality_penalty'] * 0.05)).clip(lower=0)
 

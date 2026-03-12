@@ -68,6 +68,7 @@ export async function onRequest(context) {
         week52_high
       FROM ranked_candidates
       WHERE as_of_date = (SELECT max_date FROM LatestDate)
+        AND composite_score >= 0.65
       ORDER BY rank_overall ASC
       LIMIT 200
     `;
