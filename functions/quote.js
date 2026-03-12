@@ -76,7 +76,7 @@ export async function onRequest(context) {
     // getYahooSession() uses KV — no extra round trips when the crumb is warm
     const { cookie, crumb } = await getYahooSession(env);
 
-    const modules = "assetProfile,summaryDetail,price,financialData,defaultKeyStatistics";
+    const modules = "assetProfile,summaryDetail,price,financialData,defaultKeyStatistics,calendarEvents";
 
     // Fetch Quote Summary, 1-Month Chart, AND Latest News simultaneously
     const quoteUrl = `https://query1.finance.yahoo.com/v10/finance/quoteSummary/${encodeURIComponent(ticker)}?modules=${modules}&crumb=${crumb}`;
