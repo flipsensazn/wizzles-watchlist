@@ -78,7 +78,6 @@ export async function onRequest(context) {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": "Basic " + btoa(`${username}:${password}`),
         "Neon-Connection-String": DATABASE_URL,
       },
       body: JSON.stringify({ query: sqlQuery }),
