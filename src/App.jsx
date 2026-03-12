@@ -2004,23 +2004,25 @@ export default function App() {
             <div style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", letterSpacing: "-0.01em" }}>AI Capex Flow Intelligence</div>
           </div>
 
-          <MarketClock />
-
-          <div className="header-controls" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-            
+          {/* CENTER: Market Clock & Theme Toggle */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+            <MarketClock />
             <button 
               onClick={() => setIsLightMode(!isLightMode)} 
               style={{ 
                 background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", 
-                color: "#e2e8f0", borderRadius: 8, padding: "5px 12px", cursor: "pointer", 
-                fontSize: 12, fontWeight: 600, fontFamily: "inherit", display: "flex", 
-                alignItems: "center", gap: 6, transition: "background .2s" 
+                color: "#e2e8f0", borderRadius: 6, padding: "3px 8px", cursor: "pointer", 
+                fontSize: 10, fontWeight: 600, fontFamily: "inherit", display: "flex", 
+                alignItems: "center", gap: 4, transition: "background .2s" 
               }}
               onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
               onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
             >
-              {isLightMode ? "🌙 Dark" : "☀️ Light"}
+              {isLightMode ? "🌙 Dark Mode" : "☀️ Light Mode"}
             </button>
+          </div>
+
+          <div className="header-controls" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
 
             {!isAdmin ? (
               <button onClick={handleUnlock} style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", color: "#64748b", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>
