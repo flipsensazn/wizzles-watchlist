@@ -1,0 +1,32 @@
+name: Weekly Small-Cap Scanner ETL
+
+on:
+  schedule:
+    # Sunday 6:00 AM EDT (10:00 UTC) — completes well before Monday open
+    - cron: '0 10 * * 0'
+
+  # Manual trigger for testing
+  workflow_dispatch:
+
+jobs:
+  run-etl-pipeline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180  # 3 hour cap — yfinance gating takes ~30 min, SEC ~60 min
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install Dependencies
+        run: pip install requests pandas numpy psycopg2-binary yfinance
+
+      - name: Run ETL Pipeline
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: python src/etl_pipeline.py
