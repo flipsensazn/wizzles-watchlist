@@ -13,6 +13,13 @@ DATABASE_URL    = os.environ.get('DATABASE_URL')
 FINNHUB_BASE    = 'https://finnhub.io/api/v1'
 SEC_HEADERS     = {'User-Agent': 'WizzlesWatchlist flipsensazn@gmail.com'}
 
+# --- Symbol range for split runs (set by workflow env vars) ---
+# Part 1: SYMBOL_RANGE_START=A  SYMBOL_RANGE_END=N  (A–M)
+# Part 2: SYMBOL_RANGE_START=N  SYMBOL_RANGE_END=ZZZ (N–Z)
+# When running manually with no env vars set, processes the full universe.
+SYMBOL_RANGE_START = os.environ.get('SYMBOL_RANGE_START', 'A')
+SYMBOL_RANGE_END   = os.environ.get('SYMBOL_RANGE_END',   'ZZZ')
+
 
 # ── PHASE 1: FINNHUB UNIVERSE GATING ─────────────────────
 def get_us_universe():
@@ -28,8 +35,29 @@ def get_us_universe():
 
 def apply_gates(symbols):
     candidates = []
-    # Strip symbols with dots (ETFs, foreign ordinaries) to cut ~4000 irrelevant tickers
+
+    # ── Pre-filters (no API calls — pure string filtering) ──────────────────
+
+    # Filter 1: Remove dots and long symbols (ETFs, foreign ordinaries)
     symbols = [s for s in symbols if '.' not in s and len(s) <= 5]
+
+    # Filter 2: Remove single/double-char symbols (almost always large-caps or ETFs)
+    symbols = [s for s in symbols if len(s) >= 3]
+
+    # Filter 3: Remove warrant, rights, unit, bankruptcy, and when-issued suffixes
+    # These suffixes identify non-operating securities that will never pass our gates
+    junk_suffixes = ('W', 'R', 'U', 'Q', 'Z')
+    symbols = [s for s in symbols if not s.endswith(junk_suffixes)]
+
+    # Filter 4: Symbol range split — processes only the assigned alphabetical slice
+    # Allows the full universe to be covered across two GitHub Actions jobs
+    symbols = [s for s in symbols if SYMBOL_RANGE_START <= s < SYMBOL_RANGE_END]
+
+    print(f"Pre-filtered to {len(symbols)} symbols "
+          f"(range {SYMBOL_RANGE_START}–{SYMBOL_RANGE_END}, "
+          f"after removing dots/warrants/short symbols).")
+
+    # ── Finnhub API gating loop ──────────────────────────────────────────────
     for i, symbol in enumerate(symbols):
         try:
             quote = requests.get(f"{FINNHUB_BASE}/quote",
@@ -45,8 +73,8 @@ def apply_gates(symbols):
             avg_vol    = metrics.get('10DayAverageTradingVolume', 0) or 0
             dollar_vol = price * (avg_vol * 1_000_000)
 
-            # ── FEATURE 4: Capture 52-week range while we already have metrics ──
-            week52_low        = metrics.get('52WeekLow', 0) or 0
+            # Capture 52-week range — already in the metrics payload, zero extra calls
+            week52_low        = metrics.get('52WeekLow', 0)  or 0
             week52_high       = metrics.get('52WeekHigh', 0) or 0
             pct_above_52w_low = round(((price - week52_low) / week52_low * 100), 2) if week52_low > 0 else None
 
@@ -95,7 +123,7 @@ def latest_gaap(facts, tags):
 
 def prev_year_gaap(facts, tags):
     """
-    Returns the prior-year annual value for a GAAP tag (second most recent 10-K filing).
+    Returns the prior-year annual value for a GAAP tag (second most recent 10-K).
     Used for real YoY growth calculations — asset growth and revenue growth.
     """
     gaap = facts.get('facts', {}).get('us-gaap', {})
@@ -131,22 +159,17 @@ def fetch_sec_fundamentals(df_candidates):
             facts = res.json()
 
             # Core fundamentals
-            cfo              = latest_gaap(facts, ['NetCashProvidedByUsedInOperatingActivities'])
-            capex            = latest_gaap(facts, ['PaymentsToAcquirePropertyPlantAndEquipment',
-                                                   'PaymentsToAcquireProductiveAssets'])
-            net_income       = latest_gaap(facts, ['NetIncomeLoss'])
-            total_assets     = latest_gaap(facts, ['Assets'])
-            book_equity      = latest_gaap(facts, ['StockholdersEquity', 'AssetsNet'])
-
-            # FEATURE 1: Real prior-year assets for true YoY growth (replaces 0.05 placeholder)
+            cfo               = latest_gaap(facts, ['NetCashProvidedByUsedInOperatingActivities'])
+            capex             = latest_gaap(facts, ['PaymentsToAcquirePropertyPlantAndEquipment',
+                                                    'PaymentsToAcquireProductiveAssets'])
+            net_income        = latest_gaap(facts, ['NetIncomeLoss'])
+            total_assets      = latest_gaap(facts, ['Assets'])
+            book_equity       = latest_gaap(facts, ['StockholdersEquity', 'AssetsNet'])
             total_assets_prev = prev_year_gaap(facts, ['Assets'])
+            total_debt        = latest_gaap(facts, ['LongTermDebt',
+                                                    'LongTermDebtAndCapitalLeaseObligation',
+                                                    'DebtAndCapitalLeaseObligations'])
 
-            # FEATURE 2: Total debt for quality penalty calculation
-            total_debt = latest_gaap(facts, ['LongTermDebt',
-                                             'LongTermDebtAndCapitalLeaseObligation',
-                                             'DebtAndCapitalLeaseObligations'])
-
-            # FEATURE 3: Revenue current + prior year for growth factor
             rev_tags = [
                 'RevenueFromContractWithCustomerExcludingAssessedTax',
                 'Revenues',
@@ -177,43 +200,41 @@ def fetch_sec_fundamentals(df_candidates):
 # ── PHASE 3: SCORING ─────────────────────────────────────
 def score(df):
 
-    # ── Raw factor calculations ──────────────────────────
+    # Raw factor calculations
     df['fcf']            = df['cfo'] - df['capex'].abs()
     df['fcf_yield']      = df['fcf'] / (df['market_cap'] * 1_000_000)
     df['book_to_market'] = df['book_equity'] / (df['market_cap'] * 1_000_000)
     df['roa']            = df['net_income'] / df['total_assets']
 
-    # FEATURE 1: Real asset growth YoY (replaces 0.05 placeholder)
+    # Real asset growth YoY
     df['asset_growth_yoy'] = np.where(
         df['total_assets_prev'].notna() & (df['total_assets_prev'] != 0),
         (df['total_assets'] - df['total_assets_prev']) / df['total_assets_prev'].abs(),
-        0.0  # neutral fallback when prior year unavailable
+        0.0
     )
 
-    # FEATURE 3: Revenue growth YoY
+    # Revenue growth YoY
     df['revenue_growth'] = np.where(
         df['revenue_prev'].notna() & (df['revenue_prev'] != 0),
         (df['revenue_current'] - df['revenue_prev']) / df['revenue_prev'].abs(),
-        np.nan  # will be filled with median at ranking step
+        np.nan
     )
 
-    # ── FEATURE 1: Relaxed ROA gate — allow down to -5% ─
-    # Keeps companies trending toward profitability rather than cutting them entirely
+    # Relaxed ROA gate: allow down to -5% to catch near-profitable companies
     df = df[
         (df['fcf_yield'] > 0) &
         (df['book_to_market'] > 0) &
-        (df['roa'] >= -0.05)        # was: roa > 0
+        (df['roa'] >= -0.05)
     ].copy()
 
     if df.empty:
         print("No candidates survived the gates.")
         return df
 
-    # ── Winsorize + percentile rank all 5 factors ────────
+    # Winsorize + percentile rank all 5 factors
     factors = ['fcf_yield', 'book_to_market', 'roa', 'asset_growth_yoy', 'revenue_growth']
     for factor in factors:
         col = df[factor].copy()
-        # Fill missing revenue_growth with median so gaps don't skew ranks
         if factor == 'revenue_growth':
             col = col.fillna(col.median())
         lo         = col.quantile(0.05)
@@ -221,19 +242,18 @@ def score(df):
         winsorized = col.clip(lower=lo, upper=hi)
         df[f'{factor}_rank_pct'] = winsorized.rank(pct=True)
 
-    # ── Updated composite (5 factors, rebalanced weights) ─
+    # Composite score: FCF(35%) B/M(20%) ROA(15%) AssetGrowth(15%) RevGrowth(15%)
     df['composite_score'] = (
-        0.35 * df['fcf_yield_rank_pct']        +  # reduced from 0.45
+        0.35 * df['fcf_yield_rank_pct']        +
         0.20 * df['book_to_market_rank_pct']   +
-        0.15 * df['roa_rank_pct']              +  # reduced from 0.20
+        0.15 * df['roa_rank_pct']              +
         0.15 * df['asset_growth_yoy_rank_pct'] +
-        0.15 * df['revenue_growth_rank_pct']      # new momentum factor
+        0.15 * df['revenue_growth_rank_pct']
     )
 
-    # ── FEATURE 2: Quality penalty system ───────────────
+    # Quality penalty system
     df['quality_penalty'] = 0
 
-    # Penalty 1: High debt burden (total debt / book equity > 2.0)
     if 'total_debt' in df.columns:
         high_debt = (
             df['total_debt'].notna() &
@@ -245,32 +265,68 @@ def score(df):
         if high_debt.sum() > 0:
             print(f"  Quality penalty (high debt D/E>2): {high_debt.sum()} stocks")
 
-    # Penalty 2: Asset bloat — fast balance sheet growth without FCF support
     asset_bloat = (df['asset_growth_yoy'] > 0.20) & (df['fcf_yield'] < 0.03)
     df.loc[asset_bloat, 'quality_penalty'] += 1
     if asset_bloat.sum() > 0:
         print(f"  Quality penalty (asset bloat): {asset_bloat.sum()} stocks")
 
-    # Penalty 3: Micro-cap liquidity risk (under $30M market cap)
     microcap = df['market_cap'] < 30
     df.loc[microcap, 'quality_penalty'] += 1
     if microcap.sum() > 0:
         print(f"  Quality penalty (micro-cap <$30M): {microcap.sum()} stocks")
 
-    # Each penalty point deducts 0.05 from composite score, floor at 0
     df['composite_score'] = (df['composite_score'] - (df['quality_penalty'] * 0.05)).clip(lower=0)
 
-    # ── Final ranking ────────────────────────────────────
-    df['rank_overall'] = df['composite_score'].rank(ascending=False, method='min').astype(int)
-    return df.sort_values('rank_overall')
+    # NOTE: rank_overall is NOT assigned here — it is computed globally after
+    # both Part 1 and Part 2 have been written to Neon. A separate re-rank
+    # step runs at the end of Part 2 to assign final ranks across the full universe.
+    return df
+
+
+# ── PHASE 3b: GLOBAL RE-RANK (runs after Part 2 completes) ──
+def rerank_in_db():
+    """
+    Reads today's full scored universe from Neon, assigns rank_overall
+    based on composite_score across ALL tickers (both A-M and N-Z parts),
+    then writes the ranks back. Called only by Part 2 after its insert.
+    """
+    print("Re-ranking full universe across both parts...")
+    conn = None
+    try:
+        conn = psycopg2.connect(DATABASE_URL)
+        cur  = conn.cursor()
+        rerank_sql = """
+            WITH today_ranked AS (
+                SELECT ticker, as_of_date,
+                       RANK() OVER (
+                           PARTITION BY as_of_date
+                           ORDER BY composite_score DESC
+                       ) AS new_rank
+                FROM ranked_candidates
+                WHERE as_of_date = CURRENT_DATE
+            )
+            UPDATE ranked_candidates rc
+            SET rank_overall = tr.new_rank
+            FROM today_ranked tr
+            WHERE rc.ticker = tr.ticker
+              AND rc.as_of_date = tr.as_of_date;
+        """
+        cur.execute(rerank_sql)
+        conn.commit()
+        print(f"Re-rank complete. Rows updated: {cur.rowcount}")
+    except Exception as e:
+        print(f"Re-rank error: {e}")
+        if conn:
+            conn.rollback()
+    finally:
+        if conn:
+            conn.close()
 
 
 # ── PHASE 4: DATABASE LOAD ───────────────────────────────
 def load_to_db(df):
     print(f"Loading {len(df)} rows into Neon PostgreSQL...")
 
-    # Add new columns to the Neon table if they don't already exist
-    # Run this once — safe to re-run (IF NOT EXISTS guard)
     migration_sql = """
         ALTER TABLE ranked_candidates
             ADD COLUMN IF NOT EXISTS quality_penalty     INTEGER DEFAULT 0,
@@ -282,9 +338,9 @@ def load_to_db(df):
     """
 
     df['as_of_date'] = date.today()
+    df['rank_overall'] = 0  # placeholder — replaced by rerank_in_db() after Part 2
     df_clean = df.replace({np.nan: None})
 
-    # Ordered list of python col -> db col mappings
     col_map = [
         ('as_of_date',               'as_of_date'),
         ('ticker',                   'ticker'),
@@ -315,11 +371,9 @@ def load_to_db(df):
         ('total_debt',               'total_debt'),
     ]
 
-    # Only include mappings where the python column actually exists in df
-    active = [(py, db) for py, db in col_map if py in df_clean.columns]
-    py_cols = [py for py, _ in active]
-    db_cols = [db for _, db in active]
-
+    active     = [(py, db) for py, db in col_map if py in df_clean.columns]
+    py_cols    = [py for py, _ in active]
+    db_cols    = [db for _, db in active]
     records    = [tuple(x) for x in df_clean[py_cols].to_numpy()]
     col_str    = ', '.join(db_cols)
     update_set = ', '.join([f"{db} = EXCLUDED.{db}"
@@ -335,13 +389,9 @@ def load_to_db(df):
     try:
         conn = psycopg2.connect(DATABASE_URL)
         cur  = conn.cursor()
-
-        # Run migration to add new columns (safe / idempotent)
         cur.execute(migration_sql)
         conn.commit()
         print("Schema migration complete (new columns ensured).")
-
-        # Insert / upsert data
         psycopg2.extras.execute_values(cur, insert_sql, records, page_size=500)
         conn.commit()
         print("Database load successful.")
@@ -356,27 +406,42 @@ def load_to_db(df):
 
 # ── MAIN ─────────────────────────────────────────────────
 if __name__ == "__main__":
-    print("=== Starting Weekly ETL ===")
+    is_part2 = SYMBOL_RANGE_START == 'N'
+    part_label = "Part 2 (N–Z)" if is_part2 else \
+                 "Part 1 (A–M)" if SYMBOL_RANGE_END == 'N' else \
+                 "Full Universe"
+
+    print(f"=== Starting Weekly ETL — {part_label} ===")
     universe   = get_us_universe()
     candidates = apply_gates(universe)
     print(f"\n{len(candidates)} candidates passed gates.")
 
     if candidates.empty:
         print("No candidates -- aborting.")
-        exit(1)
+        # If this is Part 2 and Part 1 loaded data, still re-rank what's there
+        if is_part2:
+            rerank_in_db()
+        exit(0)
 
     sec_data = fetch_sec_fundamentals(candidates)
     merged   = pd.merge(candidates, sec_data, on='ticker', how='inner')
     ranked   = score(merged)
 
     if ranked.empty:
-        print("No candidates survived scoring -- aborting.")
-        exit(1)
+        print("No candidates survived scoring.")
+        if is_part2:
+            rerank_in_db()
+        exit(0)
 
-    print(f"\nTop 5 ranked:")
-    print(ranked[['ticker', 'composite_score', 'rank_overall',
+    print(f"\nTop 5 by composite score ({part_label}):")
+    print(ranked[['ticker', 'composite_score',
                   'fcf_yield', 'revenue_growth', 'quality_penalty',
                   'pct_above_52w_low']].head())
 
     load_to_db(ranked)
-    print("=== ETL Complete ===")
+
+    # Part 2 triggers the global re-rank across the full universe
+    if is_part2:
+        rerank_in_db()
+
+    print(f"=== ETL Complete — {part_label} ===")
