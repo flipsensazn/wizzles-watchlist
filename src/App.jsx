@@ -609,45 +609,121 @@ function MarketClock() {
   );
 }
 
-// ── MARKET STRIP ──────────────────────────────────────────
+// ── MARKET STRIP (BLOOMBERG STYLE) ──────────────────────────
+function BloombergChart({ data, timestamps, color }) {
+  if (!data || !timestamps || data.length < 2) return (
+    <div style={{ height: 24, marginTop: 4, display: "flex", alignItems: "center", justifyContent: "center", borderTop: "1px dashed rgba(255,255,255,0.2)" }}>
+      <span style={{ fontSize: 8, color: "#475569" }}>NO CHART DATA</span>
+    </div>
+  );
+
+  const width = 160;
+  const height = 24;
+  
+  // Find the separator between yesterday and today
+  let splitIndex = -1;
+  let maxGap = 0;
+  for (let i = 1; i < timestamps.length; i++) {
+    const gap = timestamps[i] - timestamps[i-1];
+    if (gap > maxGap) { maxGap = gap; splitIndex = i; }
+  }
+  
+  // If no overnight gap exists (Crypto is 24/7), separate at exactly 24 hours ago
+  if (maxGap < 4 * 3600) {
+    const dayAgo = timestamps[timestamps.length - 1] - 24 * 3600;
+    splitIndex = timestamps.findIndex(t => t >= dayAgo);
+  }
+  if (splitIndex <= 0) splitIndex = Math.floor(data.length / 2);
+
+  const validData = [];
+  for(let i=0; i<data.length; i++) {
+    if (data[i] != null) validData.push({ val: data[i], idx: i });
+  }
+  if (validData.length < 2) return null;
+
+  const min = Math.min(...validData.map(d => d.val));
+  const max = Math.max(...validData.map(d => d.val));
+  const yRange = (max - min) || 1;
+  const yMin = min - (yRange * 0.1);
+  const yMax = max + (yRange * 0.1);
+  const scaleY = yMax - yMin;
+
+  const getX = (idx) => (idx / (data.length - 1)) * width;
+  const getY = (val) => height - ((val - yMin) / scaleY) * height;
+
+  const part1 = validData.filter(d => d.idx <= splitIndex);
+  const part2 = validData.filter(d => d.idx >= splitIndex); // Overlap so the line connects seamlessly
+
+  const path1 = part1.map((d, i) => `${i === 0 ? 'M' : 'L'}${getX(d.idx)},${getY(d.val)}`).join(" ");
+  const path2 = part2.map((d, i) => `${i === 0 ? 'M' : 'L'}${getX(d.idx)},${getY(d.val)}`).join(" ");
+  const splitX = getX(splitIndex);
+
+  return (
+    <div style={{ height, marginTop: 4, position: "relative", zIndex: 0 }}>
+      <svg width={width} height={height} style={{ overflow: "visible", display: "block" }}>
+        <line x1={splitX} y1={0} x2={splitX} y2={height} stroke="rgba(255,255,255,0.4)" strokeWidth="1" strokeDasharray="2,2" />
+        {path1 && <path d={path1} fill="none" stroke="#f8fafc" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />}
+        {path2 && <path d={path2} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />}
+      </svg>
+    </div>
+  );
+}
+
 function MarketStrip({ data, tickers, labels, colors }) {
   function formatPrice(p, ticker) {
     if (p === null || p === undefined) return "—";
     if (ticker === "BTC-USD" || ticker === "ETH-USD") return p.toLocaleString("en-US", { maximumFractionDigits: 0, useGrouping: false });
-    if (ticker === "XRP-USD") return p.toFixed(3);
+    if (ticker === "XRP-USD") return p.toFixed(4);
     return p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false });
   }
   
   return (
-    <div className="market-strip" style={{ display: "flex", flexDirection: "column", gap: 10, justifyContent: "center", padding: "0 20px" }}>
+    <div className="market-strip" style={{ display: "flex", flexDirection: "column", gap: 6, justifyContent: "center", padding: "0 10px" }}>
       {tickers.map((ticker, i) => {
-        const entry = data[ticker];
-        const price = entry?.price;
-        const change = entry?.change;
-        const session = entry?.session;
-        const pos = (change ?? 0) >= 0;
-        const sessionLabel = session === "POST" || session === "CLOSED" ? "AH" : session === "PRE" ? "PM" : null;
+        const entry = data[ticker] || {};
+        const price = entry.price;
+        const changePct = entry.change;
+        const pos = (changePct ?? 0) >= 0;
+        
+        // Bloomberg uses very stark red/green
+        const changeColor = changePct === undefined || changePct === null ? "#475569" : pos ? "#10b981" : "#ef4444";
+
+        // Reverse-engineer absolute point change (since our backend only provides percentage)
+        let absChange = "—";
+        if (price != null && changePct != null) {
+           const prevPrice = price / (1 + (changePct / 100));
+           const diff = price - prevPrice;
+           absChange = (diff >= 0 ? "+" : "") + diff.toFixed(2);
+        }
         
         return (
           <div key={ticker} style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
-            padding: "10px 14px", borderRadius: 6, minWidth: 230,
-            background: "rgba(255,255,255,0.02)", border: `1px solid rgba(255,255,255,0.05)`, transition: "background .2s, border-color .2s",
-          }}
-            onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.05)"; }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: colors[i], letterSpacing: "0.05em", textTransform: "uppercase" }}>{labels[i]}</span>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              {sessionLabel && (
-                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: "#64748b", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, padding: "1px 5px" }}>{sessionLabel}</span>
-              )}
-              <span style={{ fontSize: 18, fontWeight: 700, color: "rgba(255,255,255,0.7)" }}>{formatPrice(price, ticker)}</span>
-              {change !== undefined && change !== null ? (
-                <span style={{ fontSize: 14, fontWeight: 700, color: pos ? "#34d399" : "#f87171", display: "flex", alignItems: "center", gap: 4, width: 64, justifyContent: "flex-end" }}>
-                  <span style={{ fontSize: 10 }}>{pos ? "▲" : "▼"}</span> {Math.abs(change).toFixed(2)}%
-                </span>
-              ) : <span style={{ fontSize: 14, color: "#475569", width: 64, textAlign: "right" }}>—</span>}
+            display: "flex", flexDirection: "column",
+            padding: "6px 10px", borderRadius: 2, minWidth: 160,
+            background: "linear-gradient(to bottom, #262626, #0a0a0a)", 
+            border: "1px solid #171717",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 2px 4px rgba(0,0,0,0.5)",
+            fontFamily: "'Roboto Condensed', sans-serif"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: colors[i] || "#fbbf24", letterSpacing: "0.02em" }}>
+                {labels[i]}
+              </span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: changeColor }}>
+                {absChange}
+              </span>
             </div>
+            
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: "#f8fafc" }}>
+                {formatPrice(price, ticker)}
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: changeColor }}>
+                {changePct != null ? `${pos ? "+" : ""}${changePct.toFixed(2)}%` : "—"}
+              </span>
+            </div>
+
+            <BloombergChart data={entry.chartData} timestamps={entry.chartTimestamps} color={changeColor} />
           </div>
         );
       })}
@@ -892,6 +968,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
                 const pos = change === undefined || change >= 0;
                 const near52W = getNear52WLowInfo(entry);
                 const near52WH = !near52W ? getNear52WHighInfo(entry) : null;
+                
                 const earningsDate = entry?.earningsDate;
                 const isUpcomingEarnings = earningsDate && (earningsDate * 1000 - Date.now() <= 3 * 86400000) && (earningsDate * 1000 - Date.now() >= -86400000);
 
@@ -931,9 +1008,11 @@ function HeatMap({ prices, capexData, onTickerClick }) {
                     }}
                     onMouseOver={e => { e.currentTarget.style.filter = "brightness(1.4)"; e.currentTarget.style.transform = "scale(1.06)"; }}
                     onMouseOut={e => { e.currentTarget.style.filter = ""; e.currentTarget.style.transform = ""; }}>
+                    
                     {isUpcomingEarnings && (
                       <div style={{ position: "absolute", top: 3, left: 4, fontSize: 8, fontWeight: 800, color: "#c084fc", letterSpacing: "0.05em", lineHeight: 1 }}>E</div>
                     )}
+
                     {sessionLabel && !near52W && !near52WH && (
                       <div style={{ position: "absolute", top: 3, right: 4, fontSize: 7, fontWeight: 800, color: "rgba(255,255,255,0.55)", letterSpacing: "0.05em", lineHeight: 1 }}>{sessionLabel}</div>
                     )}
@@ -958,7 +1037,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
       })}
       
       {tooltip && (
-        <div style={{ position: "fixed", top: tooltip.rect.top - (tooltip.near52W || tooltip.near52WH ? 68 : 52), left: tooltip.rect.left, background: "rgba(18,18,18,0.95)", border: `1px solid ${tooltip.near52W ? "#f59e0b" : tooltip.near52WH ? "#34d399" : (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171"}44`, borderRadius: 8, padding: "7px 12px", pointerEvents: "none", zIndex: 1000, display: "flex", flexDirection: "column", gap: 4, minWidth: 140 }}>
+        <div style={{ position: "fixed", top: tooltip.rect.top - (tooltip.near52W || tooltip.near52WH || tooltip.isUpcomingEarnings ? 68 : 52), left: tooltip.rect.left, background: "rgba(18,18,18,0.95)", border: `1px solid ${tooltip.near52W ? "#f59e0b" : tooltip.near52WH ? "#34d399" : (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171"}44`, borderRadius: 8, padding: "7px 12px", pointerEvents: "none", zIndex: 1000, display: "flex", flexDirection: "column", gap: 4, minWidth: 140 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{tooltip.ticker}</span>
             {tooltip.price !== undefined && <span style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0" }}>${tooltip.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
@@ -966,12 +1045,14 @@ function HeatMap({ prices, capexData, onTickerClick }) {
             {tooltip.session && <span style={{ fontSize: 9, fontWeight: 700, color: "#64748b", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.05em" }}>{tooltip.session}</span>}
             <span style={{ fontSize: 10, color: "#475569" }}>{tooltip.track}</span>
           </div>
+          
           {tooltip.isUpcomingEarnings && (
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontSize: 8, fontWeight: 800, color: "#c084fc", background: "rgba(192,132,252,0.15)", border: "1px solid rgba(192,132,252,0.4)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.08em" }}>E EARNINGS SOON</span>
               <span style={{ fontSize: 10, color: "#c084fc" }}>Within 3 Days</span>
             </div>
           )}
+
           {tooltip.near52W && (
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontSize: 8, fontWeight: 800, color: "#f59e0b", background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.4)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.08em" }}>▼ 52W LOW ZONE</span>
@@ -1186,7 +1267,6 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
     : ((typeof a.change === 'number' ? a.change : 999)  - (typeof b.change === 'number' ? b.change : 999)));
   const validChanges = filtered.filter(x => typeof x.change === 'number');
   const avg          = validChanges.reduce((s, x) => s + x.change, 0) / (validChanges.length || 1);
-  const maxAbs       = Math.max(...enriched.map(x => Math.abs(typeof x.change === 'number' ? x.change : 0)), 1);
 
   function handleAdd() {
     const sym = input.trim().toUpperCase();
@@ -1272,6 +1352,7 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
                   : isShort && <div style={{ fontSize: 9, color: "#f59e0b", marginTop: 1 }}>Shortlist</div>
                 }
               </div>
+              
               {/* 52W Range Tracker */}
               {(() => {
                 const pData = prices[item.ticker] || {};
@@ -1305,6 +1386,7 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
                   </div>
                 );
               })()}
+
               <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, fontSize: 13, fontWeight: 700, minWidth: 68, textAlign: "right", color: typeof item.change !== 'number' ? "#334155" : pos ? "#34d399" : "#f87171" }}>
                 {typeof item.change !== 'number' ? "—" : <><span style={{ fontSize: 10 }}>{pos ? "▲" : "▼"}</span>{Math.abs(item.change).toFixed(2)}%</>}
               </div>
@@ -1693,6 +1775,9 @@ function AdminModal({ onClose, onSuccess }) {
 const GLOBAL_STYLES = `
   * { box-sizing: border-box; margin: 0; padding: 0; box-shadow: none !important; }
   html, body { background: #0E1117; font-family: 'Inter', sans-serif; }
+  
+  html.light-mode { filter: invert(1) hue-rotate(180deg); }
+  
   table, .market-strip span, .ticker-tape, .capex-number { font-family: 'Roboto Condensed', sans-serif !important; letter-spacing: 0.02em; }
   div[style*="border-radius: 12px"], div[style*="border-radius: 14px"], div[style*="border-radius: 18px"], div[style*="border-radius: 22px"] { border-radius: 6px !important; }
   ::-webkit-scrollbar { width: 6px; height: 6px; }
@@ -1736,6 +1821,20 @@ const GLOBAL_STYLES = `
 
 // ── ROOT APP ──────────────────────────────────────────────
 export default function App() {
+  
+  const [isLightMode, setIsLightMode] = useState(() => {
+    return localStorage.getItem("theme") === "light";
+  });
+
+  useEffect(() => {
+    if (isLightMode) {
+      document.documentElement.classList.add("light-mode");
+      localStorage.setItem("theme", "light");
+    } else {
+      document.documentElement.classList.remove("light-mode");
+      localStorage.setItem("theme", "dark");
+    }
+  }, [isLightMode]);
   
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminPassword, setAdminPassword] = useState("");
@@ -1981,10 +2080,26 @@ export default function App() {
             <div style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", letterSpacing: "-0.01em" }}>AI Capex Flow Intelligence</div>
           </div>
 
-          <MarketClock />
+          {/* CENTER: Market Clock & Theme Toggle */}
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
+            <MarketClock />
+            <button 
+              onClick={() => setIsLightMode(!isLightMode)} 
+              style={{ 
+                background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", 
+                color: "#e2e8f0", borderRadius: 6, padding: "3px 8px", cursor: "pointer", 
+                fontSize: 10, fontWeight: 600, fontFamily: "inherit", display: "flex", 
+                alignItems: "center", gap: 4, transition: "background .2s" 
+              }}
+              onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
+              onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
+            >
+              {isLightMode ? "🌙 Dark Mode" : "☀️ Light Mode"}
+            </button>
+          </div>
 
           <div className="header-controls" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
-            
+
             {!isAdmin ? (
               <button onClick={handleUnlock} style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", color: "#64748b", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>
                 🔒 Login
@@ -2030,7 +2145,7 @@ export default function App() {
           <div className="top-node-layout" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
             <MarketStrip data={marketData} tickers={["^GSPC","^DJI","^IXIC"]} labels={["S&P 500","DOW","NASDAQ"]} colors={["#60a5fa","#34d399","#c084fc"]} />
             <div className="top-node-center" style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "0 0 auto" }}>
-              <div style={{ width: 480, borderRadius: 22, padding: "26px 30px", textAlign: "center", background: "linear-gradient(135deg,rgba(251,191,36,.1) 0%,rgba(180,120,10,.04) 50%,rgba(18,18,18,.9) 100%)", border: "1.5px solid rgba(251,191,36,.45)" }}>
+              <div style={{ width: 540, borderRadius: 22, padding: "26px 30px", textAlign: "center", background: "linear-gradient(135deg,rgba(251,191,36,.1) 0%,rgba(180,120,10,.04) 50%,rgba(18,18,18,.9) 100%)", border: "1.5px solid rgba(251,191,36,.45)" }}>
                 <div style={{ fontSize: 10, color: "rgba(251,191,36,.5)", letterSpacing: "0.4em", textTransform: "uppercase", marginBottom: 6 }}>Total Investment Flow</div>
                 <div className="capex-number" style={{ fontSize: 64, color: "#fbbf24", lineHeight: 1, marginBottom: 6, letterSpacing: "0.04em" }}>~$600B+</div>
                 <div style={{ fontSize: 13, color: "#64748b", marginBottom: 18 }}>Hyperscaler AI Capex <span style={{ color: "rgba(251,191,36,.6)" }}>(2026 Est.)</span></div>
