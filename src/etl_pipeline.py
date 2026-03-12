@@ -80,8 +80,28 @@ def apply_gates(symbols):
 
             if (25 <= cap_m <= 2000) and (dollar_vol >= 250_000):
                 print(f"PASSED: {symbol} | ${price} | ${cap_m}M")
+                
+                # Fetch company profile to get sector and name (only for passing candidates)
+                company_name = None
+                sector = None
+                try:
+                    prof_res = requests.get(f"{FINNHUB_BASE}/stock/profile2", 
+                                            params={'symbol': symbol, 'token': FINNHUB_API_KEY})
+                    if prof_res.status_code == 200:
+                        profile = prof_res.json()
+                        company_name = profile.get('name')
+                        sector       = profile.get('finnhubIndustry')
+                except Exception as e:
+                    print(f"  -> Profile error for {symbol}: {e}")
+                
+                # Extra sleep to respect Finnhub's 60 calls/min limit when fetching profiles
+                time.sleep(1.1) 
+
                 candidates.append({
                     'ticker':             symbol,
+                    'company_name':       company_name,
+                    'sector':             sector,
+                    'industry':           sector, # Finnhub combines these, map same to both
                     'price':              price,
                     'market_cap':         cap_m,
                     'avg_dollar_vol_20d': dollar_vol,
