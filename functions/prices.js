@@ -160,6 +160,7 @@ export async function onRequest(context) {
             session,
             week52Low:  q.fiftyTwoWeekLow  != null ? parseFloat(q.fiftyTwoWeekLow.toFixed(2))  : null,
             week52High: q.fiftyTwoWeekHigh != null ? parseFloat(q.fiftyTwoWeekHigh.toFixed(2)) : null,
+            earningsDate: q.earningsTimestamp || q.earningsTimestampStart || null, // <-- ADD THIS LINE
           };
         }
       } else if (res.status === 401 || res.status === 403) {
