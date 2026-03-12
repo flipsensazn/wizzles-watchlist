@@ -28,8 +28,17 @@ def get_us_universe():
 
 def apply_gates(symbols):
     candidates = []
-    # Strip symbols with dots (ETFs, foreign ordinaries) to cut ~4000 irrelevant tickers
+    # Pre-filter 1: Remove dots and long symbols (ETFs, foreign ordinaries)
     symbols = [s for s in symbols if '.' not in s and len(s) <= 5]
+
+    # Pre-filter 2: Remove known non-operating suffixes that slip through
+    # W = warrants, R = rights, U = units, Q = bankruptcy, Z = when-issued
+    junk_suffixes = ('W', 'R', 'U', 'Q', 'Z')
+    symbols = [s for s in symbols if not s.endswith(junk_suffixes)]
+
+    # Pre-filter 3: Remove very short symbols (1-2 chars are almost always
+    # large-caps or ETFs that won't pass the $25M-$2B cap gate anyway)
+    symbols = [s for s in symbols if len(s) >= 3]
     for i, symbol in enumerate(symbols):
         try:
             quote = requests.get(f"{FINNHUB_BASE}/quote",
