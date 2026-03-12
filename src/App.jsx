@@ -567,7 +567,7 @@ function fmtCountdown(secs) {
   return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
 }
 
-function MarketClock() {
+function () {
   const [tick, setTick] = useState(() => Date.now());
 
   useEffect(() => {
@@ -2010,28 +2010,24 @@ export default function App() {
             <div style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", letterSpacing: "-0.01em" }}>AI Capex Flow Intelligence</div>
           </div>
          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-            <MarketClock />
-            
-              href="https://wizzleswatchlist.substack.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 6,
-                fontSize: 11, fontWeight: 700, letterSpacing: "0.08em",
-                color: "#f97316", background: "rgba(249,115,22,0.1)",
-                border: "1px solid rgba(249,115,22,0.35)", borderRadius: 6,
-                padding: "4px 12px", textDecoration: "none", transition: "all .2s",
-                fontFamily: "'Inter', sans-serif",
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = "rgba(249,115,22,0.2)"; e.currentTarget.style.borderColor = "rgba(249,115,22,0.65)"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "rgba(249,115,22,0.1)"; e.currentTarget.style.borderColor = "rgba(249,115,22,0.35)"; }}
-            >
-              <svg width="13" height="13" viewBox="0 0 24 24" fill="currentColor" style={{ flexShrink: 0 }}>
-                <path d="M22.539 8.242H1.46V5.406h21.08v2.836zM1.46 10.812V24L12 18.11 22.54 24V10.812H1.46zM22.54 0H1.46v2.836h21.08V0z"/>
-              </svg>
-              Newsletter ↗
-            </a>
-          </div>
+  <MarketClock />
+  
+    href="https://wizzleswatchlist.substack.com/"
+    target="_blank"
+    rel="noopener noreferrer"
+    style={{
+      display: "inline-flex", alignItems: "center", gap: 6,
+      fontSize: 11, fontWeight: 700, color: "#f59e0b",
+      background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.3)",
+      borderRadius: 8, padding: "5px 13px", textDecoration: "none",
+      letterSpacing: "0.04em", transition: "all .18s", fontFamily: "'DM Mono','Fira Code',monospace",
+    }}
+    onMouseEnter={e => { e.currentTarget.style.background = "rgba(245,158,11,0.16)"; e.currentTarget.style.borderColor = "rgba(245,158,11,0.6)"; }}
+    onMouseLeave={e => { e.currentTarget.style.background = "rgba(245,158,11,0.08)"; e.currentTarget.style.borderColor = "rgba(245,158,11,0.3)"; }}
+  >
+    <span style={{ fontSize: 13 }}>✉</span> Wizzle's Watchlist ↗
+  </a>
+</div>
           <div className="header-controls" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
             
             {!isAdmin ? (
