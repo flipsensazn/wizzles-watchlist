@@ -2145,31 +2145,56 @@ export default function App() {
           <div className="top-node-layout" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
             <MarketStrip data={marketData} tickers={["^GSPC","^DJI","^IXIC"]} labels={["S&P 500","DOW","NASDAQ"]} colors={["#60a5fa","#34d399","#c084fc"]} />
             <div className="top-node-center" style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "0 0 auto" }}>
-              <div style={{ width: 540, borderRadius: 22, padding: "26px 30px", textAlign: "center", background: "linear-gradient(135deg,rgba(251,191,36,.1) 0%,rgba(180,120,10,.04) 50%,rgba(18,18,18,.9) 100%)", border: "1.5px solid rgba(251,191,36,.45)" }}>
-                <div style={{ fontSize: 10, color: "rgba(251,191,36,.5)", letterSpacing: "0.4em", textTransform: "uppercase", marginBottom: 6 }}>Total Investment Flow</div>
-                <div className="capex-number" style={{ fontSize: 64, color: "#fbbf24", lineHeight: 1, marginBottom: 6, letterSpacing: "0.04em" }}>~$600B+</div>
-                <div style={{ fontSize: 13, color: "#64748b", marginBottom: 18 }}>Hyperscaler AI Capex <span style={{ color: "rgba(251,191,36,.6)" }}>(2026 Est.)</span></div>
+              <div style={{ 
+                width: 540, 
+                borderRadius: 4, 
+                padding: "26px 30px", 
+                textAlign: "center", 
+                background: "linear-gradient(to bottom, #1c1917, #0a0a0a)", 
+                border: "1px solid #27272a", 
+                borderTop: "3px solid #fbbf24", 
+                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 12px rgba(0,0,0,0.6)" 
+              }}>
+                <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 6, fontFamily: "'Roboto Condensed', sans-serif" }}>Total Investment Flow</div>
+                <div className="capex-number" style={{ fontSize: 68, fontWeight: 800, color: "#fbbf24", lineHeight: 1, marginBottom: 8, textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}>~$600B+</div>
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginBottom: 20, letterSpacing: "0.08em", textTransform: "uppercase" }}>Hyperscaler AI Capex <span style={{ color: "#d97706" }}>(2026 Est.)</span></div>
+                
                 <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
                   {CAPEX_DATA.companies.map(co => {
                     const entry = marketData[co];
                     const pos = (entry?.change ?? 0) >= 0;
                     const sessionLabel = entry?.session === "POST" || entry?.session === "CLOSED" ? "AH" : entry?.session === "PRE" ? "PM" : null;
                     return (
-                      <div key={co} style={{ display: "flex", flexDirection: "column", alignItems: "center", padding: "6px 12px", borderRadius: 10, minWidth: 72, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.09)", transition: "all .2s" }} onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(251,191,36,0.45)"; }} onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.09)"; }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 2 }}>
-                          <span style={{ fontSize: 10, fontWeight: 800, color: "#fbbf24", letterSpacing: "0.1em" }}>{co}</span>
-                          {sessionLabel && <span style={{ fontSize: 8, fontWeight: 700, color: "#64748b", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 2, padding: "1px 3px" }}>{sessionLabel}</span>}
+                      <div key={co} style={{ 
+                        display: "flex", flexDirection: "column", alignItems: "center", 
+                        padding: "8px 12px", borderRadius: 2, minWidth: 85, 
+                        background: "linear-gradient(to bottom, #262626, #0a0a0a)", 
+                        border: "1px solid #171717",
+                        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02), 0 2px 4px rgba(0,0,0,0.5)",
+                        fontFamily: "'Roboto Condensed', sans-serif"
+                      }}>
+                        <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 4 }}>
+                          <span style={{ fontSize: 12, fontWeight: 800, color: "#f8fafc", letterSpacing: "0.02em" }}>{co}</span>
+                          {sessionLabel && <span style={{ fontSize: 7, fontWeight: 800, color: "#94a3b8", background: "#171717", border: "1px solid #333", borderRadius: 2, padding: "1px 3px" }}>{sessionLabel}</span>}
                         </div>
-                        <span style={{ fontSize: 12, fontWeight: 700, color: sessionLabel ? "rgba(255,255,255,0.7)" : "#f1f5f9", marginBottom: 1 }}>{entry?.price ? "$" + entry.price.toLocaleString("en-US", { maximumFractionDigits: 2 }) : "—"}</span>
-                        {entry?.change !== undefined && entry?.change !== null ? <span style={{ fontSize: 10, fontWeight: 600, color: pos ? "#34d399" : "#f87171" }}>{pos ? "+" : ""}{entry.change.toFixed(2)}%</span> : <span style={{ fontSize: 10, color: "#334155" }}>—</span>}
+                        <span style={{ fontSize: 13, fontWeight: 700, color: sessionLabel ? "rgba(255,255,255,0.6)" : "#f8fafc", marginBottom: 2 }}>
+                          {entry?.price ? "$" + entry.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
+                        </span>
+                        {entry?.change !== undefined && entry?.change !== null ? (
+                          <span style={{ fontSize: 12, fontWeight: 700, color: pos ? "#10b981" : "#ef4444" }}>
+                            {pos ? "+" : ""}{entry.change.toFixed(2)}%
+                          </span>
+                        ) : <span style={{ fontSize: 11, color: "#475569" }}>—</span>}
                       </div>
                     );
                   })}
                 </div>
               </div>
-              <div style={{ width: 1, height: 28, background: "linear-gradient(to bottom,rgba(251,191,36,.5),transparent)" }} />
-              <div style={{ position: "relative", width: "100%", height: 1, background: "linear-gradient(90deg,transparent 5%,rgba(255,255,255,.06) 20%,rgba(255,255,255,.06) 80%,transparent 95%)" }}>
-                {capexData.tracks.map((_, i, arr) => <div key={i} style={{ position: "absolute", top: 0, left: `${(i / (arr.length - 1)) * 70 + 15}%`, width: 1, height: 18, background: "linear-gradient(to bottom,rgba(255,255,255,.12),transparent)" }} />)}
+              
+              {/* Data Flow Lines underneath the box */}
+              <div style={{ width: 1, height: 28, background: "linear-gradient(to bottom,#fbbf24,transparent)" }} />
+              <div style={{ position: "relative", width: "100%", height: 1, background: "linear-gradient(90deg,transparent 5%,rgba(255,255,255,.1) 20%,rgba(255,255,255,.1) 80%,transparent 95%)" }}>
+                {capexData.tracks.map((_, i, arr) => <div key={i} style={{ position: "absolute", top: 0, left: `${(i / (arr.length - 1)) * 70 + 15}%`, width: 1, height: 18, background: "linear-gradient(to bottom,rgba(255,255,255,.15),transparent)" }} />)}
               </div>
             </div>
             <MarketStrip data={marketData} tickers={["BTC-USD","ETH-USD","XRP-USD"]} labels={["BTC","ETH","XRP"]} colors={["#f59e0b","#60a5fa","#34d399"]} />
