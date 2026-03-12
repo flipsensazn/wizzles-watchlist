@@ -2,16 +2,13 @@
 
 const CACHE_TTL_SECONDS = 60; // 1 minutes — keeps KV writes well under the 1,000/day free tier limit
 // v2 key ensures any old REGULAR-session snapshots are not served after this deploy
-const KV_CACHE_KEY  = "priceCache_v4";
+const KV_CACHE_KEY  = "priceCache_v5";
 // Crumb is valid for hours — cache it in KV to eliminate 2 serial round trips
-// (fc.yahoo.com + getcrumb) on every price request.
 const KV_CRUMB_KEY  = "yahooSession_v1";
-const CRUMB_TTL_MS  = 55 * 60 * 1000; // 55 minutes (Yahoo crumbs last ~1 hour)
+const CRUMB_TTL_MS  = 55 * 60 * 1000; // 55 minutes
 const USER_AGENT    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 // ── CRUMB HELPER ─────────────────────────────────────────────────────────────
-// Returns { cookie, crumb } — reads from KV first, falls back to a live fetch
-// and writes the result back to KV so the next invocation skips the round trips.
 async function getYahooSession(env) {
   if (env.SHARED_DATA) {
     try {
@@ -24,7 +21,6 @@ async function getYahooSession(env) {
     }
   }
 
-  // Fetch fresh cookie + crumb
   const cookieRes = await fetch("https://fc.yahoo.com", { headers: { "User-Agent": USER_AGENT } });
   const rawCookie = cookieRes.headers.get("set-cookie");
   const cookie    = rawCookie ? rawCookie.split(";")[0] : "";
@@ -34,13 +30,12 @@ async function getYahooSession(env) {
   });
   const crumb = await crumbRes.text();
 
-  // Persist to KV for reuse across invocations
   if (env.SHARED_DATA) {
     try {
       await env.SHARED_DATA.put(
         KV_CRUMB_KEY,
         JSON.stringify({ cookie, crumb, timestamp: Date.now() }),
-        { expirationTtl: 3600 } // KV auto-expiry at 1 hour
+        { expirationTtl: 3600 }
       );
     } catch (err) {
       console.error("KV crumb write error:", err);
@@ -81,9 +76,6 @@ export async function onRequest(context) {
   }
 
   // 2. KV PRICE CACHE CHECK
-  // Only serve the cached snapshot if every requested ticker is already in it.
-  // If any ticker is missing (e.g. a newly-added Shortlist symbol), bypass the
-  // cache so Yahoo is fetched fresh and the new ticker starts tracking immediately.
   if (env.SHARED_DATA) {
     try {
       const cached = await env.SHARED_DATA.get(KV_CACHE_KEY, "json");
@@ -92,8 +84,6 @@ export async function onRequest(context) {
         if (allPresent) {
           return new Response(JSON.stringify({ data: cached.data, cached: true }), { status: 200, headers });
         }
-        // Some tickers are missing from the cache — fall through to a fresh fetch
-        // but keep the cached data so we can merge results back in below.
       }
     } catch (err) {
       console.error("KV cache read error:", err);
@@ -101,7 +91,6 @@ export async function onRequest(context) {
   }
 
   // 3. FETCH FROM YAHOO (Primary Engine)
-  // getYahooSession() returns a cached crumb — no extra round trips on warm invocations.
   const results = {};
   const FINNHUB_KEY = env.FINNHUB_KEY;
 
@@ -112,11 +101,6 @@ export async function onRequest(context) {
     for (let i = 0; i < tickers.length; i += batchSize) {
       const batch = tickers.slice(i, i + batchSize);
 
-      // Use query2 + corsDomain=finance.yahoo.com + formatted=false.
-      // This combination reliably returns the full payload including
-      // postMarketPrice, preMarketPrice, and marketState fields.
-      // Do NOT add a `fields` param — it restricts the response and
-      // causes Yahoo to strip extended-hours fields from the payload.
       const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${batch.join(",")}&corsDomain=finance.yahoo.com&formatted=false&crumb=${crumb}`;
       const res = await fetch(url, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } });
 
@@ -127,7 +111,7 @@ export async function onRequest(context) {
         for (const q of quoteList) {
           if (q.regularMarketPrice === undefined) continue;
 
-          const state = q.marketState; // "PRE" | "REGULAR" | "POST" | "POSTPOST" | "CLOSED"
+          const state = q.marketState; 
           let price, change, session;
 
           if (state === "POST" || state === "POSTPOST") {
@@ -160,27 +144,49 @@ export async function onRequest(context) {
             session,
             week52Low:  q.fiftyTwoWeekLow  != null ? parseFloat(q.fiftyTwoWeekLow.toFixed(2))  : null,
             week52High: q.fiftyTwoWeekHigh != null ? parseFloat(q.fiftyTwoWeekHigh.toFixed(2)) : null,
-            earningsDate: q.earningsTimestamp || q.earningsTimestampStart || null, // <-- ADD THIS LINE
+            earningsDate: q.earningsTimestamp || q.earningsTimestampStart || null,
           };
         }
       } else if (res.status === 401 || res.status === 403) {
-        // Crumb has expired mid-session — evict the KV cache so next request
-        // fetches a fresh one rather than retrying the same stale crumb.
         if (env.SHARED_DATA) {
           try { await env.SHARED_DATA.delete(KV_CRUMB_KEY); } catch {}
         }
       }
     }
+
+    // 4. FETCH 2-DAY INTRADAY CHARTS FOR MACRO TICKERS (For Bloomberg TV UI)
+    const MACRO_TICKERS = new Set(["^GSPC", "^DJI", "^IXIC", "BTC-USD", "ETH-USD", "XRP-USD"]);
+    const macrosToFetch = tickers.filter(t => MACRO_TICKERS.has(t));
+
+    if (macrosToFetch.length > 0) {
+      await Promise.all(macrosToFetch.map(async (t) => {
+        try {
+          const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?range=2d&interval=15m&crumb=${crumb}`;
+          const res = await fetch(url, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } });
+          if (res.ok) {
+            const data = await res.json();
+            const result = data.chart?.result?.[0];
+            if (result && result.indicators?.quote?.[0]?.close) {
+               results[t] = results[t] || {};
+               results[t].chartData = result.indicators.quote[0].close;
+               results[t].chartTimestamps = result.timestamp;
+            }
+          }
+        } catch (e) {
+          console.error(`Chart fetch error for ${t}:`, e);
+        }
+      }));
+    }
+
   } catch (err) {
     console.error("Yahoo bulk fetch error:", err);
   }
 
-  // 4. FINNHUB FALLBACK (only for tickers Yahoo missed)
-  // Run in parallel batches instead of fully serially to reduce latency.
+  // 5. FINNHUB FALLBACK (only for tickers Yahoo missed)
   const missingTickers = tickers.filter(t => !results[t]);
   if (missingTickers.length > 0 && FINNHUB_KEY) {
     const safeMissing = missingTickers.slice(0, 45);
-    const BATCH_SIZE  = 8; // Finnhub free tier: 60 req/min → safe at 8 concurrent
+    const BATCH_SIZE  = 8;
 
     async function fetchFinnhub(t) {
       try {
@@ -200,7 +206,6 @@ export async function onRequest(context) {
       }
     }
 
-    // Process in parallel batches with a brief pause between each batch
     for (let i = 0; i < safeMissing.length; i += BATCH_SIZE) {
       const batch = safeMissing.slice(i, i + BATCH_SIZE);
       await Promise.all(batch.map(fetchFinnhub));
@@ -209,38 +214,8 @@ export async function onRequest(context) {
       }
     }
   }
-  // 4b. FETCH 2-DAY INTRADAY CHARTS FOR MACRO TICKERS (For Bloomberg TV UI)
-  const MACRO_TICKERS = new Set(["^GSPC", "^DJI", "^IXIC", "BTC-USD", "ETH-USD", "XRP-USD"]);
-  const macrosToFetch = tickers.filter(t => MACRO_TICKERS.has(t));
 
-  if (macrosToFetch.length > 0) {
-    try {
-      const { cookie, crumb } = await getYahooSession(env);
-      await Promise.all(macrosToFetch.map(async (t) => {
-        try {
-          const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?range=2d&interval=15m&crumb=${crumb}`;
-          const res = await fetch(url, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } });
-          if (res.ok) {
-            const data = await res.json();
-            const result = data.chart?.result?.[0];
-            if (result && result.indicators?.quote?.[0]?.close) {
-               results[t] = results[t] || {};
-               results[t].chartData = result.indicators.quote[0].close;
-               results[t].chartTimestamps = result.timestamp;
-            }
-          }
-        } catch (e) {
-          console.error(`Chart fetch error for ${t}:`, e);
-        }
-      }));
-    } catch (err) {
-      console.error("Macro chart batch fetch error:", err);
-    }
-  }
-
-  // 5. WRITE BACK TO KV PRICE CACHE
-  // Merge new results with any existing cached data so that a partial fresh
-  // fetch (triggered by new tickers) doesn't evict previously-cached symbols.
+  // 6. WRITE BACK TO KV PRICE CACHE
   if (Object.keys(results).length > 0 && env.SHARED_DATA) {
     try {
       let merged = results;
