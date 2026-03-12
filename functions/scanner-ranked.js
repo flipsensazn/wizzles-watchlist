@@ -51,6 +51,9 @@ export async function onRequest(context) {
       SELECT
         rank_overall,
         ticker,
+        company_name,
+        sector,
+        industry,
         market_cap,
         price,
         fcf_yield,
