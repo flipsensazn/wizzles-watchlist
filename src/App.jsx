@@ -609,44 +609,70 @@ function MarketClock() {
   );
 }
 
-// ── MARKET STRIP ──────────────────────────────────────────
+// ── MARKET STRIP (BLOOMBERG STYLE) ──────────────────────────
 function MarketStrip({ data, tickers, labels, colors }) {
   function formatPrice(p, ticker) {
     if (p === null || p === undefined) return "—";
     if (ticker === "BTC-USD" || ticker === "ETH-USD") return p.toLocaleString("en-US", { maximumFractionDigits: 0, useGrouping: false });
-    if (ticker === "XRP-USD") return p.toFixed(3);
+    if (ticker === "XRP-USD") return p.toFixed(4);
     return p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false });
   }
   
   return (
-    <div className="market-strip" style={{ display: "flex", flexDirection: "column", gap: 10, justifyContent: "center", padding: "0 20px" }}>
+    <div className="market-strip" style={{ display: "flex", flexDirection: "column", gap: 6, justifyContent: "center", padding: "0 10px" }}>
       {tickers.map((ticker, i) => {
         const entry = data[ticker];
         const price = entry?.price;
-        const change = entry?.change;
-        const session = entry?.session;
-        const pos = (change ?? 0) >= 0;
-        const sessionLabel = session === "POST" || session === "CLOSED" ? "AH" : session === "PRE" ? "PM" : null;
+        const changePct = entry?.change;
+        const pos = (changePct ?? 0) >= 0;
+        
+        // Bloomberg uses very stark red/green
+        const changeColor = changePct === undefined || changePct === null ? "#475569" : pos ? "#10b981" : "#ef4444";
+
+        // Reverse-engineer the absolute point change (since backend only provides percentage right now)
+        let absChange = "—";
+        if (price != null && changePct != null) {
+           const prevPrice = price / (1 + (changePct / 100));
+           const diff = price - prevPrice;
+           absChange = (diff > 0 ? "+" : "") + diff.toFixed(2);
+        }
         
         return (
           <div key={ticker} style={{
-            display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16,
-            padding: "10px 14px", borderRadius: 6, minWidth: 230,
-            background: "rgba(255,255,255,0.02)", border: `1px solid rgba(255,255,255,0.05)`, transition: "background .2s, border-color .2s",
-          }}
-            onMouseEnter={e => { e.currentTarget.style.background = "rgba(255,255,255,0.05)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; }}
-            onMouseLeave={e => { e.currentTarget.style.background = "rgba(255,255,255,0.02)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.05)"; }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: colors[i], letterSpacing: "0.05em", textTransform: "uppercase" }}>{labels[i]}</span>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              {sessionLabel && (
-                <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.1em", color: "#64748b", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, padding: "1px 5px" }}>{sessionLabel}</span>
-              )}
-              <span style={{ fontSize: 18, fontWeight: 700, color: "rgba(255,255,255,0.7)" }}>{formatPrice(price, ticker)}</span>
-              {change !== undefined && change !== null ? (
-                <span style={{ fontSize: 14, fontWeight: 700, color: pos ? "#34d399" : "#f87171", display: "flex", alignItems: "center", gap: 4, width: 64, justifyContent: "flex-end" }}>
-                  <span style={{ fontSize: 10 }}>{pos ? "▲" : "▼"}</span> {Math.abs(change).toFixed(2)}%
-                </span>
-              ) : <span style={{ fontSize: 14, color: "#475569", width: 64, textAlign: "right" }}>—</span>}
+            display: "flex", flexDirection: "column",
+            padding: "6px 10px", borderRadius: 2, minWidth: 160,
+            background: "linear-gradient(to bottom, #262626, #0a0a0a)", 
+            border: "1px solid #171717",
+            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 2px 4px rgba(0,0,0,0.5)",
+            fontFamily: "'Roboto Condensed', sans-serif"
+          }}>
+            {/* Top Row: Label and Absolute Point Change */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
+              <span style={{ fontSize: 13, fontWeight: 800, color: colors[i] || "#fbbf24", letterSpacing: "0.02em" }}>
+                {labels[i]}
+              </span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: changeColor }}>
+                {absChange}
+              </span>
+            </div>
+            
+            {/* Bottom Row: Price and Percentage Change */}
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
+              <span style={{ fontSize: 14, fontWeight: 700, color: "#f8fafc" }}>
+                {formatPrice(price, ticker)}
+              </span>
+              <span style={{ fontSize: 12, fontWeight: 700, color: changeColor }}>
+                {changePct != null ? `${pos ? "+" : ""}${changePct.toFixed(2)}%` : "—"}
+              </span>
+            </div>
+
+            {/* Sparkline Chart Area */}
+            <div style={{ height: 24, marginTop: 4, borderTop: "1px dashed rgba(255,255,255,0.2)", position: "relative", display: "flex", alignItems: "center", justifyContent: "center" }}>
+               {/* Vertical dashed line mimicking the previous close separator */}
+               <div style={{ position: "absolute", left: "50%", top: 0, bottom: 0, width: 1, borderLeft: "1px dashed rgba(255,255,255,0.3)" }} />
+               <span style={{ fontSize: 8, color: "#475569", zIndex: 1, backgroundColor: "#0a0a0a", padding: "0 4px" }}>
+                 NO CHART DATA
+               </span>
             </div>
           </div>
         );
