@@ -58,6 +58,7 @@ async function fetchQuoteSummary(ticker) {
     const profile = r.assetProfile ?? {};
     const detail  = r.summaryDetail ?? {};
     const price   = r.price ?? {};
+    const events  = r.calendarEvents ?? {};
 
     let chartPoints = [], chartDates = [];
     if (chartResult && chartResult.indicators?.quote?.[0]?.close && chartResult.timestamp) {
@@ -91,6 +92,7 @@ async function fetchQuoteSummary(ticker) {
       rawPrice:     currentPriceRaw,
       raw52Low:     detail.fiftyTwoWeekLow?.raw,
       raw52High:    detail.fiftyTwoWeekHigh?.raw,
+      earningsDate: events.earnings?.earningsDate?.[0]?.raw ?? null,
       news:         newsResult ? {
                       title: newsResult.title,
                       link: newsResult.link,
@@ -365,7 +367,19 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
           </div>
           {data?.name && data.name !== ticker && <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.4 }}>{data.name}</div>}
         </div>
-        <button onClick={onClose} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "#64748b", width: 24, height: 24, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit" }}>×</button>
+        
+        {/* Top Right Controls */}
+        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+          {data?.earningsDate && (
+            <div style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(192,132,252,0.12)", border: "1px solid rgba(192,132,252,0.3)", padding: "4px 8px", borderRadius: 6 }}>
+              <span style={{ fontSize: 9, fontWeight: 800, color: "#c084fc", letterSpacing: "0.05em" }}>EARNINGS:</span>
+              <span style={{ fontSize: 9, fontWeight: 700, color: "#e2e8f0" }}>
+                {new Date(data.earningsDate * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}
+              </span>
+            </div>
+          )}
+          <button onClick={onClose} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "#64748b", width: 24, height: 24, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit" }}>×</button>
+        </div>
       </div>
 
       <div style={{ padding: "12px 16px 14px" }}>
@@ -878,9 +892,12 @@ function HeatMap({ prices, capexData, onTickerClick }) {
                 const pos = change === undefined || change >= 0;
                 const near52W = getNear52WLowInfo(entry);
                 const near52WH = !near52W ? getNear52WHighInfo(entry) : null;
+                const earningsDate = entry?.earningsDate;
+                const isUpcomingEarnings = earningsDate && (earningsDate * 1000 - Date.now() <= 3 * 86400000) && (earningsDate * 1000 - Date.now() >= -86400000);
+
                 return (
                   <div key={ticker}
-                    onMouseEnter={e => setTooltip({ ticker, change, price: currentPrice, session: sessionLabel, track: track.label, near52W, near52WH, rect: e.currentTarget.getBoundingClientRect() })}
+                    onMouseEnter={e => setTooltip({ ticker, change, price: currentPrice, session: sessionLabel, track: track.label, near52W, near52WH, isUpcomingEarnings, rect: e.currentTarget.getBoundingClientRect() })}
                     onMouseLeave={() => setTooltip(null)}
                     onClick={e => { e.stopPropagation(); onTickerClick?.(ticker, e.currentTarget.getBoundingClientRect()); }}
                     style={{
@@ -914,6 +931,9 @@ function HeatMap({ prices, capexData, onTickerClick }) {
                     }}
                     onMouseOver={e => { e.currentTarget.style.filter = "brightness(1.4)"; e.currentTarget.style.transform = "scale(1.06)"; }}
                     onMouseOut={e => { e.currentTarget.style.filter = ""; e.currentTarget.style.transform = ""; }}>
+                    {isUpcomingEarnings && (
+                      <div style={{ position: "absolute", top: 3, left: 4, fontSize: 8, fontWeight: 800, color: "#c084fc", letterSpacing: "0.05em", lineHeight: 1 }}>E</div>
+                    )}
                     {sessionLabel && !near52W && !near52WH && (
                       <div style={{ position: "absolute", top: 3, right: 4, fontSize: 7, fontWeight: 800, color: "rgba(255,255,255,0.55)", letterSpacing: "0.05em", lineHeight: 1 }}>{sessionLabel}</div>
                     )}
@@ -946,6 +966,12 @@ function HeatMap({ prices, capexData, onTickerClick }) {
             {tooltip.session && <span style={{ fontSize: 9, fontWeight: 700, color: "#64748b", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.05em" }}>{tooltip.session}</span>}
             <span style={{ fontSize: 10, color: "#475569" }}>{tooltip.track}</span>
           </div>
+          {tooltip.isUpcomingEarnings && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 8, fontWeight: 800, color: "#c084fc", background: "rgba(192,132,252,0.15)", border: "1px solid rgba(192,132,252,0.4)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.08em" }}>E EARNINGS SOON</span>
+              <span style={{ fontSize: 10, color: "#c084fc" }}>Within 3 Days</span>
+            </div>
+          )}
           {tooltip.near52W && (
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontSize: 8, fontWeight: 800, color: "#f59e0b", background: "rgba(245,158,11,0.15)", border: "1px solid rgba(245,158,11,0.4)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.08em" }}>▼ 52W LOW ZONE</span>
@@ -1234,7 +1260,6 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
         )}
         {sorted.map((item, idx) => {
           const pos  = (typeof item.change === 'number' ? item.change : 0) >= 0;
-          const barW = typeof item.change === 'number' ? Math.abs(item.change) / maxAbs * 100 : 0;
           return (
             <div key={item.ticker} style={{ borderRadius: 8, padding: "10px 10px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background .15s" }}
               onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
@@ -1247,9 +1272,39 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
                   : isShort && <div style={{ fontSize: 9, color: "#f59e0b", marginTop: 1 }}>Shortlist</div>
                 }
               </div>
-              <div style={{ flex: 1, height: 4, borderRadius: 2, background: "rgba(255,255,255,0.04)", overflow: "hidden" }}>
-                {typeof item.change === 'number' && <div style={{ height: "100%", borderRadius: 2, width: `${barW}%`, background: pos ? "linear-gradient(90deg,#065f46,#34d399)" : "linear-gradient(90deg,#7f1d1d,#ef4444)", transition: "width .4s ease" }} />}
-              </div>
+              {/* 52W Range Tracker */}
+              {(() => {
+                const pData = prices[item.ticker] || {};
+                const w52L = pData.week52Low;
+                const w52H = pData.week52High;
+                const pLive = pData.price;
+                const has52W = w52L != null && w52H != null && pLive != null && (w52H > w52L);
+                const dotPos = has52W ? Math.max(0, Math.min(100, ((pLive - w52L) / (w52H - w52L)) * 100)) : 50;
+                const dotColor = pos ? "#34d399" : "#f87171";
+                
+                return (
+                  <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, fontSize: 9, color: "#64748b", fontFamily: "monospace", minWidth: 100 }}>
+                    {has52W ? (
+                      <>
+                        <span>{w52L}</span>
+                        <div style={{ flex: 1, position: "relative", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2 }}>
+                          {/* Position wrapper perfectly centers the dot on the line */}
+                          <div style={{ position: "absolute", left: `${dotPos}%`, top: "50%", transform: "translate(-50%, -50%)", zIndex: 2 }}>
+                            {/* Price label placed directly above the dot */}
+                            <div style={{ position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)", marginBottom: 3, background: "rgba(24,24,24,0.85)", padding: "1px 5px", borderRadius: 4, fontSize: 8.5, fontWeight: 700, color: "#e2e8f0" }}>
+                              ${pLive.toFixed(2)}
+                            </div>
+                            <div style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, boxShadow: `0 0 6px ${dotColor}88` }} />
+                          </div>
+                        </div>
+                        <span>{w52H}</span>
+                      </>
+                    ) : (
+                      <span style={{ flex: 1, textAlign: "center", color: "#475569" }}>—</span>
+                    )}
+                  </div>
+                );
+              })()}
               <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, fontSize: 13, fontWeight: 700, minWidth: 68, textAlign: "right", color: typeof item.change !== 'number' ? "#334155" : pos ? "#34d399" : "#f87171" }}>
                 {typeof item.change !== 'number' ? "—" : <><span style={{ fontSize: 10 }}>{pos ? "▲" : "▼"}</span>{Math.abs(item.change).toFixed(2)}%</>}
               </div>
