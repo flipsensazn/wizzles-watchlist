@@ -629,6 +629,14 @@ function TopBar({ marketData }) {
           const changeColor = changePct == null ? "#475569" : pos ? "#10b981" : "#ef4444";
           const sessionLabel = entry?.session === "POST" || entry?.session === "CLOSED" ? "AH"
                              : entry?.session === "PRE" ? "PM" : null;
+          // Reverse-engineer absolute point/dollar change from price + percentage
+          let absChange = "—";
+          if (price != null && changePct != null) {
+            const prevPrice = price / (1 + (changePct / 100));
+            const diff = price - prevPrice;
+            absChange = (diff >= 0 ? "+" : "") + diff.toFixed(2);
+          }
+
           return (
             <div key={ticker} style={{
               display: "flex", flexDirection: "column", justifyContent: "center",
@@ -639,10 +647,15 @@ function TopBar({ marketData }) {
               flex: "1 1 0", minWidth: 0, boxSizing: "border-box",
               overflow: "hidden",
             }}>
-              <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 1 }}>
-                <span style={{ fontSize: 11, fontWeight: 800, color, letterSpacing: "0.04em", whiteSpace: "nowrap" }}>{label}</span>
-                {sessionLabel && <span style={{ fontSize: 7, fontWeight: 800, color: "#94a3b8", background: "#171717", border: "1px solid #333", borderRadius: 2, padding: "1px 3px", flexShrink: 0 }}>{sessionLabel}</span>}
+              {/* Row 1: Label + session badge | abs change */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color, letterSpacing: "0.04em", whiteSpace: "nowrap" }}>{label}</span>
+                  {sessionLabel && <span style={{ fontSize: 7, fontWeight: 800, color: "#94a3b8", background: "#171717", border: "1px solid #333", borderRadius: 2, padding: "1px 3px", flexShrink: 0 }}>{sessionLabel}</span>}
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 700, color: changeColor, whiteSpace: "nowrap", flexShrink: 0 }}>{absChange}</span>
               </div>
+              {/* Row 2: Price | % change */}
               <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2, gap: 4 }}>
                 <span style={{ fontSize: 13, fontWeight: 700, color: "#f8fafc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{formatPrice(price, ticker)}</span>
                 <span style={{ fontSize: 11, fontWeight: 700, color: changeColor, whiteSpace: "nowrap", flexShrink: 0 }}>
