@@ -678,7 +678,7 @@ function MarketStrip({ data, tickers, labels, colors }) {
   }
   
   return (
-    <div className="market-strip" style={{ display: "flex", flexDirection: "column", gap: 6, justifyContent: "center", padding: "0 10px" }}>
+    <div className="market-strip" style={{ display: "flex", flexDirection: "column", gap: 6, justifyContent: "flex-start", padding: "0 10px" }}>
       {tickers.map((ticker, i) => {
         const entry = data[ticker] || {};
         const price = entry.price;
@@ -2142,7 +2142,7 @@ export default function App() {
 
         <div className="main-content" style={{ maxWidth: 1480, margin: "0 auto", padding: "32px 28px", display: "flex", flexDirection: "column", gap: 28 }}>
           
-          <div className="top-node-layout" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div className="top-node-layout" style={{ display: "flex", alignItems: "flex-start", justifyContent: "center" }}>
             <MarketStrip data={marketData} tickers={["^GSPC","^DJI","^IXIC"]} labels={["S&P 500","DOW","NASDAQ"]} colors={["#60a5fa","#34d399","#c084fc"]} />
             <div className="top-node-center" style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "0 0 auto" }}>
               <div style={{ 
