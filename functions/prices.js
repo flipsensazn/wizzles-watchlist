@@ -2,8 +2,18 @@
 
 const CACHE_TTL_SECONDS = 60; // 1 minutes — keeps KV writes well under the 1,000/day free tier limit
 // These 6 tickers power the market strip and get a dedicated no-cache fast path
-// so the frontend 5s poll actually receives fresh data every call.
-const STRIP_TICKERS = new Set(["^GSPC", "^DJI", "^IXIC", "BTC-USD", "ETH-USD", "XRP-USD"]);
+// so the frontend 5s poll receives fresh data every call.
+// Indices → Yahoo (session-aware, pre/after-hours)
+// Crypto  → Finnhub (near real-time, Yahoo crypto lags 1-2 min)
+const STRIP_TICKERS  = new Set(["^GSPC", "^DJI", "^IXIC", "BTC-USD", "ETH-USD", "XRP-USD"]);
+const INDEX_TICKERS  = ["^GSPC", "^DJI", "^IXIC"];
+const CRYPTO_TICKERS = ["BTC-USD", "ETH-USD", "XRP-USD"];
+// Finnhub uses exchange-prefixed symbols for crypto
+const FINNHUB_CRYPTO_MAP = {
+  "BTC-USD": "BINANCE:BTCUSDT",
+  "ETH-USD": "BINANCE:ETHUSDT",
+  "XRP-USD": "BINANCE:XRPUSDT",
+};
 // v2 key ensures any old REGULAR-session snapshots are not served after this deploy
 const KV_CACHE_KEY  = "priceCache_v5";
 // Crumb is valid for hours — cache it in KV to eliminate 2 serial round trips
@@ -85,52 +95,90 @@ export async function onRequest(context) {
   const allStrip = tickers.length > 0 && tickers.every(t => STRIP_TICKERS.has(t));
   if (allStrip) {
     const stripResults = {};
-    try {
-      const { cookie, crumb } = await getYahooSession(env);
-      const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${tickers.join(",")}&corsDomain=finance.yahoo.com&formatted=false&crumb=${crumb}`;
-      const res = await fetch(url, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } });
-      if (res.ok) {
-        const data = await res.json();
-        const quotes = data?.quoteResponse?.result || [];
-        console.log(`[strip fast-path] Yahoo returned ${quotes.length} quotes for: ${tickers.join(",")}`);
-        for (const q of quotes) {
-          if (q.regularMarketPrice === undefined) continue;
-          const state = q.marketState;
-          let price, change, session;
-          if (state === "POST" || state === "POSTPOST") {
-            price = q.postMarketPrice ?? q.regularMarketPrice;
-            change = q.postMarketChangePercent ?? q.regularMarketChangePercent ?? 0;
-            session = "POST";
-          } else if (state === "PRE") {
-            price = q.preMarketPrice ?? q.regularMarketPrice;
-            change = q.preMarketChangePercent ?? q.regularMarketChangePercent ?? 0;
-            session = "PRE";
-          } else if (state === "CLOSED") {
-            price = q.postMarketPrice ?? q.regularMarketPrice;
-            change = q.postMarketChangePercent ?? q.regularMarketChangePercent ?? 0;
-            session = q.postMarketPrice != null ? "POST" : "CLOSED";
+    const FINNHUB_KEY = env.FINNHUB_KEY;
+
+    // ── Run Yahoo (indices) and Finnhub (crypto) in parallel ──────────────
+    await Promise.all([
+
+      // Yahoo for ^GSPC, ^DJI, ^IXIC — session-aware, handles pre/after-hours
+      (async () => {
+        try {
+          const { cookie, crumb } = await getYahooSession(env);
+          const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${INDEX_TICKERS.join(",")}&corsDomain=finance.yahoo.com&formatted=false&crumb=${crumb}`;
+          const res = await fetch(url, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } });
+          if (res.ok) {
+            const data = await res.json();
+            const quotes = data?.quoteResponse?.result || [];
+            console.log(`[strip] Yahoo indices: ${quotes.length} quotes`);
+            for (const q of quotes) {
+              if (q.regularMarketPrice === undefined) continue;
+              const state = q.marketState;
+              let price, change, session;
+              if (state === "POST" || state === "POSTPOST") {
+                price = q.postMarketPrice ?? q.regularMarketPrice;
+                change = q.postMarketChangePercent ?? q.regularMarketChangePercent ?? 0;
+                session = "POST";
+              } else if (state === "PRE") {
+                price = q.preMarketPrice ?? q.regularMarketPrice;
+                change = q.preMarketChangePercent ?? q.regularMarketChangePercent ?? 0;
+                session = "PRE";
+              } else if (state === "CLOSED") {
+                price = q.postMarketPrice ?? q.regularMarketPrice;
+                change = q.postMarketChangePercent ?? q.regularMarketChangePercent ?? 0;
+                session = q.postMarketPrice != null ? "POST" : "CLOSED";
+              } else {
+                price = q.regularMarketPrice;
+                change = q.regularMarketChangePercent ?? 0;
+                session = "REGULAR";
+              }
+              stripResults[q.symbol] = {
+                price:   parseFloat(price.toFixed(2)),
+                change:  parseFloat(change.toFixed(2)),
+                session,
+              };
+            }
           } else {
-            price = q.regularMarketPrice;
-            change = q.regularMarketChangePercent ?? 0;
-            session = "REGULAR";
+            console.error(`[strip] Yahoo indices responded ${res.status}`);
           }
-          stripResults[q.symbol] = {
-            price:   parseFloat(price.toFixed(2)),
-            change:  parseFloat(change.toFixed(2)),
-            session,
-          };
+        } catch (err) {
+          console.error("[strip] Yahoo indices error:", err.message);
         }
-        // NOTE: chart data is intentionally NOT fetched here — the fast path
-        // only updates price/change every 5s. Charts update on the 30s cycle,
-        // which is fine since 15m-interval chart bars don't change that fast.
-        // Fetching 6 chart calls every 5s was causing timeouts and silent failures.
-        console.log(`[strip fast-path] returning ${Object.keys(stripResults).length} results`);
-      } else {
-        console.error(`[strip fast-path] Yahoo quote responded ${res.status}`);
-      }
-    } catch (err) {
-      console.error("[strip fast-path] error:", err.message);
-    }
+      })(),
+
+      // Finnhub for BTC-USD, ETH-USD, XRP-USD — near real-time crypto quotes
+      // 3 parallel calls, well within the 60 calls/min free tier limit
+      ...CRYPTO_TICKERS.map(async (yahooSymbol) => {
+        if (!FINNHUB_KEY) return;
+        const finnhubSymbol = FINNHUB_CRYPTO_MAP[yahooSymbol];
+        if (!finnhubSymbol) return;
+        try {
+          const res = await fetch(
+            `https://finnhub.io/api/v1/quote?symbol=${finnhubSymbol}&token=${FINNHUB_KEY}`
+          );
+          if (res.ok) {
+            const q = await res.json();
+            // Finnhub: c = current price, dp = % change, pc = prev close
+            if (q.c != null && q.c > 0) {
+              // Compute % change from prev close if dp missing
+              const change = q.dp != null ? q.dp : (q.pc > 0 ? ((q.c - q.pc) / q.pc) * 100 : 0);
+              stripResults[yahooSymbol] = {
+                price:   parseFloat(q.c.toFixed(2)),
+                change:  parseFloat(change.toFixed(2)),
+                session: "REGULAR",
+              };
+              console.log(`[strip] Finnhub ${yahooSymbol}: $${q.c}`);
+            }
+          } else {
+            console.error(`[strip] Finnhub ${finnhubSymbol} responded ${res.status}`);
+          }
+        } catch (err) {
+          console.error(`[strip] Finnhub ${finnhubSymbol} error:`, err.message);
+        }
+      }),
+
+    ]);
+
+    console.log(`[strip] fast-path returning ${Object.keys(stripResults).length}/6 results`);
     return new Response(JSON.stringify({ data: stripResults, cached: false }), { status: 200, headers });
   }
 
