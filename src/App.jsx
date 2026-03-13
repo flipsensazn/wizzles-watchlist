@@ -1331,16 +1331,37 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
         )
       )}
 
-      <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
-        <button onClick={() => setFilter("all")} style={{ background: filter === "all" ? "rgba(255,255,255,0.08)" : "transparent", border: `1px solid ${filter === "all" ? "rgba(255,255,255,0.15)" : "transparent"}`, color: filter === "all" ? "#e2e8f0" : "#475569", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>All</button>
-        {capexData.tracks.map(track => {
-          const label = TRACK_SHORT[track.id] ?? track.label.split(" ")[0];
-          const active = filter === track.id;
-          return (
-            <button key={track.id} onClick={() => setFilter(active ? "all" : track.id)} style={{ background: active ? `${track.color}22` : "transparent", border: `1px solid ${active ? track.color + "66" : "transparent"}`, color: active ? track.color : "#475569", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit", transition: "all .15s" }}>{label}</button>
-          );
-        })}
-        <button onClick={() => setSortDir(d => d === "desc" ? "asc" : "desc")} style={{ marginLeft: "auto", background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b", borderRadius: 6, padding: "4px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>Sort {sortDir === "desc" ? "↓" : "↑"}</button>
+      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+        <select
+          value={filter}
+          onChange={e => setFilter(e.target.value)}
+          style={{
+            flex: 1,
+            background: "rgba(255,255,255,0.05)",
+            border: `1px solid ${filter === "all" ? "rgba(255,255,255,0.1)" : (capexData.tracks.find(t => t.id === filter)?.color ?? "#60a5fa") + "66"}`,
+            borderRadius: 8,
+            padding: "5px 10px",
+            color: filter === "all" ? "#e2e8f0" : (capexData.tracks.find(t => t.id === filter)?.color ?? "#e2e8f0"),
+            fontSize: 11,
+            fontFamily: "inherit",
+            cursor: "pointer",
+            outline: "none",
+            appearance: "none",
+            backgroundImage: `url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%2364748b'/%3E%3C/svg%3E")`,
+            backgroundRepeat: "no-repeat",
+            backgroundPosition: "right 10px center",
+            paddingRight: 28,
+          }}
+        >
+          <option value="all" style={{ background: "#1e293b", color: "#e2e8f0" }}>All Sectors</option>
+          {capexData.tracks.map(track => {
+            const label = TRACK_SHORT[track.id] ?? track.label.split(" ")[0];
+            return (
+              <option key={track.id} value={track.id} style={{ background: "#1e293b", color: "#e2e8f0" }}>{label}</option>
+            );
+          })}
+        </select>
+        <button onClick={() => setSortDir(d => d === "desc" ? "asc" : "desc")} style={{ flexShrink: 0, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>Sort {sortDir === "desc" ? "↓" : "↑"}</button>
       </div>
 
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, overflowY: "auto", minHeight: 0, paddingRight: 4 }}>
@@ -1786,7 +1807,7 @@ function AdminModal({ onClose, onSuccess }) {
 // ── GLOBAL STYLES ─────────────────────────────────────────
 const GLOBAL_STYLES = `
   * { box-sizing: border-box; margin: 0; padding: 0; box-shadow: none !important; }
-  html, body { background: #0E1117; font-family: 'Inter', sans-serif; }
+  html, body { background: #1a1a1f; font-family: 'Inter', sans-serif; }
   
   html.light-mode { filter: invert(1) hue-rotate(180deg); }
   
