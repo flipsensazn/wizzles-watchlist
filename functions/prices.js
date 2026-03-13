@@ -1,6 +1,9 @@
 // functions/prices.js
 
 const CACHE_TTL_SECONDS = 60; // 1 minutes — keeps KV writes well under the 1,000/day free tier limit
+// These 6 tickers power the market strip and get a dedicated no-cache fast path
+// so the frontend 5s poll actually receives fresh data every call.
+const STRIP_TICKERS = new Set(["^GSPC", "^DJI", "^IXIC", "BTC-USD", "ETH-USD", "XRP-USD"]);
 // v2 key ensures any old REGULAR-session snapshots are not served after this deploy
 const KV_CACHE_KEY  = "priceCache_v5";
 // Crumb is valid for hours — cache it in KV to eliminate 2 serial round trips
@@ -73,6 +76,70 @@ export async function onRequest(context) {
 
   if (!tickers.length) {
     return new Response(JSON.stringify({ error: "No tickers provided" }), { status: 400, headers });
+  }
+
+  // 2a. FAST PATH — strip tickers bypass KV cache entirely so the 5s frontend
+  //     poll always gets a live Yahoo quote, not a 60s-stale snapshot.
+  //     Only activates when the request contains ONLY strip tickers (i.e. the
+  //     dedicated fast-refresh call from the frontend, not the full 30s refresh).
+  const allStrip = tickers.length > 0 && tickers.every(t => STRIP_TICKERS.has(t));
+  if (allStrip) {
+    const stripResults = {};
+    try {
+      const { cookie, crumb } = await getYahooSession(env);
+      const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${tickers.join(",")}&corsDomain=finance.yahoo.com&formatted=false&crumb=${crumb}`;
+      const res = await fetch(url, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } });
+      if (res.ok) {
+        const data = await res.json();
+        for (const q of (data?.quoteResponse?.result || [])) {
+          if (q.regularMarketPrice === undefined) continue;
+          const state = q.marketState;
+          let price, change, session;
+          if (state === "POST" || state === "POSTPOST") {
+            price = q.postMarketPrice ?? q.regularMarketPrice;
+            change = q.postMarketChangePercent ?? q.regularMarketChangePercent ?? 0;
+            session = "POST";
+          } else if (state === "PRE") {
+            price = q.preMarketPrice ?? q.regularMarketPrice;
+            change = q.preMarketChangePercent ?? q.regularMarketChangePercent ?? 0;
+            session = "PRE";
+          } else if (state === "CLOSED") {
+            price = q.postMarketPrice ?? q.regularMarketPrice;
+            change = q.postMarketChangePercent ?? q.regularMarketChangePercent ?? 0;
+            session = q.postMarketPrice != null ? "POST" : "CLOSED";
+          } else {
+            price = q.regularMarketPrice;
+            change = q.regularMarketChangePercent ?? 0;
+            session = "REGULAR";
+          }
+          stripResults[q.symbol] = {
+            price:   parseFloat(price.toFixed(2)),
+            change:  parseFloat(change.toFixed(2)),
+            session,
+          };
+        }
+
+        // Also fetch intraday charts for the strip tickers (same as main path)
+        await Promise.all(tickers.map(async (t) => {
+          try {
+            const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?range=2d&interval=15m&crumb=${crumb}`;
+            const chartRes = await fetch(chartUrl, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } });
+            if (chartRes.ok) {
+              const chartData = await chartRes.json();
+              const result = chartData.chart?.result?.[0];
+              if (result?.indicators?.quote?.[0]?.close) {
+                stripResults[t] = stripResults[t] || {};
+                stripResults[t].chartData = result.indicators.quote[0].close;
+                stripResults[t].chartTimestamps = result.timestamp;
+              }
+            }
+          } catch {}
+        }));
+      }
+    } catch (err) {
+      console.error("Strip fast-path error:", err);
+    }
+    return new Response(JSON.stringify({ data: stripResults, cached: false }), { status: 200, headers });
   }
 
   // 2. KV PRICE CACHE CHECK
