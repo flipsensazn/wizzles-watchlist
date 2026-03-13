@@ -1951,6 +1951,31 @@ export default function App() {
     return () => clearInterval(id);
   }, [refresh]);
 
+  // Fast 5s refresh for the 6 market-strip tickers only (indices + crypto).
+  // Runs independently of the full 30s cycle so the strip stays near-live
+  // without hammering the /prices endpoint with the entire watchlist.
+  useEffect(() => {
+    const fastRefresh = async () => {
+      if (document.hidden) return;
+      try {
+        const stripTickers = [...INDEX_TICKERS, ...CRYPTO_TICKERS];
+        const data = await fetchAllPrices(stripTickers);
+        setMarketData(prev => {
+          const merged = { ...prev };
+          stripTickers.forEach(ticker => {
+            const val = data[ticker];
+            if (val != null) merged[ticker] = val;
+          });
+          return merged;
+        });
+      } catch {
+        // silent — full 30s refresh will catch up
+      }
+    };
+    const id = setInterval(fastRefresh, 5000);
+    return () => clearInterval(id);
+  }, []);
+
   const handleUnlock = () => setShowAdminModal(true);
 
   const saveGlobalScanner = async (newList) => {
