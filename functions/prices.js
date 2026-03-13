@@ -91,7 +91,9 @@ export async function onRequest(context) {
       const res = await fetch(url, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } });
       if (res.ok) {
         const data = await res.json();
-        for (const q of (data?.quoteResponse?.result || [])) {
+        const quotes = data?.quoteResponse?.result || [];
+        console.log(`[strip fast-path] Yahoo returned ${quotes.length} quotes for: ${tickers.join(",")}`);
+        for (const q of quotes) {
           if (q.regularMarketPrice === undefined) continue;
           const state = q.marketState;
           let price, change, session;
@@ -118,26 +120,16 @@ export async function onRequest(context) {
             session,
           };
         }
-
-        // Also fetch intraday charts for the strip tickers (same as main path)
-        await Promise.all(tickers.map(async (t) => {
-          try {
-            const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?range=2d&interval=15m&crumb=${crumb}`;
-            const chartRes = await fetch(chartUrl, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } });
-            if (chartRes.ok) {
-              const chartData = await chartRes.json();
-              const result = chartData.chart?.result?.[0];
-              if (result?.indicators?.quote?.[0]?.close) {
-                stripResults[t] = stripResults[t] || {};
-                stripResults[t].chartData = result.indicators.quote[0].close;
-                stripResults[t].chartTimestamps = result.timestamp;
-              }
-            }
-          } catch {}
-        }));
+        // NOTE: chart data is intentionally NOT fetched here — the fast path
+        // only updates price/change every 5s. Charts update on the 30s cycle,
+        // which is fine since 15m-interval chart bars don't change that fast.
+        // Fetching 6 chart calls every 5s was causing timeouts and silent failures.
+        console.log(`[strip fast-path] returning ${Object.keys(stripResults).length} results`);
+      } else {
+        console.error(`[strip fast-path] Yahoo quote responded ${res.status}`);
       }
     } catch (err) {
-      console.error("Strip fast-path error:", err);
+      console.error("[strip fast-path] error:", err.message);
     }
     return new Response(JSON.stringify({ data: stripResults, cached: false }), { status: 200, headers });
   }
