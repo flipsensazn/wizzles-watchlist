@@ -345,7 +345,7 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
   return (
     <div ref={popupRef} style={{
       position: "fixed", top, left, width: POPUP_W, zIndex: 3000,
-      background: "rgba(18,18,18,0.97)", border: `1px solid ${changeColor}44`,
+      background: "rgba(36,36,41,0.97)", border: `1px solid ${changeColor}44`,
       borderRadius: 14, boxShadow: `0 8px 48px rgba(0,0,0,0.85), 0 0 30px ${changeColor}18`,
       fontFamily: "'DM Mono','Fira Code',monospace", animation: "fadeSlideIn .18s ease-out",
       overflow: "hidden",
@@ -707,7 +707,7 @@ function MarketStrip({ data, tickers, labels, colors }) {
           <div key={ticker} style={{
             display: "flex", flexDirection: "column",
             padding: "6px 10px", borderRadius: 2, width: 160, flexShrink: 0, boxSizing: "border-box",
-            background: "linear-gradient(to bottom, #262626, #0a0a0a)", 
+            background: "linear-gradient(to bottom, #2e2e34, #1e1e23)", 
             border: "1px solid #171717",
             boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 2px 4px rgba(0,0,0,0.5)",
             fontFamily: "'Roboto Condensed', sans-serif"
@@ -753,7 +753,7 @@ const TickerChip = memo(function TickerChip({ symbol, changeData, onRemove, onTi
       onClick={e => { e.stopPropagation(); onTickerClick?.(symbol, e.currentTarget.getBoundingClientRect()); }}
       style={{
         display: "flex", alignItems: "center", gap: 6, padding: "5px 10px",
-        background: hovered ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.05)",
+        background: hovered ? "rgba(255,255,255,0.13)" : "rgba(255,255,255,0.05)",
         border: `1px solid ${hovered ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.10)"}`,
         borderRadius: 8, cursor: "pointer", transition: "background .15s, border-color .15s", position: "relative",
       }}>
@@ -789,7 +789,7 @@ function SubsectorCard({ sub, prices, isAdmin, onAddTicker, onRemoveTicker, onTi
 
   return (
     <div style={{
-      borderRadius: 12, border: `1px solid ${isBottleneck ? "rgba(239,68,68,.35)" : isHot ? "rgba(245,158,11,.25)" : "rgba(255,255,255,0.07)"}`,
+      borderRadius: 12, border: `1px solid ${isBottleneck ? "rgba(239,68,68,.35)" : isHot ? "rgba(245,158,11,.25)" : "rgba(255,255,255,0.11)"}`,
       background: isBottleneck ? "rgba(239,68,68,0.06)" : "rgba(255,255,255,0.03)", padding: 14, display: "flex", flexDirection: "column", gap: 10,
     }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
@@ -845,9 +845,9 @@ const TrackCard = memo(function TrackCard({ track, isActive, onClick }) {
   return (
     <div onClick={onClick} style={{
       position: "relative", borderRadius: 14, padding: "14px 12px", minHeight: 120, cursor: "pointer", userSelect: "none",
-      background: isActive ? `linear-gradient(135deg,${track.borderColor}28 0%,rgba(18,18,18,.95) 100%)` : "rgba(255,255,255,0.03)",
-      border: `1px solid ${isActive ? track.borderColor : "rgba(255,255,255,0.09)"}`, display: "flex", flexDirection: "column", gap: 8, transition: "all .2s",
-    }} onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.borderColor = `${track.color}44`; } }} onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.09)"; } }}>
+      background: isActive ? `linear-gradient(135deg,${track.borderColor}28 0%,rgba(36,36,41,.95) 100%)` : "rgba(255,255,255,0.03)",
+      border: `1px solid ${isActive ? track.borderColor : "rgba(255,255,255,0.13)"}`, display: "flex", flexDirection: "column", gap: 8, transition: "all .2s",
+    }} onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.borderColor = `${track.color}44`; } }} onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.13)"; } }}>
       {isActive && (
         <div style={{ position: "absolute", top: -11, left: "50%", transform: "translateX(-50%)", background: `linear-gradient(90deg, ${track.borderColor}, ${track.color})`, color: "#000", fontSize: 9, fontWeight: 800, padding: "2px 10px", borderRadius: 20, letterSpacing: "0.2em", whiteSpace: "nowrap" }}>YOUR FOCUS</div>
       )}
@@ -869,7 +869,7 @@ const TrackCard = memo(function TrackCard({ track, isActive, onClick }) {
 function TrackPane({ track, prices, isAdmin, onAddTicker, onRemoveTicker, onTickerClick }) {
   return (
     <div style={{
-      borderRadius: 18, border: `1px solid ${track.borderColor}44`, background: "rgba(24,24,24,0.92)", padding: 22, marginTop: 8, animation: "fadeSlideIn .25s ease-out",
+      borderRadius: 18, border: `1px solid ${track.borderColor}44`, background: "rgba(38,38,43,0.92)", padding: 22, marginTop: 8, animation: "fadeSlideIn .25s ease-out",
     }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
@@ -939,7 +939,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
   }
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, height: "100%", overflowY: "auto", boxSizing: "border-box" }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.11)", background: "rgba(38,38,43,0.7)", padding: 20, height: "100%", overflowY: "auto", boxSizing: "border-box" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
         <div>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Portfolio Heat Map</h3>
@@ -1049,7 +1049,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
       })}
       
       {tooltip && (
-        <div style={{ position: "fixed", top: tooltip.rect.top - (tooltip.near52W || tooltip.near52WH || tooltip.isUpcomingEarnings ? 68 : 52), left: tooltip.rect.left, background: "rgba(18,18,18,0.95)", border: `1px solid ${tooltip.near52W ? "#f59e0b" : tooltip.near52WH ? "#34d399" : (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171"}44`, borderRadius: 8, padding: "7px 12px", pointerEvents: "none", zIndex: 1000, display: "flex", flexDirection: "column", gap: 4, minWidth: 140 }}>
+        <div style={{ position: "fixed", top: tooltip.rect.top - (tooltip.near52W || tooltip.near52WH || tooltip.isUpcomingEarnings ? 68 : 52), left: tooltip.rect.left, background: "rgba(36,36,41,0.95)", border: `1px solid ${tooltip.near52W ? "#f59e0b" : tooltip.near52WH ? "#34d399" : (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171"}44`, borderRadius: 8, padding: "7px 12px", pointerEvents: "none", zIndex: 1000, display: "flex", flexDirection: "column", gap: 4, minWidth: 140 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{tooltip.ticker}</span>
             {tooltip.price !== undefined && <span style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0" }}>${tooltip.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
@@ -1139,7 +1139,7 @@ function DonutChart({ prices, capexData, capexIntel, capexIntelStatus, capexInte
   const hov = hovered ? segments.find(s => s.track.id === hovered) : null;
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, height: "100%", overflowY: "auto", boxSizing: "border-box" }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.11)", background: "rgba(38,38,43,0.7)", padding: 20, height: "100%", overflowY: "auto", boxSizing: "border-box" }}>
       <div style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Sector Allocation</h3>
@@ -1178,11 +1178,11 @@ function DonutChart({ prices, capexData, capexIntel, capexIntelStatus, capexInte
             const isHov = hovered === seg.track.id;
             return (
               <g key={seg.track.id} onMouseEnter={() => setHovered(seg.track.id)} onMouseLeave={() => setHovered(null)} style={{ transformOrigin: `${cx}px ${cy}px`, transform: `scale(${isHov ? 1.06 : 1})`, transition: "transform .2s", cursor: "pointer" }}>
-                <path d={seg.path} fill={isHov ? seg.track.color : seg.track.borderColor} opacity={isHov ? 1 : hovered ? 0.35 : 0.82} stroke="rgba(24,24,24,0.8)" strokeWidth="2.5" />
+                <path d={seg.path} fill={isHov ? seg.track.color : seg.track.borderColor} opacity={isHov ? 1 : hovered ? 0.35 : 0.82} stroke="rgba(38,38,43,0.8)" strokeWidth="2.5" />
               </g>
             );
           })}
-          <circle cx={cx} cy={cy} r={r - 2} fill="rgba(24,24,24,0.95)" />
+          <circle cx={cx} cy={cy} r={r - 2} fill="rgba(38,38,43,0.95)" />
           {hov ? (
             <>
               <text x={cx} y={cy - 14} textAnchor="middle" fill={hov.track.color} fontSize="11" fontWeight="600">{hov.track.label.split(" ")[0]}</text>
@@ -1280,7 +1280,7 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
   const avg          = validChanges.reduce((s, x) => s + x.change, 0) / (validChanges.length || 1);
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, display: "flex", flexDirection: "column", gap: 14, height: "100%" }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.11)", background: "rgba(38,38,43,0.7)", padding: 20, display: "flex", flexDirection: "column", gap: 14, height: "100%" }}>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <div style={{ display: "flex", gap: 2, background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: 3 }}>
@@ -1405,7 +1405,7 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
                           {/* Position wrapper perfectly centers the dot on the line */}
                           <div style={{ position: "absolute", left: `${dotPos}%`, top: "50%", transform: "translate(-50%, -50%)", zIndex: 2 }}>
                             {/* Price label placed directly above the dot */}
-                            <div style={{ position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)", marginBottom: 3, background: "rgba(24,24,24,0.85)", padding: "1px 5px", borderRadius: 4, fontSize: 8.5, fontWeight: 700, color: "#e2e8f0" }}>
+                            <div style={{ position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)", marginBottom: 3, background: "rgba(38,38,43,0.85)", padding: "1px 5px", borderRadius: 4, fontSize: 8.5, fontWeight: 700, color: "#e2e8f0" }}>
                               ${pLive.toFixed(2)}
                             </div>
                             <div style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, boxShadow: `0 0 6px ${dotColor}88` }} />
@@ -1510,7 +1510,7 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
   const sectors = [...new Set(allData.map(d => d.sector).filter(Boolean))].sort();
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, display: "flex", flexDirection: "column", height: "100%" }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.11)", background: "rgba(38,38,43,0.7)", padding: 20, display: "flex", flexDirection: "column", height: "100%" }}>
 
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12, flexShrink: 0 }}>
         <div>
@@ -1569,7 +1569,7 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
         )}
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, textAlign: "left" }}>
           <thead>
-            <tr style={{ color: "#475569", borderBottom: "1px solid rgba(255,255,255,0.05)", position: "sticky", top: 0, background: "rgba(14,17,23,0.95)", zIndex: 10 }}>
+            <tr style={{ color: "#475569", borderBottom: "1px solid rgba(255,255,255,0.05)", position: "sticky", top: 0, background: "rgba(30,30,35,0.95)", zIndex: 10 }}>
               <th style={{ padding: "10px 8px" }}>#</th>
               <th style={{ padding: "10px 8px" }}>TICKER</th>
               <th style={{ padding: "10px 8px" }}>PRICE</th>
@@ -1746,7 +1746,7 @@ function AdminModal({ onClose, onSuccess }) {
       <div
         onClick={e => e.stopPropagation()}
         style={{
-          background: "rgba(18,18,18,0.98)", border: "1px solid rgba(255,255,255,0.1)",
+          background: "rgba(36,36,41,0.98)", border: "1px solid rgba(255,255,255,0.1)",
           borderRadius: 14, padding: "28px 32px", width: 340,
           fontFamily: "'DM Mono','Fira Code',monospace",
           boxShadow: "0 16px 64px rgba(0,0,0,0.85)",
@@ -1807,7 +1807,7 @@ function AdminModal({ onClose, onSuccess }) {
 // ── GLOBAL STYLES ─────────────────────────────────────────
 const GLOBAL_STYLES = `
   * { box-sizing: border-box; margin: 0; padding: 0; box-shadow: none !important; }
-  html, body { background: #0E1117; font-family: 'Inter', sans-serif; }
+  html, body { background: #1a1a1f; font-family: 'Inter', sans-serif; }
   
   html.light-mode { filter: invert(1) hue-rotate(180deg); }
   
@@ -2136,7 +2136,7 @@ export default function App() {
       <div style={{ position: "relative", zIndex: 1, minHeight: "100vh", color: "#fff" }}>
         
         {/* HEADER */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(38,38,43,0.6)", flexWrap: "wrap", gap: 12 }}>
           <div>
             <div style={{ fontSize: 10, color: "#2d3a52", letterSpacing: "0.35em", textTransform: "uppercase", marginBottom: 3 }}>HOW ~$600B+ IN HYPERSCALER CAPEX FLOWS THROUGH AI INFRASTRUCTURE TRACKS</div>
             <div style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", letterSpacing: "-0.01em" }}>AI Capex Flow Intelligence</div>
@@ -2214,7 +2214,7 @@ export default function App() {
                 borderRadius: 4, 
                 padding: "26px 30px", 
                 textAlign: "center", 
-                background: "linear-gradient(to bottom, #1c1917, #0a0a0a)", 
+                background: "linear-gradient(to bottom, #222228, #1e1e23)", 
                 border: "1px solid #27272a", 
                 borderTop: "3px solid #fbbf24", 
                 boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 12px rgba(0,0,0,0.6)" 
@@ -2232,7 +2232,7 @@ export default function App() {
                       <div key={co} style={{ 
                         display: "flex", flexDirection: "column", alignItems: "center", 
                         padding: "8px 12px", borderRadius: 2, minWidth: 85, 
-                        background: "linear-gradient(to bottom, #262626, #0a0a0a)", 
+                        background: "linear-gradient(to bottom, #2e2e34, #1e1e23)", 
                         border: "1px solid #171717",
                         boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02), 0 2px 4px rgba(0,0,0,0.5)",
                         fontFamily: "'Roboto Condensed', sans-serif"
@@ -2301,7 +2301,7 @@ export default function App() {
         </div>
       </div>
       {/* TICKER TAPE */}
-      <div style={{ position: "sticky", bottom: 0, zIndex: 50, height: 34, overflow: "hidden", borderTop: "1px solid rgba(255,255,255,.04)", background: "rgba(18,18,18,0.95)", padding: "6px 0" }}>
+      <div style={{ position: "sticky", bottom: 0, zIndex: 50, height: 34, overflow: "hidden", borderTop: "1px solid rgba(255,255,255,.04)", background: "rgba(36,36,41,0.95)", padding: "6px 0" }}>
         {tickerEntries.length > 0 && (
           <div className="ticker-tape">
             {[...tickerEntries, ...tickerEntries].map(([sym, val], i) => {
