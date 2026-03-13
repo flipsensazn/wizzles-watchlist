@@ -2135,16 +2135,82 @@ export default function App() {
       <style>{GLOBAL_STYLES}</style>
       <div style={{ position: "relative", zIndex: 1, minHeight: "100vh", color: "#fff" }}>
         
-        {/* HEADER */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
+        {/* FIXED TOP BAR: 6 Tickers + Market Clock */}
+        <div style={{
+          position: "fixed", top: 0, left: 0, right: 0, zIndex: 1000,
+          display: "flex", alignItems: "center", justifyContent: "space-between",
+          padding: "0 16px", height: 72,
+          background: "rgba(14,14,14,0.98)",
+          borderBottom: "1px solid rgba(255,255,255,.07)",
+          backdropFilter: "blur(12px)",
+          boxShadow: "0 2px 20px rgba(0,0,0,0.7)"
+        }}>
+          {/* 6 Tickers in a row */}
+          <div style={{ display: "flex", alignItems: "stretch", gap: 5, flex: 1 }}>
+            {[
+              { ticker: "^GSPC",   label: "S&P 500", color: "#60a5fa" },
+              { ticker: "^DJI",    label: "DOW",     color: "#34d399" },
+              { ticker: "^IXIC",   label: "NASDAQ",  color: "#c084fc" },
+              { ticker: "BTC-USD", label: "BTC",     color: "#f59e0b" },
+              { ticker: "ETH-USD", label: "ETH",     color: "#60a5fa" },
+              { ticker: "XRP-USD", label: "XRP",     color: "#34d399" },
+            ].map(({ ticker, label, color }) => {
+              const entry = marketData[ticker] || {};
+              const price = entry.price;
+              const changePct = entry.change;
+              const pos = (changePct ?? 0) >= 0;
+              const changeColor = changePct === undefined || changePct === null ? "#475569" : pos ? "#10b981" : "#ef4444";
+              const formatPrice = (p, t) => {
+                if (p == null) return "—";
+                if (t === "BTC-USD" || t === "ETH-USD") return p.toLocaleString("en-US", { maximumFractionDigits: 0, useGrouping: true });
+                if (t === "XRP-USD") return p.toFixed(4);
+                return p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true });
+              };
+              const sessionLabel = entry?.session === "POST" || entry?.session === "CLOSED" ? "AH" : entry?.session === "PRE" ? "PM" : null;
+              return (
+                <div key={ticker} style={{
+                  display: "flex", flexDirection: "column", justifyContent: "center",
+                  padding: "6px 10px 4px", borderRadius: 3,
+                  background: "linear-gradient(to bottom, #1c1c1c, #111)",
+                  border: "1px solid #222",
+                  fontFamily: "'Roboto Condensed', sans-serif",
+                  minWidth: 148, flexShrink: 0,
+                  boxSizing: "border-box",
+                }}>
+                  {/* Label + session badge */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 1 }}>
+                    <span style={{ fontSize: 11, fontWeight: 800, color, letterSpacing: "0.04em" }}>{label}</span>
+                    {sessionLabel && <span style={{ fontSize: 7, fontWeight: 800, color: "#94a3b8", background: "#171717", border: "1px solid #333", borderRadius: 2, padding: "1px 3px" }}>{sessionLabel}</span>}
+                  </div>
+                  {/* Price + change% */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#f8fafc" }}>{formatPrice(price, ticker)}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: changeColor }}>
+                      {changePct != null ? `${pos ? "+" : ""}${changePct.toFixed(2)}%` : "—"}
+                    </span>
+                  </div>
+                  {/* Mini sparkline chart */}
+                  <BloombergChart data={entry.chartData} timestamps={entry.chartTimestamps} color={changeColor} />
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Market Clock — right side */}
+          <div style={{ display: "flex", alignItems: "center", flexShrink: 0, marginLeft: 14 }}>
+            <MarketClock />
+          </div>
+        </div>
+
+        {/* HEADER (below fixed bar) */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", marginTop: 72, borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
           <div>
             <div style={{ fontSize: 10, color: "#2d3a52", letterSpacing: "0.35em", textTransform: "uppercase", marginBottom: 3 }}>HOW ~$600B+ IN HYPERSCALER CAPEX FLOWS THROUGH AI INFRASTRUCTURE TRACKS</div>
             <div style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", letterSpacing: "-0.01em" }}>AI Capex Flow Intelligence</div>
           </div>
 
-          {/* CENTER: Market Clock & Theme Toggle */}
+          {/* Theme Toggle (clock moved to fixed bar) */}
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-            <MarketClock />
             <button 
               onClick={() => setIsLightMode(!isLightMode)} 
               style={{ 
@@ -2205,9 +2271,6 @@ export default function App() {
         <div className="main-content" style={{ maxWidth: 1480, margin: "0 auto", padding: "32px 28px", display: "flex", flexDirection: "column", gap: 28 }}>
           
           <div className="top-node-layout" style={{ display: "flex", alignItems: "flex-start", justifyContent: "center" }}>
-            <div style={{ width: 180, flexShrink: 0 }}>
-              <MarketStrip data={marketData} tickers={["^GSPC","^DJI","^IXIC"]} labels={["S&P 500","DOW","NASDAQ"]} colors={["#60a5fa","#34d399","#c084fc"]} />
-            </div>
             <div className="top-node-center" style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "0 0 auto" }}>
               <div style={{ 
                 width: 540, 
@@ -2260,9 +2323,6 @@ export default function App() {
               <div style={{ position: "relative", width: "100%", height: 1, background: "linear-gradient(90deg,transparent 5%,rgba(255,255,255,.1) 20%,rgba(255,255,255,.1) 80%,transparent 95%)" }}>
                 {capexData.tracks.map((_, i, arr) => <div key={i} style={{ position: "absolute", top: 0, left: `${(i / (arr.length - 1)) * 70 + 15}%`, width: 1, height: 18, background: "linear-gradient(to bottom,rgba(255,255,255,.15),transparent)" }} />)}
               </div>
-            </div>
-            <div style={{ width: 180, flexShrink: 0 }}>
-              <MarketStrip data={marketData} tickers={["BTC-USD","ETH-USD","XRP-USD"]} labels={["BTC","ETH","XRP"]} colors={["#f59e0b","#60a5fa","#34d399"]} />
             </div>
           </div>
 
