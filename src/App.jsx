@@ -964,7 +964,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
               {track.label}
               <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg,${track.color}44,transparent)` }} />
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, minHeight: 52 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, minHeight: 40 }}>
               {cells.map(ticker => {
                 const entry = prices[ticker];
                 const change = entry?.change ?? entry;
@@ -993,7 +993,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
                         : bg,
                       borderRadius: 8,
                       padding: "8px 12px",
-                      height: 64,
+                      height: 48,
                       display: "flex",
                       flexDirection: "column",
                       justifyContent: "center",
