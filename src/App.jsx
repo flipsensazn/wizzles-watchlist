@@ -678,7 +678,7 @@ function MarketStrip({ data, tickers, labels, colors }) {
   }
   
   return (
-    <div className="market-strip" style={{ display: "flex", flexDirection: "column", gap: 6, justifyContent: "center", padding: "0 10px" }}>
+    <div className="market-strip" style={{ display: "flex", flexDirection: "column", gap: 6, justifyContent: "flex-start", padding: "0 10px" }}>
       {tickers.map((ticker, i) => {
         const entry = data[ticker] || {};
         const price = entry.price;
@@ -1951,6 +1951,35 @@ export default function App() {
     return () => clearInterval(id);
   }, [refresh]);
 
+  // Fast 5s refresh for the 6 market-strip tickers only (indices + crypto).
+  // Runs independently of the full 30s cycle so the strip stays near-live
+  // without hammering the /prices endpoint with the entire watchlist.
+  useEffect(() => {
+    const fastRefresh = async () => {
+      if (document.hidden) return;
+      try {
+        const stripTickers = [...INDEX_TICKERS, ...CRYPTO_TICKERS];
+        const data = await fetchAllPrices(stripTickers);
+        setMarketData(prev => {
+          const merged = { ...prev };
+          stripTickers.forEach(ticker => {
+            const val = data[ticker];
+            if (val != null) {
+              // Shallow-merge at the per-ticker level so chartData written by
+              // the 30s refresh is preserved — fast path only updates price/change/session
+              merged[ticker] = { ...prev[ticker], ...val };
+            }
+          });
+          return merged;
+        });
+      } catch (err) {
+        console.warn("[strip] fast-refresh error:", err);
+      }
+    };
+    const id = setInterval(fastRefresh, 5000);
+    return () => clearInterval(id);
+  }, []);
+
   const handleUnlock = () => setShowAdminModal(true);
 
   const saveGlobalScanner = async (newList) => {
@@ -2142,7 +2171,7 @@ export default function App() {
 
         <div className="main-content" style={{ maxWidth: 1480, margin: "0 auto", padding: "32px 28px", display: "flex", flexDirection: "column", gap: 28 }}>
           
-          <div className="top-node-layout" style={{ display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <div className="top-node-layout" style={{ display: "flex", alignItems: "flex-start", justifyContent: "center" }}>
             <MarketStrip data={marketData} tickers={["^GSPC","^DJI","^IXIC"]} labels={["S&P 500","DOW","NASDAQ"]} colors={["#60a5fa","#34d399","#c084fc"]} />
             <div className="top-node-center" style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "0 0 auto" }}>
               <div style={{ 
