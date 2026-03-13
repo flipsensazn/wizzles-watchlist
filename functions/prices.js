@@ -135,6 +135,7 @@ export async function onRequest(context) {
                 price:   parseFloat(price.toFixed(2)),
                 change:  parseFloat(change.toFixed(2)),
                 session,
+                source:  "yahoo",
               };
             }
           } else {
@@ -165,6 +166,7 @@ export async function onRequest(context) {
                 price:   parseFloat(q.c.toFixed(2)),
                 change:  parseFloat(change.toFixed(2)),
                 session: "REGULAR",
+                source:  "finnhub",
               };
               console.log(`[strip] Finnhub ${yahooSymbol}: $${q.c}`);
             }
