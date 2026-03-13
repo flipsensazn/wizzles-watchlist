@@ -617,7 +617,7 @@ function BloombergChart({ data, timestamps, color }) {
     </div>
   );
 
-  const width = 160;
+  const vbWidth = 160;
   const height = 24;
   
   // Find the separator between yesterday and today
@@ -648,7 +648,7 @@ function BloombergChart({ data, timestamps, color }) {
   const yMax = max + (yRange * 0.1);
   const scaleY = yMax - yMin;
 
-  const getX = (idx) => (idx / (data.length - 1)) * width;
+  const getX = (idx) => (idx / (data.length - 1)) * vbWidth;
   const getY = (val) => height - ((val - yMin) / scaleY) * height;
 
   const part1 = validData.filter(d => d.idx <= splitIndex);
@@ -659,11 +659,18 @@ function BloombergChart({ data, timestamps, color }) {
   const splitX = getX(splitIndex);
 
   return (
-    <div style={{ height, marginTop: 4, position: "relative", zIndex: 0 }}>
-      <svg width={width} height={height} style={{ overflow: "visible", display: "block" }}>
-        <line x1={splitX} y1={0} x2={splitX} y2={height} stroke="rgba(255,255,255,0.4)" strokeWidth="1" strokeDasharray="2,2" />
-        {path1 && <path d={path1} fill="none" stroke="#f8fafc" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />}
-        {path2 && <path d={path2} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />}
+    <div style={{ height, marginTop: 4, position: "relative", zIndex: 0, overflow: "hidden" }}>
+      <svg width="100%" height={height} viewBox={`0 0 ${vbWidth} ${height}`} preserveAspectRatio="none" style={{ overflow: "hidden", display: "block" }}>
+        <defs>
+          <clipPath id="bloomberg-clip">
+            <rect x="0" y="0" width={vbWidth} height={height} />
+          </clipPath>
+        </defs>
+        <g clipPath="url(#bloomberg-clip)">
+          <line x1={splitX} y1={0} x2={splitX} y2={height} stroke="rgba(255,255,255,0.4)" strokeWidth="1" strokeDasharray="2,2" />
+          {path1 && <path d={path1} fill="none" stroke="#f8fafc" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />}
+          {path2 && <path d={path2} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />}
+        </g>
       </svg>
     </div>
   );
@@ -699,7 +706,7 @@ function MarketStrip({ data, tickers, labels, colors }) {
         return (
           <div key={ticker} style={{
             display: "flex", flexDirection: "column",
-            padding: "6px 10px", borderRadius: 2, width: 160, flexShrink: 0,
+            padding: "6px 10px", borderRadius: 2, width: 160, flexShrink: 0, boxSizing: "border-box",
             background: "linear-gradient(to bottom, #262626, #0a0a0a)", 
             border: "1px solid #171717",
             boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 2px 4px rgba(0,0,0,0.5)",
