@@ -1960,8 +1960,6 @@ export default function App() {
       try {
         const stripTickers = [...INDEX_TICKERS, ...CRYPTO_TICKERS];
         const data = await fetchAllPrices(stripTickers);
-        const count = Object.keys(data).length;
-        console.log(`[strip] fast-refresh received ${count} tickers`, data);
         setMarketData(prev => {
           const merged = { ...prev };
           stripTickers.forEach(ticker => {
