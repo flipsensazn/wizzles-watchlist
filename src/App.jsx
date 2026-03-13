@@ -2139,14 +2139,14 @@ export default function App() {
         <div style={{
           position: "fixed", top: 0, left: 0, right: 0, zIndex: 1000,
           display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "0 20px", height: 52,
-          background: "rgba(14,14,14,0.97)",
+          padding: "0 16px", height: 72,
+          background: "rgba(14,14,14,0.98)",
           borderBottom: "1px solid rgba(255,255,255,.07)",
           backdropFilter: "blur(12px)",
-          boxShadow: "0 2px 16px rgba(0,0,0,0.6)"
+          boxShadow: "0 2px 20px rgba(0,0,0,0.7)"
         }}>
           {/* 6 Tickers in a row */}
-          <div style={{ display: "flex", alignItems: "center", gap: 6, flex: 1 }}>
+          <div style={{ display: "flex", alignItems: "stretch", gap: 5, flex: 1 }}>
             {[
               { ticker: "^GSPC",   label: "S&P 500", color: "#60a5fa" },
               { ticker: "^DJI",    label: "DOW",     color: "#34d399" },
@@ -2169,38 +2169,41 @@ export default function App() {
               const sessionLabel = entry?.session === "POST" || entry?.session === "CLOSED" ? "AH" : entry?.session === "PRE" ? "PM" : null;
               return (
                 <div key={ticker} style={{
-                  display: "flex", alignItems: "center", gap: 8,
-                  padding: "5px 12px", borderRadius: 3,
-                  background: "linear-gradient(to bottom, #1a1a1a, #111)",
+                  display: "flex", flexDirection: "column", justifyContent: "center",
+                  padding: "6px 10px 4px", borderRadius: 3,
+                  background: "linear-gradient(to bottom, #1c1c1c, #111)",
                   border: "1px solid #222",
                   fontFamily: "'Roboto Condensed', sans-serif",
-                  minWidth: 130, flexShrink: 0,
+                  minWidth: 148, flexShrink: 0,
+                  boxSizing: "border-box",
                 }}>
-                  <div style={{ display: "flex", flexDirection: "column" }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                      <span style={{ fontSize: 11, fontWeight: 800, color, letterSpacing: "0.04em" }}>{label}</span>
-                      {sessionLabel && <span style={{ fontSize: 7, fontWeight: 800, color: "#94a3b8", background: "#171717", border: "1px solid #333", borderRadius: 2, padding: "1px 3px" }}>{sessionLabel}</span>}
-                    </div>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "#f8fafc" }}>{formatPrice(price, ticker)}</span>
+                  {/* Label + session badge */}
+                  <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 1 }}>
+                    <span style={{ fontSize: 11, fontWeight: 800, color, letterSpacing: "0.04em" }}>{label}</span>
+                    {sessionLabel && <span style={{ fontSize: 7, fontWeight: 800, color: "#94a3b8", background: "#171717", border: "1px solid #333", borderRadius: 2, padding: "1px 3px" }}>{sessionLabel}</span>}
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", marginLeft: "auto" }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: changeColor }}>
+                  {/* Price + change% */}
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
+                    <span style={{ fontSize: 13, fontWeight: 700, color: "#f8fafc" }}>{formatPrice(price, ticker)}</span>
+                    <span style={{ fontSize: 11, fontWeight: 700, color: changeColor }}>
                       {changePct != null ? `${pos ? "+" : ""}${changePct.toFixed(2)}%` : "—"}
                     </span>
                   </div>
+                  {/* Mini sparkline chart */}
+                  <BloombergChart data={entry.chartData} timestamps={entry.chartTimestamps} color={changeColor} />
                 </div>
               );
             })}
           </div>
 
           {/* Market Clock — right side */}
-          <div style={{ display: "flex", alignItems: "center", gap: 10, flexShrink: 0, marginLeft: 16 }}>
+          <div style={{ display: "flex", alignItems: "center", flexShrink: 0, marginLeft: 14 }}>
             <MarketClock />
           </div>
         </div>
 
         {/* HEADER (below fixed bar) */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", marginTop: 52, borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", marginTop: 72, borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
           <div>
             <div style={{ fontSize: 10, color: "#2d3a52", letterSpacing: "0.35em", textTransform: "uppercase", marginBottom: 3 }}>HOW ~$600B+ IN HYPERSCALER CAPEX FLOWS THROUGH AI INFRASTRUCTURE TRACKS</div>
             <div style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", letterSpacing: "-0.01em" }}>AI Capex Flow Intelligence</div>
