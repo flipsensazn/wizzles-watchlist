@@ -560,6 +560,122 @@ function fmtCountdown(secs) {
   return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
 }
 
+// ── RESPONSIVE TOP BAR ───────────────────────────────────
+const TOP_BAR_TICKERS = [
+  { ticker: "^GSPC",   label: "S&P 500", color: "#60a5fa" },
+  { ticker: "^DJI",    label: "DOW",     color: "#34d399" },
+  { ticker: "^IXIC",   label: "NASDAQ",  color: "#c084fc" },
+  { ticker: "BTC-USD", label: "BTC",     color: "#f59e0b" },
+  { ticker: "ETH-USD", label: "ETH",     color: "#60a5fa" },
+  { ticker: "XRP-USD", label: "XRP",     color: "#34d399" },
+];
+
+function TopBar({ marketData }) {
+  const barRef    = useRef(null);
+  const clockRef  = useRef(null);
+  // scale: 1 = full size, shrinks toward 0.7 as space gets tight
+  const [scale, setScale] = useState(1);
+
+  useEffect(() => {
+    const measure = () => {
+      if (!barRef.current || !clockRef.current) return;
+      const barW   = barRef.current.offsetWidth;
+      const clockW = clockRef.current.offsetWidth;
+      const padding = 32;    // 16px each side
+      const gap     = 14;    // gap between tickers and clock
+      const available = barW - padding - gap - clockW;
+      // At full scale each card is ~148px, 6 cards + 5 gaps of 5px = 913px
+      const fullW = 148 * 6 + 5 * 5;
+      const ratio = available / fullW;
+      setScale(Math.min(1, Math.max(0.65, ratio)));
+    };
+
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(barRef.current);
+    return () => ro.disconnect();
+  }, []);
+
+  function formatPrice(p, t) {
+    if (p == null) return "—";
+    if (t === "BTC-USD" || t === "ETH-USD") return p.toLocaleString("en-US", { maximumFractionDigits: 0, useGrouping: true });
+    if (t === "XRP-USD") return p.toFixed(4);
+    return p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true });
+  }
+
+  return (
+    <div ref={barRef} style={{
+      position: "fixed", top: 0, left: 0, right: 0, zIndex: 1000,
+      display: "flex", alignItems: "center",
+      padding: "0 16px", height: 72,
+      background: "rgba(14,14,14,0.98)",
+      borderBottom: "1px solid rgba(255,255,255,.07)",
+      backdropFilter: "blur(12px)",
+      boxShadow: "0 2px 20px rgba(0,0,0,0.7)",
+      overflow: "hidden",
+    }}>
+      {/* Tickers — flex-shrink allowed, scaled via transform */}
+      <div style={{
+        display: "flex", alignItems: "stretch", gap: Math.round(5 * scale),
+        flex: "1 1 0", minWidth: 0,
+        transformOrigin: "left center",
+        transform: `scaleX(${scale}) scaleY(${Math.min(1, scale + 0.15)})`,
+      }}>
+        {TOP_BAR_TICKERS.map(({ ticker, label, color }) => {
+          const entry      = marketData[ticker] || {};
+          const price      = entry.price;
+          const changePct  = entry.change;
+          const pos        = (changePct ?? 0) >= 0;
+          const changeColor = changePct == null ? "#475569" : pos ? "#10b981" : "#ef4444";
+          const sessionLabel = entry?.session === "POST" || entry?.session === "CLOSED" ? "AH"
+                             : entry?.session === "PRE" ? "PM" : null;
+          // Reverse-engineer absolute point/dollar change from price + percentage
+          let absChange = "—";
+          if (price != null && changePct != null) {
+            const prevPrice = price / (1 + (changePct / 100));
+            const diff = price - prevPrice;
+            absChange = (diff >= 0 ? "+" : "") + diff.toFixed(2);
+          }
+
+          return (
+            <div key={ticker} style={{
+              display: "flex", flexDirection: "column", justifyContent: "center",
+              padding: "6px 10px 4px", borderRadius: 3,
+              background: "linear-gradient(to bottom, #1c1c1c, #111)",
+              border: "1px solid #222",
+              fontFamily: "'Roboto Condensed', sans-serif",
+              flex: "1 1 0", minWidth: 0, boxSizing: "border-box",
+              overflow: "hidden",
+            }}>
+              {/* Row 1: Label + session badge | abs change */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color, letterSpacing: "0.04em", whiteSpace: "nowrap" }}>{label}</span>
+                  {sessionLabel && <span style={{ fontSize: 7, fontWeight: 800, color: "#94a3b8", background: "#171717", border: "1px solid #333", borderRadius: 2, padding: "1px 3px", flexShrink: 0 }}>{sessionLabel}</span>}
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 700, color: changeColor, whiteSpace: "nowrap", flexShrink: 0 }}>{absChange}</span>
+              </div>
+              {/* Row 2: Price | % change */}
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2, gap: 4 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#f8fafc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{formatPrice(price, ticker)}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: changeColor, whiteSpace: "nowrap", flexShrink: 0 }}>
+                  {changePct != null ? `${pos ? "+" : ""}${changePct.toFixed(2)}%` : "—"}
+                </span>
+              </div>
+              <BloombergChart data={entry.chartData} timestamps={entry.chartTimestamps} color={changeColor} />
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Market Clock — always full size, never compressed */}
+      <div ref={clockRef} style={{ flexShrink: 0, marginLeft: 14 }}>
+        <MarketClock />
+      </div>
+    </div>
+  );
+}
+
 function MarketClock() {
   const [tick, setTick] = useState(() => Date.now());
 
@@ -2136,71 +2252,7 @@ export default function App() {
       <div style={{ position: "relative", zIndex: 1, minHeight: "100vh", color: "#fff" }}>
         
         {/* FIXED TOP BAR: 6 Tickers + Market Clock */}
-        <div style={{
-          position: "fixed", top: 0, left: 0, right: 0, zIndex: 1000,
-          display: "flex", alignItems: "center", justifyContent: "space-between",
-          padding: "0 16px", height: 72,
-          background: "rgba(14,14,14,0.98)",
-          borderBottom: "1px solid rgba(255,255,255,.07)",
-          backdropFilter: "blur(12px)",
-          boxShadow: "0 2px 20px rgba(0,0,0,0.7)"
-        }}>
-          {/* 6 Tickers in a row */}
-          <div style={{ display: "flex", alignItems: "stretch", gap: 5, flex: 1 }}>
-            {[
-              { ticker: "^GSPC",   label: "S&P 500", color: "#60a5fa" },
-              { ticker: "^DJI",    label: "DOW",     color: "#34d399" },
-              { ticker: "^IXIC",   label: "NASDAQ",  color: "#c084fc" },
-              { ticker: "BTC-USD", label: "BTC",     color: "#f59e0b" },
-              { ticker: "ETH-USD", label: "ETH",     color: "#60a5fa" },
-              { ticker: "XRP-USD", label: "XRP",     color: "#34d399" },
-            ].map(({ ticker, label, color }) => {
-              const entry = marketData[ticker] || {};
-              const price = entry.price;
-              const changePct = entry.change;
-              const pos = (changePct ?? 0) >= 0;
-              const changeColor = changePct === undefined || changePct === null ? "#475569" : pos ? "#10b981" : "#ef4444";
-              const formatPrice = (p, t) => {
-                if (p == null) return "—";
-                if (t === "BTC-USD" || t === "ETH-USD") return p.toLocaleString("en-US", { maximumFractionDigits: 0, useGrouping: true });
-                if (t === "XRP-USD") return p.toFixed(4);
-                return p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true });
-              };
-              const sessionLabel = entry?.session === "POST" || entry?.session === "CLOSED" ? "AH" : entry?.session === "PRE" ? "PM" : null;
-              return (
-                <div key={ticker} style={{
-                  display: "flex", flexDirection: "column", justifyContent: "center",
-                  padding: "6px 10px 4px", borderRadius: 3,
-                  background: "linear-gradient(to bottom, #1c1c1c, #111)",
-                  border: "1px solid #222",
-                  fontFamily: "'Roboto Condensed', sans-serif",
-                  minWidth: 148, flexShrink: 0,
-                  boxSizing: "border-box",
-                }}>
-                  {/* Label + session badge */}
-                  <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 1 }}>
-                    <span style={{ fontSize: 11, fontWeight: 800, color, letterSpacing: "0.04em" }}>{label}</span>
-                    {sessionLabel && <span style={{ fontSize: 7, fontWeight: 800, color: "#94a3b8", background: "#171717", border: "1px solid #333", borderRadius: 2, padding: "1px 3px" }}>{sessionLabel}</span>}
-                  </div>
-                  {/* Price + change% */}
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "#f8fafc" }}>{formatPrice(price, ticker)}</span>
-                    <span style={{ fontSize: 11, fontWeight: 700, color: changeColor }}>
-                      {changePct != null ? `${pos ? "+" : ""}${changePct.toFixed(2)}%` : "—"}
-                    </span>
-                  </div>
-                  {/* Mini sparkline chart */}
-                  <BloombergChart data={entry.chartData} timestamps={entry.chartTimestamps} color={changeColor} />
-                </div>
-              );
-            })}
-          </div>
-
-          {/* Market Clock — right side */}
-          <div style={{ display: "flex", alignItems: "center", flexShrink: 0, marginLeft: 14 }}>
-            <MarketClock />
-          </div>
-        </div>
+        <TopBar marketData={marketData} />
 
         {/* HEADER (below fixed bar) */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", marginTop: 72, borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
