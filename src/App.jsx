@@ -1230,36 +1230,35 @@ function DonutChart({ prices, capexData, capexIntel, capexIntelStatus, capexInte
 
 // ── WATCHLIST ─────────────────────────────────────────────
 function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSaveShortlist }) {
-  const [tab, setTab]             = useState("watch");
-  const [watchList, setWatchList] = useState(() => [...new Set(capexData.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))]);
-  const [input, setInput]         = useState("");
-
-  const [sortDir, setSortDir]     = useState("desc");
-  const [filter, setFilter]       = useState("all");
-
-  useEffect(() => {
-    const capexTickers = [...new Set(capexData.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))];
-    setWatchList(prev => {
-      const prevSet = new Set(prev);
-      const incoming = capexTickers.filter(t => !prevSet.has(t));
-      return incoming.length ? [...prev, ...incoming] : prev;
-    });
-  }, [capexData]);
+  const [tab, setTab]         = useState("watch");
+  const [input, setInput]     = useState("");
+  const [sortDir, setSortDir] = useState("desc");
+  const [filter, setFilter]   = useState("all");
 
   const isShort = tab === "short";
-  const list    = isShort ? shortList : watchList;
   const accent  = isShort ? "#f59e0b" : "#60a5fa";
+
+  // Watchlist is always derived live from capexData — no local state needed
+  const watchList = useMemo(
+    () => [...new Set(capexData.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))],
+    [capexData]
+  );
+
+  const list = isShort ? shortList : watchList;
 
   function switchTab(t) { setTab(t); setFilter("all"); setInput(""); }
 
   function addTicker(sym) {
-    if (!sym || list.includes(sym)) return;
-    if (isShort) { onSaveShortlist([...shortList, sym]); }
-    else { setWatchList(l => [...l, sym]); }
+    if (!sym || shortList.includes(sym)) return;
+    onSaveShortlist([...shortList, sym]);
   }
   function removeTicker(sym) {
-    if (isShort) { onSaveShortlist(shortList.filter(x => x !== sym)); }
-    else { setWatchList(l => l.filter(x => x !== sym)); }
+    onSaveShortlist(shortList.filter(x => x !== sym));
+  }
+
+  function handleAdd() {
+    const sym = input.trim().toUpperCase();
+    if (sym) { addTicker(sym); setInput(""); }
   }
 
   const sectorMap = useMemo(() => {
@@ -1279,11 +1278,6 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
     : ((typeof a.change === 'number' ? a.change : 999)  - (typeof b.change === 'number' ? b.change : 999)));
   const validChanges = filtered.filter(x => typeof x.change === 'number');
   const avg          = validChanges.reduce((s, x) => s + x.change, 0) / (validChanges.length || 1);
-
-  function handleAdd() {
-    const sym = input.trim().toUpperCase();
-    if (sym) { addTicker(sym); setInput(""); }
-  }
 
   return (
     <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, display: "flex", flexDirection: "column", gap: 14, height: "100%" }}>
@@ -1307,28 +1301,34 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
         </div>
       </div>
 
-      {isShort && (
+      {isShort ? (
         <p style={{ fontSize: 11, color: "#64748b", margin: 0, marginTop: -6 }}>
           Potential investment opportunities · shared with all users
         </p>
+      ) : (
+        <p style={{ fontSize: 11, color: "#475569", margin: 0, marginTop: -6, display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ color: "#334155" }}>⟳</span> Auto-synced from Portfolio Heat Map
+        </p>
       )}
 
-      {isShort && !isAdmin ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", borderRadius: 8, padding: "10px 14px" }}>
-          <span style={{ fontSize: 14 }}>🔒</span>
-          <span style={{ fontSize: 12, color: "#64748b" }}>Login to add or remove tickers from the Shortlist</span>
-        </div>
-      ) : (
-        <div style={{ display: "flex", gap: 8 }}>
-          <input
-            value={input}
-            onChange={e => setInput(e.target.value.toUpperCase())}
-            onKeyDown={e => e.key === "Enter" && handleAdd()}
-            placeholder={isShort ? "Add opportunity… e.g. NVDA" : "Add ticker… e.g. NVDA"}
-            style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "7px 12px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit", outline: "none" }}
-          />
-          <button onClick={handleAdd} style={{ background: `${accent}1a`, border: `1px solid ${accent}40`, color: accent, borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>+ Add</button>
-        </div>
+      {isShort && (
+        !isAdmin ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", borderRadius: 8, padding: "10px 14px" }}>
+            <span style={{ fontSize: 14 }}>🔒</span>
+            <span style={{ fontSize: 12, color: "#64748b" }}>Login to add or remove tickers from the Shortlist</span>
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              value={input}
+              onChange={e => setInput(e.target.value.toUpperCase())}
+              onKeyDown={e => e.key === "Enter" && handleAdd()}
+              placeholder="Add opportunity… e.g. NVDA"
+              style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "7px 12px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit", outline: "none" }}
+            />
+            <button onClick={handleAdd} style={{ background: `${accent}1a`, border: `1px solid ${accent}40`, color: accent, borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>+ Add</button>
+          </div>
+        )
       )}
 
       <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
@@ -1402,7 +1402,7 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
               <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, fontSize: 13, fontWeight: 700, minWidth: 68, textAlign: "right", color: typeof item.change !== 'number' ? "#334155" : pos ? "#34d399" : "#f87171" }}>
                 {typeof item.change !== 'number' ? "—" : <><span style={{ fontSize: 10 }}>{pos ? "▲" : "▼"}</span>{Math.abs(item.change).toFixed(2)}%</>}
               </div>
-              <button onClick={() => removeTicker(item.ticker)} style={{ background: "none", border: "none", color: "#1e293b", cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1, transition: "color .15s", fontFamily: "inherit", visibility: isShort && !isAdmin ? "hidden" : "visible" }} onMouseEnter={e => e.currentTarget.style.color = "#ef4444"} onMouseLeave={e => e.currentTarget.style.color = "#1e293b"}>×</button>
+              <button onClick={() => removeTicker(item.ticker)} style={{ background: "none", border: "none", color: "#1e293b", cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1, transition: "color .15s", fontFamily: "inherit", visibility: !isShort || !isAdmin ? "hidden" : "visible" }} onMouseEnter={e => e.currentTarget.style.color = "#ef4444"} onMouseLeave={e => e.currentTarget.style.color = "#1e293b"}>×</button>
             </div>
           );
         })}
