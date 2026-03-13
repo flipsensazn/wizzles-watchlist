@@ -1960,6 +1960,8 @@ export default function App() {
       try {
         const stripTickers = [...INDEX_TICKERS, ...CRYPTO_TICKERS];
         const data = await fetchAllPrices(stripTickers);
+        const count = Object.keys(data).length;
+        console.debug(`[strip] fast-refresh received ${count} tickers`, data);
         setMarketData(prev => {
           const merged = { ...prev };
           stripTickers.forEach(ticker => {
@@ -1968,8 +1970,8 @@ export default function App() {
           });
           return merged;
         });
-      } catch {
-        // silent — full 30s refresh will catch up
+      } catch (err) {
+        console.warn("[strip] fast-refresh error:", err);
       }
     };
     const id = setInterval(fastRefresh, 5000);
