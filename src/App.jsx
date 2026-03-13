@@ -1961,12 +1961,16 @@ export default function App() {
         const stripTickers = [...INDEX_TICKERS, ...CRYPTO_TICKERS];
         const data = await fetchAllPrices(stripTickers);
         const count = Object.keys(data).length;
-        console.debug(`[strip] fast-refresh received ${count} tickers`, data);
+        console.log(`[strip] fast-refresh received ${count} tickers`, data);
         setMarketData(prev => {
           const merged = { ...prev };
           stripTickers.forEach(ticker => {
             const val = data[ticker];
-            if (val != null) merged[ticker] = val;
+            if (val != null) {
+              // Shallow-merge at the per-ticker level so chartData written by
+              // the 30s refresh is preserved — fast path only updates price/change/session
+              merged[ticker] = { ...prev[ticker], ...val };
+            }
           });
           return merged;
         });
