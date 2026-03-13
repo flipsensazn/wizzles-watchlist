@@ -54,15 +54,32 @@ def yf_download_with_retry(tickers_str, max_retries=4):
     return None
 
 
-def fast_info_with_retry(symbol, max_retries=4):
+def yf_ticker_data_with_retry(symbol, max_retries=4):
     """
-    Fetches yf.Ticker.fast_info with exponential backoff on rate limit errors.
-    Returns the fast_info object or None if all retries fail.
+    Fetches both fast_info (market cap, 52W range) and info (sector, industry,
+    company name) for a single ticker with exponential backoff on rate limits.
+
+    Returns a dict: { 'fast_info': <obj>, 'sector': str, 'industry': str, 'name': str }
+    or None if all retries fail.
+
+    Why .info and not fast_info for sector/name?
+    fast_info only exposes numeric market data. Sector, industry, and company
+    name live in the full .info dict — same HTTP call Yahoo would serve anyway.
+    We only call this on tickers that passed the volume gate (~500–800 tickers),
+    so the extra latency is acceptable.
     """
     delay = 20
     for attempt in range(max_retries):
         try:
-            return yf.Ticker(symbol).fast_info
+            t        = yf.Ticker(symbol)
+            fi       = t.fast_info
+            info     = t.info  # heavier call — has sector/industry/longName
+            return {
+                'fast_info': fi,
+                'sector':    info.get('sector')   or '',
+                'industry':  info.get('industry') or '',
+                'name':      info.get('longName') or info.get('shortName') or '',
+            }
         except Exception as e:
             err = str(e).lower()
             if "rate" in err or "429" in err or "too many" in err:
@@ -179,16 +196,17 @@ def apply_gates(symbols):
     vol_passed = [s for s, v in price_vol.items() if v['avg_dollar_vol'] >= 250_000]
     print(f"{len(vol_passed)} symbols passed price/volume gate.")
 
-    # Gate 2 — market cap + 52W range, per surviving ticker with retry
+    # Gate 2 — market cap, 52W range, sector, industry, name per surviving ticker
     candidates = []
-    print(f"Fetching market cap + 52W range for {len(vol_passed)} survivors...")
+    print(f"Fetching market cap, sector, and name for {len(vol_passed)} survivors...")
 
     for i, symbol in enumerate(vol_passed):
-        fi = fast_info_with_retry(symbol)
-        if fi is None:
+        ticker_data = yf_ticker_data_with_retry(symbol)
+        if ticker_data is None:
             continue
 
         try:
+            fi          = ticker_data['fast_info']
             cap_m       = (fi.market_cap or 0) / 1_000_000
             week52_low  = fi.year_low  or 0
             week52_high = fi.year_high or 0
@@ -201,9 +219,12 @@ def apply_gates(symbols):
             )
 
             if 25 <= cap_m <= 2000:
-                print(f"  PASSED: {symbol} | ${price:.2f} | ${cap_m:.0f}M")
+                print(f"  PASSED: {symbol} | ${price:.2f} | ${cap_m:.0f}M | {ticker_data['sector'] or 'n/a'}")
                 candidates.append({
                     'ticker':             symbol,
+                    'company_name':       ticker_data['name'],
+                    'sector':             ticker_data['sector'],
+                    'industry':           ticker_data['industry'],
                     'price':              price,
                     'market_cap':         cap_m,
                     'avg_dollar_vol_20d': dollar_vol,
@@ -215,7 +236,7 @@ def apply_gates(symbols):
             print(f"  Error processing {symbol}: {e}")
             continue
 
-        # Pause every 25 fast_info calls — Yahoo's per-connection limit is low
+        # Pause every 25 ticker calls — Yahoo's per-connection limit is low
         if i > 0 and i % 25 == 0:
             pause = 5 + random.uniform(0, 3)
             print(f"  ({i}/{len(vol_passed)}) Pausing {pause:.1f}s...")
@@ -435,7 +456,10 @@ def load_to_db(df):
             ADD COLUMN IF NOT EXISTS pct_above_52w_low   DOUBLE PRECISION,
             ADD COLUMN IF NOT EXISTS week52_low          DOUBLE PRECISION,
             ADD COLUMN IF NOT EXISTS week52_high         DOUBLE PRECISION,
-            ADD COLUMN IF NOT EXISTS total_debt          DOUBLE PRECISION;
+            ADD COLUMN IF NOT EXISTS total_debt          DOUBLE PRECISION,
+            ADD COLUMN IF NOT EXISTS company_name        TEXT,
+            ADD COLUMN IF NOT EXISTS sector              TEXT,
+            ADD COLUMN IF NOT EXISTS industry            TEXT;
     """
 
     df['as_of_date'] = date.today()
@@ -444,6 +468,9 @@ def load_to_db(df):
     col_map = [
         ('as_of_date',               'as_of_date'),
         ('ticker',                   'ticker'),
+        ('company_name',             'company_name'),
+        ('sector',                   'sector'),
+        ('industry',                 'industry'),
         ('market_cap',               'market_cap'),
         ('price',                    'price'),
         ('avg_dollar_vol_20d',       'avg_dollar_vol_20d'),
