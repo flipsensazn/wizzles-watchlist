@@ -617,7 +617,7 @@ function BloombergChart({ data, timestamps, color }) {
     </div>
   );
 
-  const width = 160;
+  const vbWidth = 160;
   const height = 24;
   
   // Find the separator between yesterday and today
@@ -648,7 +648,7 @@ function BloombergChart({ data, timestamps, color }) {
   const yMax = max + (yRange * 0.1);
   const scaleY = yMax - yMin;
 
-  const getX = (idx) => (idx / (data.length - 1)) * width;
+  const getX = (idx) => (idx / (data.length - 1)) * vbWidth;
   const getY = (val) => height - ((val - yMin) / scaleY) * height;
 
   const part1 = validData.filter(d => d.idx <= splitIndex);
@@ -659,11 +659,18 @@ function BloombergChart({ data, timestamps, color }) {
   const splitX = getX(splitIndex);
 
   return (
-    <div style={{ height, marginTop: 4, position: "relative", zIndex: 0 }}>
-      <svg width={width} height={height} style={{ overflow: "visible", display: "block" }}>
-        <line x1={splitX} y1={0} x2={splitX} y2={height} stroke="rgba(255,255,255,0.4)" strokeWidth="1" strokeDasharray="2,2" />
-        {path1 && <path d={path1} fill="none" stroke="#f8fafc" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />}
-        {path2 && <path d={path2} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />}
+    <div style={{ height, marginTop: 4, position: "relative", zIndex: 0, overflow: "hidden" }}>
+      <svg width="100%" height={height} viewBox={`0 0 ${vbWidth} ${height}`} preserveAspectRatio="none" style={{ overflow: "hidden", display: "block" }}>
+        <defs>
+          <clipPath id="bloomberg-clip">
+            <rect x="0" y="0" width={vbWidth} height={height} />
+          </clipPath>
+        </defs>
+        <g clipPath="url(#bloomberg-clip)">
+          <line x1={splitX} y1={0} x2={splitX} y2={height} stroke="rgba(255,255,255,0.4)" strokeWidth="1" strokeDasharray="2,2" />
+          {path1 && <path d={path1} fill="none" stroke="#f8fafc" strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />}
+          {path2 && <path d={path2} fill="none" stroke={color} strokeWidth="1.5" strokeLinejoin="round" strokeLinecap="round" />}
+        </g>
       </svg>
     </div>
   );
@@ -699,7 +706,7 @@ function MarketStrip({ data, tickers, labels, colors }) {
         return (
           <div key={ticker} style={{
             display: "flex", flexDirection: "column",
-            padding: "6px 10px", borderRadius: 2, minWidth: 160,
+            padding: "6px 10px", borderRadius: 2, width: 160, flexShrink: 0, boxSizing: "border-box",
             background: "linear-gradient(to bottom, #262626, #0a0a0a)", 
             border: "1px solid #171717",
             boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 2px 4px rgba(0,0,0,0.5)",
@@ -932,7 +939,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
   }
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20 }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, height: "100%", overflowY: "auto", boxSizing: "border-box" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
         <div>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Portfolio Heat Map</h3>
@@ -957,7 +964,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
               {track.label}
               <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg,${track.color}44,transparent)` }} />
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, minHeight: 40 }}>
               {cells.map(ticker => {
                 const entry = prices[ticker];
                 const change = entry?.change ?? entry;
@@ -986,6 +993,11 @@ function HeatMap({ prices, capexData, onTickerClick }) {
                         : bg,
                       borderRadius: 8,
                       padding: "8px 12px",
+                      height: 48,
+                      display: "flex",
+                      flexDirection: "column",
+                      justifyContent: "center",
+                      alignItems: "center",
                       border: near52W
                         ? "1px solid #f59e0b"
                         : near52WH
@@ -1127,7 +1139,7 @@ function DonutChart({ prices, capexData, capexIntel, capexIntelStatus, capexInte
   const hov = hovered ? segments.find(s => s.track.id === hovered) : null;
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20 }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, height: "100%", overflowY: "auto", boxSizing: "border-box" }}>
       <div style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Sector Allocation</h3>
@@ -1218,36 +1230,35 @@ function DonutChart({ prices, capexData, capexIntel, capexIntelStatus, capexInte
 
 // ── WATCHLIST ─────────────────────────────────────────────
 function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSaveShortlist }) {
-  const [tab, setTab]             = useState("watch");
-  const [watchList, setWatchList] = useState(() => [...new Set(capexData.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))]);
-  const [input, setInput]         = useState("");
-
-  const [sortDir, setSortDir]     = useState("desc");
-  const [filter, setFilter]       = useState("all");
-
-  useEffect(() => {
-    const capexTickers = [...new Set(capexData.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))];
-    setWatchList(prev => {
-      const prevSet = new Set(prev);
-      const incoming = capexTickers.filter(t => !prevSet.has(t));
-      return incoming.length ? [...prev, ...incoming] : prev;
-    });
-  }, [capexData]);
+  const [tab, setTab]         = useState("watch");
+  const [input, setInput]     = useState("");
+  const [sortDir, setSortDir] = useState("desc");
+  const [filter, setFilter]   = useState("all");
 
   const isShort = tab === "short";
-  const list    = isShort ? shortList : watchList;
   const accent  = isShort ? "#f59e0b" : "#60a5fa";
+
+  // Watchlist is always derived live from capexData — no local state needed
+  const watchList = useMemo(
+    () => [...new Set(capexData.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))],
+    [capexData]
+  );
+
+  const list = isShort ? shortList : watchList;
 
   function switchTab(t) { setTab(t); setFilter("all"); setInput(""); }
 
   function addTicker(sym) {
-    if (!sym || list.includes(sym)) return;
-    if (isShort) { onSaveShortlist([...shortList, sym]); }
-    else { setWatchList(l => [...l, sym]); }
+    if (!sym || shortList.includes(sym)) return;
+    onSaveShortlist([...shortList, sym]);
   }
   function removeTicker(sym) {
-    if (isShort) { onSaveShortlist(shortList.filter(x => x !== sym)); }
-    else { setWatchList(l => l.filter(x => x !== sym)); }
+    onSaveShortlist(shortList.filter(x => x !== sym));
+  }
+
+  function handleAdd() {
+    const sym = input.trim().toUpperCase();
+    if (sym) { addTicker(sym); setInput(""); }
   }
 
   const sectorMap = useMemo(() => {
@@ -1267,11 +1278,6 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
     : ((typeof a.change === 'number' ? a.change : 999)  - (typeof b.change === 'number' ? b.change : 999)));
   const validChanges = filtered.filter(x => typeof x.change === 'number');
   const avg          = validChanges.reduce((s, x) => s + x.change, 0) / (validChanges.length || 1);
-
-  function handleAdd() {
-    const sym = input.trim().toUpperCase();
-    if (sym) { addTicker(sym); setInput(""); }
-  }
 
   return (
     <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, display: "flex", flexDirection: "column", gap: 14, height: "100%" }}>
@@ -1295,28 +1301,34 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
         </div>
       </div>
 
-      {isShort && (
+      {isShort ? (
         <p style={{ fontSize: 11, color: "#64748b", margin: 0, marginTop: -6 }}>
           Potential investment opportunities · shared with all users
         </p>
+      ) : (
+        <p style={{ fontSize: 11, color: "#475569", margin: 0, marginTop: -6, display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ color: "#334155" }}>⟳</span> Auto-synced from Portfolio Heat Map
+        </p>
       )}
 
-      {isShort && !isAdmin ? (
-        <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", borderRadius: 8, padding: "10px 14px" }}>
-          <span style={{ fontSize: 14 }}>🔒</span>
-          <span style={{ fontSize: 12, color: "#64748b" }}>Login to add or remove tickers from the Shortlist</span>
-        </div>
-      ) : (
-        <div style={{ display: "flex", gap: 8 }}>
-          <input
-            value={input}
-            onChange={e => setInput(e.target.value.toUpperCase())}
-            onKeyDown={e => e.key === "Enter" && handleAdd()}
-            placeholder={isShort ? "Add opportunity… e.g. NVDA" : "Add ticker… e.g. NVDA"}
-            style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "7px 12px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit", outline: "none" }}
-          />
-          <button onClick={handleAdd} style={{ background: `${accent}1a`, border: `1px solid ${accent}40`, color: accent, borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>+ Add</button>
-        </div>
+      {isShort && (
+        !isAdmin ? (
+          <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", borderRadius: 8, padding: "10px 14px" }}>
+            <span style={{ fontSize: 14 }}>🔒</span>
+            <span style={{ fontSize: 12, color: "#64748b" }}>Login to add or remove tickers from the Shortlist</span>
+          </div>
+        ) : (
+          <div style={{ display: "flex", gap: 8 }}>
+            <input
+              value={input}
+              onChange={e => setInput(e.target.value.toUpperCase())}
+              onKeyDown={e => e.key === "Enter" && handleAdd()}
+              placeholder="Add opportunity… e.g. NVDA"
+              style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "7px 12px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit", outline: "none" }}
+            />
+            <button onClick={handleAdd} style={{ background: `${accent}1a`, border: `1px solid ${accent}40`, color: accent, borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>+ Add</button>
+          </div>
+        )
       )}
 
       <div style={{ display: "flex", gap: 5, alignItems: "center", flexWrap: "wrap" }}>
@@ -1390,7 +1402,7 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
               <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, fontSize: 13, fontWeight: 700, minWidth: 68, textAlign: "right", color: typeof item.change !== 'number' ? "#334155" : pos ? "#34d399" : "#f87171" }}>
                 {typeof item.change !== 'number' ? "—" : <><span style={{ fontSize: 10 }}>{pos ? "▲" : "▼"}</span>{Math.abs(item.change).toFixed(2)}%</>}
               </div>
-              <button onClick={() => removeTicker(item.ticker)} style={{ background: "none", border: "none", color: "#1e293b", cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1, transition: "color .15s", fontFamily: "inherit", visibility: isShort && !isAdmin ? "hidden" : "visible" }} onMouseEnter={e => e.currentTarget.style.color = "#ef4444"} onMouseLeave={e => e.currentTarget.style.color = "#1e293b"}>×</button>
+              <button onClick={() => removeTicker(item.ticker)} style={{ background: "none", border: "none", color: "#1e293b", cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1, transition: "color .15s", fontFamily: "inherit", visibility: !isShort || !isAdmin ? "hidden" : "visible" }} onMouseEnter={e => e.currentTarget.style.color = "#ef4444"} onMouseLeave={e => e.currentTarget.style.color = "#1e293b"}>×</button>
             </div>
           );
         })}
@@ -1530,7 +1542,7 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
         </div>
       )}
 
-      <div style={{ flex: 1, overflowY: "auto", minHeight: 0, paddingRight: 4 }}>
+      <div style={{ flex: 1, overflowY: "auto", minHeight: 400, paddingRight: 4 }}>
         {error && (
           <div style={{ padding: "12px 8px", color: "#f87171", fontSize: 12 }}>⚠ {error} — showing live-scored fallback.</div>
         )}
@@ -1799,12 +1811,12 @@ const GLOBAL_STYLES = `
   .bottom-grid-all { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
   .span-2 { grid-column: span 2; }
   .span-1 { grid-column: span 1; }
-  .panel-wrapper { position: relative; height: 100%; min-height: 420px; }
+  .panel-wrapper { position: relative; height: 600px; min-height: 600px; }
   .panel-inner { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
   @media (max-width: 1024px) {
     .bottom-grid-all { grid-template-columns: 1fr !important; }
     .span-2, .span-1 { grid-column: 1 / -1 !important; }
-    .panel-wrapper { min-height: 450px; }
+    .panel-wrapper { min-height: 500px; height: auto; }
     .panel-inner { position: relative; height: 100%; }
   }
   @media (max-width: 640px) {
@@ -2172,7 +2184,9 @@ export default function App() {
         <div className="main-content" style={{ maxWidth: 1480, margin: "0 auto", padding: "32px 28px", display: "flex", flexDirection: "column", gap: 28 }}>
           
           <div className="top-node-layout" style={{ display: "flex", alignItems: "flex-start", justifyContent: "center" }}>
-            <MarketStrip data={marketData} tickers={["^GSPC","^DJI","^IXIC"]} labels={["S&P 500","DOW","NASDAQ"]} colors={["#60a5fa","#34d399","#c084fc"]} />
+            <div style={{ width: 180, flexShrink: 0 }}>
+              <MarketStrip data={marketData} tickers={["^GSPC","^DJI","^IXIC"]} labels={["S&P 500","DOW","NASDAQ"]} colors={["#60a5fa","#34d399","#c084fc"]} />
+            </div>
             <div className="top-node-center" style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "0 0 auto" }}>
               <div style={{ 
                 width: 540, 
@@ -2226,7 +2240,9 @@ export default function App() {
                 {capexData.tracks.map((_, i, arr) => <div key={i} style={{ position: "absolute", top: 0, left: `${(i / (arr.length - 1)) * 70 + 15}%`, width: 1, height: 18, background: "linear-gradient(to bottom,rgba(255,255,255,.15),transparent)" }} />)}
               </div>
             </div>
-            <MarketStrip data={marketData} tickers={["BTC-USD","ETH-USD","XRP-USD"]} labels={["BTC","ETH","XRP"]} colors={["#f59e0b","#60a5fa","#34d399"]} />
+            <div style={{ width: 180, flexShrink: 0 }}>
+              <MarketStrip data={marketData} tickers={["BTC-USD","ETH-USD","XRP-USD"]} labels={["BTC","ETH","XRP"]} colors={["#f59e0b","#60a5fa","#34d399"]} />
+            </div>
           </div>
 
           <div className="track-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(0,1fr))", gap: 10, paddingTop: 8 }}>
@@ -2250,9 +2266,9 @@ export default function App() {
             
             {bottomTab === "all" ? (
               <div className="bottom-grid-all">
-                <div className="span-2"><HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} /></div>
+                <div className="span-2 panel-wrapper"><div className="panel-inner"><HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} /></div></div>
                 <div className="span-1 panel-wrapper"><div className="panel-inner"><Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} /></div></div>
-                <div className="span-1"><DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} capexIntelStatus={capexIntelStatus} capexIntelError={capexIntelError} /></div>
+                <div className="span-1 panel-wrapper"><div className="panel-inner"><DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} capexIntelStatus={capexIntelStatus} capexIntelError={capexIntelError} /></div></div>
                 <div className="span-2 panel-wrapper"><div className="panel-inner"><MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} /></div></div>
               </div>
             ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} />
