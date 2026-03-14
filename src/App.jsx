@@ -1606,7 +1606,7 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
         {sorted.map((item, idx) => {
           const pos  = (typeof item.change === 'number' ? item.change : 0) >= 0;
           return (
-            <div key={item.ticker} style={{ borderRadius: 8, padding: isMobile ? "8px 6px" : "12px 10px", display: "flex", alignItems: "center", gap: isMobile ? 6 : 10, borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background .15s", minWidth: 0, overflow: "hidden" }}
+            <div key={item.ticker} style={{ borderRadius: 8, padding: isMobile ? "8px 6px" : "12px 10px", display: "flex", alignItems: "flex-end", gap: isMobile ? 6 : 10, borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background .15s", minWidth: 0, overflow: "hidden" }}
               onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
               onMouseLeave={e => e.currentTarget.style.background = ""}>
               <span style={{ fontSize: 10, color: "#334155", width: 16, textAlign: "right" }}>{idx + 1}</span>
@@ -1629,20 +1629,27 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
                 const dotColor = pos ? "#34d399" : "#f87171";
                 
                 return (
-                  <div className="range-52w" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3, fontFamily: "monospace", minWidth: 100 }}>
+                  <div className="range-52w" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, fontFamily: "monospace", minWidth: 100, overflow: "visible" }}>
                     {has52W ? (
                       <>
-                        {/* Bar + dot + current price label above dot */}
-                        <div style={{ position: "relative", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2, marginTop: 14, overflow: "visible" }}>
-                          <div style={{ position: "absolute", left: `${dotPos}%`, top: "50%", transform: "translate(-50%, -50%)", zIndex: 2 }}>
-                            <div style={{ position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)", marginBottom: 3, background: "rgba(24,24,24,0.85)", padding: "1px 5px", borderRadius: 4, fontSize: 8.5, fontWeight: 700, color: "#e2e8f0", whiteSpace: "nowrap" }}>
-                              ${pLive.toFixed(2)}
-                            </div>
-                            <div style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, boxShadow: `0 0 6px ${dotColor}88` }} />
-                          </div>
+                        {/* Current price label — normal flow, no absolute positioning */}
+                        <div style={{ position: "relative", height: 16 }}>
+                          <span style={{
+                            position: "absolute",
+                            left: `${dotPos}%`,
+                            transform: "translateX(-50%)",
+                            background: "rgba(24,24,24,0.85)",
+                            padding: "1px 5px", borderRadius: 4,
+                            fontSize: 8.5, fontWeight: 700, color: "#e2e8f0",
+                            whiteSpace: "nowrap", pointerEvents: "none",
+                          }}>${pLive.toFixed(2)}</span>
+                        </div>
+                        {/* Track bar + dot */}
+                        <div style={{ position: "relative", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2 }}>
+                          <div style={{ position: "absolute", left: `${dotPos}%`, top: "50%", transform: "translate(-50%, -50%)", width: 8, height: 8, borderRadius: "50%", background: dotColor, boxShadow: `0 0 6px ${dotColor}88` }} />
                         </div>
                         {/* Low / High labels below the bar */}
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, color: "#475569" }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, color: "#475569", marginTop: 2 }}>
                           <span>{w52L}</span>
                           <span>{w52H}</span>
                         </div>
