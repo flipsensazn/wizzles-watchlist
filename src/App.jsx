@@ -1164,7 +1164,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
   }
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, height: "100%", overflowY: "auto", boxSizing: "border-box" }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, height: "100%", overflowY: "auto", overflowX: "hidden", boxSizing: "border-box" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
         <div>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Portfolio Heat Map</h3>
@@ -1364,7 +1364,7 @@ function DonutChart({ prices, capexData, capexIntel, capexIntelStatus, capexInte
   const hov = hovered ? segments.find(s => s.track.id === hovered) : null;
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, height: "100%", overflowY: "auto", boxSizing: "border-box" }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, height: "100%", overflowY: "auto", overflowX: "hidden", boxSizing: "border-box" }}>
       <div style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Sector Allocation</h3>
@@ -1788,7 +1788,7 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
         </div>
       )}
 
-      <div style={{ flex: 1, overflowY: "auto", minHeight: 400, paddingRight: 4 }}>
+      <div style={{ flex: 1, overflowY: "auto", overflowX: "auto", minHeight: 400, paddingRight: 4, WebkitOverflowScrolling: "touch" }}>
         {error && (
           <div style={{ padding: "12px 8px", color: "#f87171", fontSize: 12 }}>⚠ {error} — showing live-scored fallback.</div>
         )}
@@ -2067,15 +2067,18 @@ const GLOBAL_STYLES = `
     .panel-wrapper { min-height: 500px; height: auto; }
     .panel-inner { position: relative; height: 100%; }
   }
-  @media (max-width: 640px) {
+  @media (max-width: 767px) {
+    html, body { overflow-x: hidden; }
     .track-grid { grid-template-columns: repeat(2, minmax(0,1fr)) !important; }
     .top-node-layout { flex-direction: column !important; align-items: stretch !important; gap: 12px !important; }
-    .market-strip { flex-direction: row !important; flex-wrap: wrap !important; justify-content: center !important; padding: 0 8px !important; gap: 8px !important; }
     .top-node-center { width: 100% !important; max-width: 100% !important; }
+    .top-node-center > div:first-child { width: 100% !important; box-sizing: border-box !important; }
     .capex-number { font-size: 44px !important; }
     .subsector-grid { grid-template-columns: 1fr !important; }
-    .main-content { padding: 16px 12px !important; }
+    .main-content { padding: 12px 8px !important; }
     .header-controls { gap: 8px !important; }
+    .panel-wrapper { min-height: 400px; }
+    .bottom-grid-all { gap: 10px !important; }
   }
 `;
 
@@ -2366,7 +2369,7 @@ export default function App() {
         <TopBar marketData={marketData} />
 
         {/* HEADER — offset below fixed bar (mobile bar is ~168px, desktop ~72px) */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", marginTop: "var(--topbar-h, 72px)", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", marginTop: "var(--topbar-h, 72px)", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
           <div>
             <div style={{ fontSize: 10, color: "#2d3a52", letterSpacing: "0.35em", textTransform: "uppercase", marginBottom: 3 }}>HOW ~$600B+ IN HYPERSCALER CAPEX FLOWS THROUGH AI INFRASTRUCTURE TRACKS</div>
             <div style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", letterSpacing: "-0.01em" }}>AI Capex Flow Intelligence</div>
@@ -2431,12 +2434,12 @@ export default function App() {
           </div>
         </div>
 
-        <div className="main-content" style={{ maxWidth: 1480, margin: "0 auto", padding: "32px 28px", display: "flex", flexDirection: "column", gap: 28 }}>
+        <div className="main-content" style={{ maxWidth: 1480, margin: "0 auto", padding: "32px 28px", display: "flex", flexDirection: "column", gap: 28, overflowX: "hidden" }}>
           
           <div className="top-node-layout" style={{ display: "flex", alignItems: "flex-start", justifyContent: "center" }}>
             <div className="top-node-center" style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "0 0 auto" }}>
               <div style={{ 
-                width: 540, 
+                width: "100%", maxWidth: 540, 
                 borderRadius: 4, 
                 padding: "26px 30px", 
                 textAlign: "center", 
