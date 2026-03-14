@@ -1,4 +1,8 @@
-import { useState, useEffect, useCallback, useRef, memo, useMemo } from "react";
+import { useState, useEffect, useCallback, useRef, memo, useMemo, createContext, useContext } from "react";
+
+// ── MOBILE CONTEXT ──────────────────────────────────────
+const MobileCtx = createContext(false);
+function useMobile() { return useContext(MobileCtx); }
 
 // ── MARKET DATA ───────────────────────────────────────────
 const INDEX_TICKERS = ["^GSPC", "^DJI", "^IXIC"];
@@ -1141,6 +1145,7 @@ function getNear52WHighInfo(priceEntry) {
 }
 
 function HeatMap({ prices, capexData, onTickerClick }) {
+  const isMobile = useMobile();
   const [tooltip, setTooltip] = useState(null);
 
   const trackCells = useMemo(() =>
@@ -1164,7 +1169,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
   }
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, height: "100%", overflowY: "auto", overflowX: "hidden", boxSizing: "border-box" }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: isMobile ? "12px 8px" : 20, height: "100%", overflowY: "auto", overflowX: "hidden", boxSizing: "border-box", width: "100%" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
         <div>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Portfolio Heat Map</h3>
@@ -1189,7 +1194,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
               {track.label}
               <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg,${track.color}44,transparent)` }} />
             </div>
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6, minHeight: 40 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: isMobile ? 4 : 6, minHeight: 40 }}>
               {cells.map(ticker => {
                 const entry = prices[ticker];
                 const change = entry?.change ?? entry;
@@ -1310,6 +1315,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
 
 // ── DONUT CHART ───────────────────────────────────────────
 function DonutChart({ prices, capexData, capexIntel, capexIntelStatus, capexIntelError }) {
+  const isMobile = useMobile();
   const [hovered, setHovered] = useState(null);
   const total = useMemo(() => capexData.tracks.reduce((s, t) => s + (t.capex || 0), 0), [capexData]);
   const cx = 130, cy = 130, R = 90, r = 52;
@@ -1364,7 +1370,7 @@ function DonutChart({ prices, capexData, capexIntel, capexIntelStatus, capexInte
   const hov = hovered ? segments.find(s => s.track.id === hovered) : null;
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, height: "100%", overflowY: "auto", overflowX: "hidden", boxSizing: "border-box" }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: isMobile ? "12px 8px" : 20, height: "100%", overflowY: "auto", overflowX: "hidden", boxSizing: "border-box", width: "100%" }}>
       <div style={{ marginBottom: 16 }}>
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6 }}>
           <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Sector Allocation</h3>
@@ -1455,6 +1461,7 @@ function DonutChart({ prices, capexData, capexIntel, capexIntelStatus, capexInte
 
 // ── WATCHLIST ─────────────────────────────────────────────
 function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSaveShortlist }) {
+  const isMobile = useMobile();
   const [tab, setTab]         = useState("watch");
   const [input, setInput]     = useState("");
   const [sortDir, setSortDir] = useState("desc");
@@ -1505,7 +1512,7 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
   const avg          = validChanges.reduce((s, x) => s + x.change, 0) / (validChanges.length || 1);
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, display: "flex", flexDirection: "column", gap: 14, height: "100%" }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: isMobile ? "12px 8px" : 20, display: "flex", flexDirection: "column", gap: 14, height: "100%", boxSizing: "border-box", width: "100%", overflowX: "hidden" }}>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <div style={{ display: "flex", gap: 2, background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: 3 }}>
@@ -1598,19 +1605,27 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
         )}
         {sorted.map((item, idx) => {
           const pos  = (typeof item.change === 'number' ? item.change : 0) >= 0;
+          const pData = prices[item.ticker] || {};
+          const w52L = pData.week52Low;
+          const w52H = pData.week52High;
+          const pLive = pData.price;
+          const has52W = w52L != null && w52H != null && pLive != null && (w52H > w52L);
+          const dotPos = has52W ? Math.max(0, Math.min(100, ((pLive - w52L) / (w52H - w52L)) * 100)) : 50;
+          const dotColor = pos ? "#34d399" : "#f87171";
+
           return (
-            <div key={item.ticker} style={{ borderRadius: 8, padding: "10px 10px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background .15s" }}
+            <div key={item.ticker} style={{ borderRadius: 8, padding: "10px 10px", display: "flex", alignItems: "center", gap: isMobile ? 6 : 10, borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background .15s" }}
               onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
               onMouseLeave={e => e.currentTarget.style.background = ""}>
-              <span style={{ fontSize: 10, color: "#334155", width: 16, textAlign: "right" }}>{idx + 1}</span>
-              <div style={{ flex: "0 0 auto", minWidth: 60, cursor: "pointer" }} onClick={e => onTickerClick?.(item.ticker, e.currentTarget.getBoundingClientRect())}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{item.ticker}</div>
+              <span style={{ fontSize: 10, color: "#334155", width: 16, textAlign: "right", flexShrink: 0 }}>{idx + 1}</span>
+              <div style={{ flex: "0 0 auto", minWidth: isMobile ? 46 : 60, cursor: "pointer" }} onClick={e => onTickerClick?.(item.ticker, e.currentTarget.getBoundingClientRect())}>
+                <div style={{ fontSize: isMobile ? 11 : 13, fontWeight: 700, color: "#f1f5f9" }}>{item.ticker}</div>
                 {item.track
                   ? <div style={{ fontSize: 9, color: item.track.color, marginTop: 1 }}>{item.track.label.split(" ").slice(0,2).join(" ")}</div>
                   : isShort && <div style={{ fontSize: 9, color: "#f59e0b", marginTop: 1 }}>Shortlist</div>
                 }
               </div>
-              
+
               {/* 52W Range Tracker */}
               {(() => {
                 const pData = prices[item.ticker] || {};
@@ -1647,10 +1662,10 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
                 );
               })()}
 
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, fontSize: 13, fontWeight: 700, minWidth: 68, textAlign: "right", color: typeof item.change !== 'number' ? "#334155" : pos ? "#34d399" : "#f87171" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, fontSize: isMobile ? 11 : 13, fontWeight: 700, minWidth: isMobile ? 54 : 68, textAlign: "right", flexShrink: 0, color: typeof item.change !== 'number' ? "#334155" : pos ? "#34d399" : "#f87171" }}>
                 {typeof item.change !== 'number' ? "—" : <><span style={{ fontSize: 10 }}>{pos ? "▲" : "▼"}</span>{Math.abs(item.change).toFixed(2)}%</>}
               </div>
-              <button onClick={() => removeTicker(item.ticker)} style={{ background: "none", border: "none", color: "#1e293b", cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1, transition: "color .15s", fontFamily: "inherit", visibility: !isShort || !isAdmin ? "hidden" : "visible" }} onMouseEnter={e => e.currentTarget.style.color = "#ef4444"} onMouseLeave={e => e.currentTarget.style.color = "#1e293b"}>×</button>
+              <button onClick={() => removeTicker(item.ticker)} style={{ background: "none", border: "none", color: "#1e293b", cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1, transition: "color .15s", fontFamily: "inherit", visibility: !isShort || !isAdmin ? "hidden" : "visible", flexShrink: 0 }} onMouseEnter={e => e.currentTarget.style.color = "#ef4444"} onMouseLeave={e => e.currentTarget.style.color = "#1e293b"}>×</button>
             </div>
           );
         })}
@@ -1661,6 +1676,7 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
 
 // ── MULTIBAGGER PANEL ─────────────────────────────────────
 function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTickerClick }) {
+  const isMobile = useMobile();
   const [allData, setAllData]           = useState([]);
   const [data, setData]                 = useState([]);
   const [loading, setLoading]           = useState(true);
@@ -1737,9 +1753,9 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
   const sectors = [...new Set(allData.map(d => d.sector).filter(Boolean))].sort();
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: 20, display: "flex", flexDirection: "column", height: "100%" }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: isMobile ? "12px 8px" : 20, display: "flex", flexDirection: "column", height: "100%", boxSizing: "border-box", width: "100%", overflowX: "hidden" }}>
 
-      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12, flexShrink: 0 }}>
+      <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8, flexShrink: 0, minWidth: 0 }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24" }}>Small-cap Scanner</h3>
@@ -1790,23 +1806,15 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
         </div>
       )}
 
-      <div style={{ flex: 1, overflowY: "auto", overflowX: "auto", minHeight: 400, paddingRight: 4, WebkitOverflowScrolling: "touch" }}>
+      <div style={{ flex: 1, overflowY: "auto", overflowX: "auto", minHeight: 400, paddingRight: isMobile ? 0 : 4, WebkitOverflowScrolling: "touch" }}>
         {error && (
-          <div style={{ padding: "12px 8px", color: "#f87171", fontSize: 12 }}>⚠ {error} — showing live-scored fallback.</div>
+          <div style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "#f87171", fontSize: 12 }}>⚠ {error} — showing live-scored fallback.</div>
         )}
-        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 11, textAlign: "left" }}>
+        <table style={{ width: "100%", borderCollapse: "collapse", fontSize: isMobile ? 10 : 11, textAlign: "left" }}>
           <thead>
             <tr style={{ color: "#475569", borderBottom: "1px solid rgba(255,255,255,0.05)", position: "sticky", top: 0, background: "rgba(14,17,23,0.95)", zIndex: 10 }}>
-              <th style={{ padding: "10px 8px" }}>#</th>
-              <th style={{ padding: "10px 8px" }}>TICKER</th>
-              <th style={{ padding: "10px 8px" }}>PRICE</th>
-              <th style={{ padding: "10px 8px" }}>MKT CAP</th>
-              <th style={{ padding: "10px 8px" }}>FCF YLD</th>
-              <th style={{ padding: "10px 8px" }}>B/M</th>
-              <th style={{ padding: "10px 8px" }}>ROA</th>
-              <th style={{ padding: "10px 8px" }}>REV GR</th>
-              <th style={{ padding: "10px 8px" }}>52W LOW</th>
-              <th style={{ padding: "10px 8px", textAlign: "right" }}>SCORE</th>
+              {...['#','TICKER','PRICE','MKT CAP','FCF YLD','B/M','ROA','REV GR','52W LOW'].map((h,i) => <th key={h} style={{ padding: isMobile ? '6px 4px' : '10px 8px', whiteSpace: 'nowrap' }}>{h}</th>)}
+              <th style={{ padding: isMobile ? '6px 4px' : '10px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>SCORE</th>
               {isAdmin && <th style={{ width: 30 }}></th>}
             </tr>
           </thead>
@@ -1854,12 +1862,12 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
                   onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.03)"}
                   onMouseLeave={e => e.currentTarget.style.background = ""}>
 
-                  <td style={{ padding: "12px 8px", color: "#334155", fontSize: 10 }}>
+                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "#334155", fontSize: 10 }}>
                     {stock.rank_overall ?? "—"}
                   </td>
 
                   <td onClick={e => onTickerClick(stock.ticker, e.currentTarget.getBoundingClientRect())}
-                    style={{ padding: "12px 8px", cursor: "pointer" }}>
+                    style={{ padding: isMobile ? "8px 4px" : "12px 8px", cursor: "pointer" }}>
                     <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                       <span style={{ fontWeight: 700, color: "#f1f5f9" }}>{stock.ticker}</span>
                       {penalty > 0 && (
@@ -1877,28 +1885,28 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
                     )}
                   </td>
 
-                  <td style={{ padding: "12px 8px", color: "#e2e8f0", fontWeight: 600 }}>{priceStr}</td>
-                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>{marketCapStr}</td>
+                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "#e2e8f0", fontWeight: 600 }}>{priceStr}</td>
+                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "#cbd5e1" }}>{marketCapStr}</td>
 
-                  <td style={{ padding: "12px 8px", color: !isNaN(fcfYield) && fcfYield > 0.08 ? "#34d399" : "#cbd5e1" }}>
+                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: !isNaN(fcfYield) && fcfYield > 0.08 ? "#34d399" : "#cbd5e1" }}>
                     {fcfDisplay}
                   </td>
-                  <td style={{ padding: "12px 8px", color: "#cbd5e1" }}>
+                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "#cbd5e1" }}>
                     {!isNaN(bm) ? bm.toFixed(3) : "—"}
                   </td>
-                  <td style={{ padding: "12px 8px", color: !isNaN(roa) && roa < 0 ? "#f87171" : "#cbd5e1" }}>
+                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: !isNaN(roa) && roa < 0 ? "#f87171" : "#cbd5e1" }}>
                     {roaDisplay}
                   </td>
 
-                  <td style={{ padding: "12px 8px", color: revGr != null && revGr > 0 ? "#34d399" : revGr != null && revGr < -0.1 ? "#f87171" : "#cbd5e1" }}>
+                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: revGr != null && revGr > 0 ? "#34d399" : revGr != null && revGr < -0.1 ? "#f87171" : "#cbd5e1" }}>
                     {revDisplay}
                   </td>
 
-                  <td style={{ padding: "12px 8px", color: get52wColor(pct52w), fontWeight: pct52w != null && pct52w <= 20 ? 700 : 400 }}>
+                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: get52wColor(pct52w), fontWeight: pct52w != null && pct52w <= 20 ? 700 : 400 }}>
                     {pct52wDisplay}
                   </td>
 
-                  <td style={{ padding: "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(score * 100), fontSize: 13 }}>
+                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", textAlign: "right", fontWeight: 800, color: getScoreColor(score * 100), fontSize: 13 }}>
                     {!isNaN(score) ? (score * 100).toFixed(1) : "—"}
                   </td>
 
@@ -2092,6 +2100,12 @@ export default function App() {
   const [isLightMode, setIsLightMode] = useState(() => {
     return localStorage.getItem("theme") === "light";
   });
+  const [isMobileApp, setIsMobileApp] = useState(() => window.innerWidth < 768);
+  useEffect(() => {
+    const fn = () => setIsMobileApp(window.innerWidth < 768);
+    window.addEventListener("resize", fn);
+    return () => window.removeEventListener("resize", fn);
+  }, []);
 
   useEffect(() => {
     if (isLightMode) {
@@ -2365,7 +2379,7 @@ export default function App() {
   const tickerEntries = Object.entries(prices);
 
   return (
-    <>
+    <MobileCtx.Provider value={isMobileApp}>
       <style>{GLOBAL_STYLES}</style>
       <div style={{ position: "relative", zIndex: 1, minHeight: "100vh", color: "#fff" }}>
         
@@ -2555,6 +2569,6 @@ export default function App() {
           onSuccess={(pwd) => { setAdminPassword(pwd); setIsAdmin(true); }}
         />
       )}
-    </>
+    </MobileCtx.Provider>
   );
 }
