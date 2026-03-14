@@ -1630,22 +1630,26 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
               <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, fontFamily: "monospace", minWidth: isMobile ? 60 : 100 }}>
                 {has52W ? (
                   <>
-                    {/* Price label — in normal flow, translated left by 50% of its own width via a wrapper */}
-                    <div style={{ position: "relative", height: 14, overflow: "hidden" }}>
-                      <div style={{
-                        position: "absolute",
-                        left: `${Math.max(0, Math.min(dotPos, 100))}%`,
-                        top: 0, bottom: 0,
-                        display: "flex", alignItems: "center",
-                        transform: "translateX(-50%)",
-                      }}>
-                        <span style={{
-                          fontSize: 8.5, fontWeight: 700, color: "#e2e8f0",
-                          whiteSpace: "nowrap",
-                          background: "rgba(24,24,24,0.85)", padding: "1px 4px", borderRadius: 3,
-                        }}>${pLive.toFixed(2)}</span>
-                      </div>
-                    </div>
+                    {/* Price label — clamped so it never overflows the bar edges */}
+                <div style={{ position: "relative", height: 14 }}>
+                  <div style={{
+                    position: "absolute",
+                    left: `clamp(0%, ${dotPos}%, 100%)`,
+                    top: 0, bottom: 0,
+                    display: "flex", alignItems: "center",
+                    transform: dotPos < 10
+                      ? "translateX(0%)"
+                      : dotPos > 90
+                      ? "translateX(-100%)"
+                      : "translateX(-50%)",
+                  }}>
+                    <span style={{
+                      fontSize: 8.5, fontWeight: 700, color: "#e2e8f0",
+                      whiteSpace: "nowrap",
+                      background: "rgba(24,24,24,0.85)", padding: "1px 4px", borderRadius: 3,
+                    }}>${pLive.toFixed(2)}</span>
+                  </div>
+                </div>
                     {/* Bar + dot */}
                     <div style={{ position: "relative", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2 }}>
                       <div style={{ position: "absolute", left: `${dotPos}%`, top: "50%", transform: "translate(-50%,-50%)", width: 8, height: 8, borderRadius: "50%", background: dotColor, boxShadow: `0 0 6px ${dotColor}88` }} />
