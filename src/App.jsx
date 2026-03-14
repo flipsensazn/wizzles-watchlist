@@ -1622,24 +1622,26 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
                 const dotColor = pos ? "#34d399" : "#f87171";
                 
                 return (
-                  <div style={{ flex: "1 1 60px", minWidth: 0, display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: "#64748b", fontFamily: "monospace", overflow: "hidden" }}>
+                  <div className="range-52w" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3, fontFamily: "monospace", minWidth: 100 }}>
                     {has52W ? (
                       <>
-                        <span>{w52L}</span>
-                        <div style={{ flex: 1, position: "relative", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2 }}>
-                          {/* Position wrapper perfectly centers the dot on the line */}
+                        {/* Bar + dot + current price label above dot */}
+                        <div style={{ position: "relative", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2 }}>
                           <div style={{ position: "absolute", left: `${dotPos}%`, top: "50%", transform: "translate(-50%, -50%)", zIndex: 2 }}>
-                            {/* Price label placed directly above the dot */}
-                            <div style={{ position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)", marginBottom: 3, background: "rgba(24,24,24,0.85)", padding: "1px 5px", borderRadius: 4, fontSize: 8.5, fontWeight: 700, color: "#e2e8f0" }}>
+                            <div style={{ position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)", marginBottom: 3, background: "rgba(24,24,24,0.85)", padding: "1px 5px", borderRadius: 4, fontSize: 8.5, fontWeight: 700, color: "#e2e8f0", whiteSpace: "nowrap" }}>
                               ${pLive.toFixed(2)}
                             </div>
                             <div style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, boxShadow: `0 0 6px ${dotColor}88` }} />
                           </div>
                         </div>
-                        <span>{w52H}</span>
+                        {/* Low / High labels below the bar */}
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, color: "#475569" }}>
+                          <span>{w52L}</span>
+                          <span>{w52H}</span>
+                        </div>
                       </>
                     ) : (
-                      <span style={{ flex: 1, textAlign: "center", color: "#475569" }}>—</span>
+                      <span style={{ textAlign: "center", color: "#475569", fontSize: 9 }}>—</span>
                     )}
                   </div>
                 );
@@ -2080,6 +2082,7 @@ const GLOBAL_STYLES = `
     .header-controls { gap: 8px !important; }
     .panel-wrapper { min-height: 400px; }
     .bottom-grid-all { gap: 10px !important; }
+    .range-52w { flex: 1 1 40px !important; min-width: 0 !important; overflow: hidden !important; }
   }
 `;
 
