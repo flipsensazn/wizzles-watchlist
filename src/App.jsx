@@ -1238,7 +1238,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
                         : near52WH
                         ? "glowPulse52WH 2.4s ease-in-out infinite"
                         : "none",
-                      minWidth: 60,
+                      minWidth: 52,
                       textAlign: "center",
                       cursor: "pointer",
                       transition: "filter .15s, transform .15s",
@@ -1397,8 +1397,8 @@ function DonutChart({ prices, capexData, capexIntel, capexIntelStatus, capexInte
            : "Capex weight · hover to inspect avg performance"}
         </p>
       </div>
-      <div style={{ display: "flex", gap: 24, alignItems: "center", flexWrap: "wrap" }}>
-        <svg width="260" height="260">
+      <div style={{ display: "flex", gap: 16, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <svg viewBox="0 0 260 260" style={{ width: "100%", maxWidth: 260, height: "auto" }}>
           {segments.map(seg => {
             const isHov = hovered === seg.track.id;
             return (
@@ -1423,7 +1423,7 @@ function DonutChart({ prices, capexData, capexIntel, capexIntelStatus, capexInte
             </>
           )}
         </svg>
-        <div style={{ flex: 1, minWidth: 200, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div style={{ flex: "1 1 140px", minWidth: 0, display: "flex", flexDirection: "column", gap: 10 }}>
           {trackPerf.map(track => (
             <div key={track.id} onMouseEnter={() => setHovered(track.id)} onMouseLeave={() => setHovered(null)} style={{ cursor: "default", opacity: hovered && hovered !== track.id ? 0.35 : 1, transition: "opacity .2s" }}>
               <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
@@ -1622,7 +1622,7 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
                 const dotColor = pos ? "#34d399" : "#f87171";
                 
                 return (
-                  <div style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, fontSize: 9, color: "#64748b", fontFamily: "monospace", minWidth: 100 }}>
+                  <div style={{ flex: "1 1 60px", minWidth: 0, display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: "#64748b", fontFamily: "monospace", overflow: "hidden" }}>
                     {has52W ? (
                       <>
                         <span>{w52L}</span>
@@ -2032,7 +2032,8 @@ function AdminModal({ onClose, onSuccess }) {
 // ── GLOBAL STYLES ─────────────────────────────────────────
 const GLOBAL_STYLES = `
   * { box-sizing: border-box; margin: 0; padding: 0; box-shadow: none !important; }
-  html, body { background: #1a1a1f; font-family: 'Inter', sans-serif; }
+  html, body { background: #1a1a1f; font-family: 'Inter', sans-serif; max-width: 100vw; overflow-x: hidden; }
+  img, svg, video, table { max-width: 100%; }
   :root { --topbar-h: 72px; }
   @media (max-width: 767px) { :root { --topbar-h: 172px; } }
   
@@ -2075,7 +2076,7 @@ const GLOBAL_STYLES = `
     .top-node-center > div:first-child { width: 100% !important; box-sizing: border-box !important; }
     .capex-number { font-size: 44px !important; }
     .subsector-grid { grid-template-columns: 1fr !important; }
-    .main-content { padding: 12px 8px !important; }
+    .main-content { padding: 12px 8px !important; max-width: 100vw !important; }
     .header-controls { gap: 8px !important; }
     .panel-wrapper { min-height: 400px; }
     .bottom-grid-all { gap: 10px !important; }
@@ -2434,7 +2435,7 @@ export default function App() {
           </div>
         </div>
 
-        <div className="main-content" style={{ maxWidth: 1480, margin: "0 auto", padding: "32px 28px", display: "flex", flexDirection: "column", gap: 28, overflowX: "hidden" }}>
+        <div className="main-content" style={{ maxWidth: 1480, margin: "0 auto", padding: "32px 20px", display: "flex", flexDirection: "column", gap: 28, overflowX: "hidden", boxSizing: "border-box", width: "100%" }}>
           
           <div className="top-node-layout" style={{ display: "flex", alignItems: "flex-start", justifyContent: "center" }}>
             <div className="top-node-center" style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "0 0 auto" }}>
