@@ -1605,66 +1605,61 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
         )}
         {sorted.map((item, idx) => {
           const pos  = (typeof item.change === 'number' ? item.change : 0) >= 0;
+          const pData = prices[item.ticker] || {};
+          const w52L = pData.week52Low;
+          const w52H = pData.week52High;
+          const pLive = pData.price;
+          const has52W = w52L != null && w52H != null && pLive != null && (w52H > w52L);
+          const dotPos = has52W ? Math.max(0, Math.min(100, ((pLive - w52L) / (w52H - w52L)) * 100)) : 50;
+          const dotColor = pos ? "#34d399" : "#f87171";
+
           return (
-            <div key={item.ticker} style={{ borderRadius: 8, padding: isMobile ? "8px 6px" : "12px 10px", display: "flex", alignItems: "flex-end", gap: isMobile ? 6 : 10, borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background .15s", minWidth: 0, overflow: "hidden" }}
+            <div key={item.ticker} style={{ borderRadius: 8, padding: "10px 10px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background .15s" }}
               onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
               onMouseLeave={e => e.currentTarget.style.background = ""}>
-              <span style={{ fontSize: 10, color: "#334155", width: 16, textAlign: "right" }}>{idx + 1}</span>
-              <div style={{ flex: "0 0 auto", minWidth: isMobile ? 44 : 60, cursor: "pointer" }} onClick={e => onTickerClick?.(item.ticker, e.currentTarget.getBoundingClientRect())}>
+              <span style={{ fontSize: 10, color: "#334155", width: 16, textAlign: "right", flexShrink: 0 }}>{idx + 1}</span>
+              <div style={{ flex: "0 0 auto", minWidth: 60, cursor: "pointer" }} onClick={e => onTickerClick?.(item.ticker, e.currentTarget.getBoundingClientRect())}>
                 <div style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{item.ticker}</div>
                 {item.track
                   ? <div style={{ fontSize: 9, color: item.track.color, marginTop: 1 }}>{item.track.label.split(" ").slice(0,2).join(" ")}</div>
                   : isShort && <div style={{ fontSize: 9, color: "#f59e0b", marginTop: 1 }}>Shortlist</div>
                 }
               </div>
-              
-              {/* 52W Range Tracker */}
-              {(() => {
-                const pData = prices[item.ticker] || {};
-                const w52L = pData.week52Low;
-                const w52H = pData.week52High;
-                const pLive = pData.price;
-                const has52W = w52L != null && w52H != null && pLive != null && (w52H > w52L);
-                const dotPos = has52W ? Math.max(0, Math.min(100, ((pLive - w52L) / (w52H - w52L)) * 100)) : 50;
-                const dotColor = pos ? "#34d399" : "#f87171";
-                
-                return (
-                  <div className="range-52w" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, fontFamily: "monospace", minWidth: 100, overflow: "visible" }}>
-                    {has52W ? (
-                      <>
-                        {/* Current price label — normal flow, no absolute positioning */}
-                        <div style={{ position: "relative", height: 16 }}>
-                          <span style={{
-                            position: "absolute",
-                            left: `${dotPos}%`,
-                            transform: "translateX(-50%)",
-                            background: "rgba(24,24,24,0.85)",
-                            padding: "1px 5px", borderRadius: 4,
-                            fontSize: 8.5, fontWeight: 700, color: "#e2e8f0",
-                            whiteSpace: "nowrap", pointerEvents: "none",
-                          }}>${pLive.toFixed(2)}</span>
-                        </div>
-                        {/* Track bar + dot */}
-                        <div style={{ position: "relative", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2 }}>
-                          <div style={{ position: "absolute", left: `${dotPos}%`, top: "50%", transform: "translate(-50%, -50%)", width: 8, height: 8, borderRadius: "50%", background: dotColor, boxShadow: `0 0 6px ${dotColor}88` }} />
-                        </div>
-                        {/* Low / High labels below the bar */}
-                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, color: "#475569", marginTop: 2 }}>
-                          <span>{w52L}</span>
-                          <span>{w52H}</span>
-                        </div>
-                      </>
-                    ) : (
-                      <span style={{ textAlign: "center", color: "#475569", fontSize: 9 }}>—</span>
-                    )}
-                  </div>
-                );
-              })()}
 
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, fontSize: isMobile ? 11 : 13, fontWeight: 700, minWidth: isMobile ? 52 : 68, textAlign: "right", flexShrink: 0, color: typeof item.change !== 'number' ? "#334155" : pos ? "#34d399" : "#f87171" }}>
+              {/* 52W Range Tracker */}
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, fontFamily: "monospace", minWidth: 100 }}>
+                {has52W ? (
+                  <>
+                    {/* Price label row — fixed height so bar is always at the same vertical position */}
+                    <div style={{ position: "relative", height: 14, overflow: "visible" }}>
+                      <span style={{
+                        position: "absolute",
+                        left: `clamp(12px, ${dotPos}%, calc(100% - 12px))`,
+                        transform: "translateX(-50%)",
+                        fontSize: 8.5, fontWeight: 700, color: "#e2e8f0",
+                        whiteSpace: "nowrap", pointerEvents: "none",
+                        background: "rgba(24,24,24,0.85)", padding: "1px 4px", borderRadius: 3,
+                      }}>${pLive.toFixed(2)}</span>
+                    </div>
+                    {/* Bar + dot */}
+                    <div style={{ position: "relative", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2 }}>
+                      <div style={{ position: "absolute", left: `${dotPos}%`, top: "50%", transform: "translate(-50%,-50%)", width: 8, height: 8, borderRadius: "50%", background: dotColor, boxShadow: `0 0 6px ${dotColor}88` }} />
+                    </div>
+                    {/* Low / High labels */}
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, color: "#475569", marginTop: 1 }}>
+                      <span>{w52L}</span>
+                      <span>{w52H}</span>
+                    </div>
+                  </>
+                ) : (
+                  <span style={{ textAlign: "center", color: "#475569", fontSize: 9 }}>—</span>
+                )}
+              </div>
+
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, fontSize: 13, fontWeight: 700, minWidth: 68, textAlign: "right", flexShrink: 0, color: typeof item.change !== 'number' ? "#334155" : pos ? "#34d399" : "#f87171" }}>
                 {typeof item.change !== 'number' ? "—" : <><span style={{ fontSize: 10 }}>{pos ? "▲" : "▼"}</span>{Math.abs(item.change).toFixed(2)}%</>}
               </div>
-              <button onClick={() => removeTicker(item.ticker)} style={{ background: "none", border: "none", color: "#1e293b", cursor: "pointer", fontSize: isMobile ? 12 : 16, padding: "0 2px", lineHeight: 1, transition: "color .15s", fontFamily: "inherit", visibility: !isShort || !isAdmin ? "hidden" : "visible", flexShrink: 0 }} onMouseEnter={e => e.currentTarget.style.color = "#ef4444"} onMouseLeave={e => e.currentTarget.style.color = "#1e293b"}>×</button>
+              <button onClick={() => removeTicker(item.ticker)} style={{ background: "none", border: "none", color: "#1e293b", cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1, transition: "color .15s", fontFamily: "inherit", visibility: !isShort || !isAdmin ? "hidden" : "visible", flexShrink: 0 }} onMouseEnter={e => e.currentTarget.style.color = "#ef4444"} onMouseLeave={e => e.currentTarget.style.color = "#1e293b"}>×</button>
             </div>
           );
         })}
@@ -2089,7 +2084,6 @@ const GLOBAL_STYLES = `
     .header-controls { gap: 8px !important; }
     .panel-wrapper { min-height: 400px; }
     .bottom-grid-all { gap: 10px !important; }
-    .range-52w { flex: 1 1 40px !important; min-width: 0 !important; overflow: hidden !important; }
   }
 `;
 
