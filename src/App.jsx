@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback, useRef, memo, useMemo, createContext,
 const MobileCtx = createContext(false);
 function useMobile() { return useContext(MobileCtx); }
 
-// ── MARKET DATA ───────────────────────────────────────────
+// ── MARKET DATA ───────────────────────────────────────────────────────────────
 const INDEX_TICKERS = ["^GSPC", "^DJI", "^IXIC"];
 const CRYPTO_TICKERS = ["BTC-USD", "ETH-USD", "XRP-USD"];
 const HYPERSCALER_TICKERS = ["AMZN", "MSFT", "GOOG", "META", "ORCL"];
@@ -539,7 +539,6 @@ function TopBar({ marketData }) {
   }
 
   // ── MOBILE LAYOUT ────────────────────────────────────────
-  // 3×2 grid of cards + compact clock bar beneath
   if (isMobile) {
     return (
       <div ref={barRef} style={{
@@ -549,7 +548,6 @@ function TopBar({ marketData }) {
         backdropFilter: "blur(12px)",
         boxShadow: "0 2px 20px rgba(0,0,0,0.7)",
       }}>
-        {/* 3-column grid of ticker cards */}
         <div style={{
           display: "grid",
           gridTemplateColumns: "repeat(3, 1fr)",
@@ -578,7 +576,6 @@ function TopBar({ marketData }) {
                 fontFamily: "'Roboto Condensed', sans-serif",
                 minWidth: 0,
               }}>
-                {/* Label + session + abs change */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 1 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
                     <span style={{ fontSize: 10, fontWeight: 800, color, letterSpacing: "0.03em", whiteSpace: "nowrap" }}>{label}</span>
@@ -586,20 +583,17 @@ function TopBar({ marketData }) {
                   </div>
                   <span style={{ fontSize: 9, fontWeight: 700, color: changeColor, whiteSpace: "nowrap" }}>{absChange}</span>
                 </div>
-                {/* Price + % */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
                   <span style={{ fontSize: 11, fontWeight: 700, color: "#f8fafc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{formatPrice(price, ticker)}</span>
                   <span style={{ fontSize: 10, fontWeight: 700, color: changeColor, whiteSpace: "nowrap", flexShrink: 0, marginLeft: 2 }}>
                     {changePct != null ? `${pos ? "+" : ""}${changePct.toFixed(2)}%` : "—"}
                   </span>
                 </div>
-                {/* Mini sparkline */}
                 <BloombergChart data={entry.chartData} timestamps={entry.chartTimestamps} color={changeColor} />
               </div>
             );
           })}
         </div>
-        {/* Compact clock strip beneath the grid */}
         <div style={{
           display: "flex", alignItems: "center", justifyContent: "center",
           padding: "3px 8px 4px", gap: 10,
@@ -801,7 +795,6 @@ function MarketClock() {
   );
 }
 
-// Compact single-line clock for mobile top bar
 function MarketClockCompact() {
   const [tick, setTick] = useState(() => Date.now());
   useEffect(() => {
@@ -849,7 +842,6 @@ function BloombergChart({ data, timestamps, color }) {
   const vbWidth = 160;
   const height = 24;
   
-  // Find the separator between yesterday and today
   let splitIndex = -1;
   let maxGap = 0;
   for (let i = 1; i < timestamps.length; i++) {
@@ -857,7 +849,6 @@ function BloombergChart({ data, timestamps, color }) {
     if (gap > maxGap) { maxGap = gap; splitIndex = i; }
   }
   
-  // If no overnight gap exists (Crypto is 24/7), separate at exactly 24 hours ago
   if (maxGap < 4 * 3600) {
     const dayAgo = timestamps[timestamps.length - 1] - 24 * 3600;
     splitIndex = timestamps.findIndex(t => t >= dayAgo);
@@ -881,7 +872,7 @@ function BloombergChart({ data, timestamps, color }) {
   const getY = (val) => height - ((val - yMin) / scaleY) * height;
 
   const part1 = validData.filter(d => d.idx <= splitIndex);
-  const part2 = validData.filter(d => d.idx >= splitIndex); // Overlap so the line connects seamlessly
+  const part2 = validData.filter(d => d.idx >= splitIndex);
 
   const path1 = part1.map((d, i) => `${i === 0 ? 'M' : 'L'}${getX(d.idx)},${getY(d.val)}`).join(" ");
   const path2 = part2.map((d, i) => `${i === 0 ? 'M' : 'L'}${getX(d.idx)},${getY(d.val)}`).join(" ");
@@ -921,10 +912,8 @@ function MarketStrip({ data, tickers, labels, colors }) {
         const changePct = entry.change;
         const pos = (changePct ?? 0) >= 0;
         
-        // Bloomberg uses very stark red/green
         const changeColor = changePct === undefined || changePct === null ? "#475569" : pos ? "#10b981" : "#ef4444";
 
-        // Reverse-engineer absolute point change (since our backend only provides percentage)
         let absChange = "—";
         if (price != null && changePct != null) {
            const prevPrice = price / (1 + (changePct / 100));
@@ -1144,6 +1133,16 @@ function getNear52WHighInfo(priceEntry) {
   return null;
 }
 
+
+function getATHInfo(priceEntry) {
+  if (!priceEntry) return null;
+  const { price, week52High } = priceEntry;
+  if (price == null || week52High == null || week52High <= 0) return null;
+  if (price >= week52High * 0.999) {
+    return { raw52High: week52High };
+  }
+  return null;
+}
 function HeatMap({ prices, capexData, onTickerClick }) {
   const isMobile = useMobile();
   const [tooltip, setTooltip] = useState(null);
@@ -1184,6 +1183,10 @@ function HeatMap({ prices, capexData, onTickerClick }) {
             <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(52,211,153,0.25)", border: "1px solid #34d399", boxShadow: "0 0 6px #34d39988" }} />
             <span>within 10% of 52W high</span>
           </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(52,211,153,0.35)", border: "2.5px solid #34d399", boxShadow: "0 0 8px #34d399cc" }} />
+            <span>All Time High (ATH)</span>
+          </div>
         </div>
       </div>
       {trackCells.map(({ track, cells }) => {
@@ -1204,20 +1207,23 @@ function HeatMap({ prices, capexData, onTickerClick }) {
                 const bg = getHeatColor(change);
                 const pos = change === undefined || change >= 0;
                 const near52W = getNear52WLowInfo(entry);
-                const near52WH = !near52W ? getNear52WHighInfo(entry) : null;
+                const athInfo = !near52W ? getATHInfo(entry) : null;
+                const near52WH = !near52W && !athInfo ? getNear52WHighInfo(entry) : null;
                 
                 const earningsDate = entry?.earningsDate;
                 const isUpcomingEarnings = earningsDate && (earningsDate * 1000 - Date.now() <= 3 * 86400000) && (earningsDate * 1000 - Date.now() >= -86400000);
 
                 return (
                   <div key={ticker}
-                    onMouseEnter={e => setTooltip({ ticker, change, price: currentPrice, session: sessionLabel, track: track.label, near52W, near52WH, isUpcomingEarnings, rect: e.currentTarget.getBoundingClientRect() })}
+                    onMouseEnter={e => setTooltip({ ticker, change, price: currentPrice, session: sessionLabel, track: track.label, near52W, near52WH, athInfo, isUpcomingEarnings, rect: e.currentTarget.getBoundingClientRect() })}
                     onMouseLeave={() => setTooltip(null)}
                     onClick={e => { e.stopPropagation(); onTickerClick?.(ticker, e.currentTarget.getBoundingClientRect()); }}
                     style={{
                       position: "relative",
                       background: near52W
                         ? `linear-gradient(135deg, ${bg} 60%, rgba(245,158,11,0.18) 100%)`
+                        : athInfo
+                        ? `linear-gradient(135deg, ${bg} 60%, rgba(52,211,153,0.28) 100%)`
                         : near52WH
                         ? `linear-gradient(135deg, ${bg} 60%, rgba(52,211,153,0.18) 100%)`
                         : bg,
@@ -1230,16 +1236,22 @@ function HeatMap({ prices, capexData, onTickerClick }) {
                       alignItems: "center",
                       border: near52W
                         ? "1px solid #f59e0b"
+                        : athInfo
+                        ? "2.5px solid #34d399"
                         : near52WH
                         ? "1px solid #34d399"
                         : `1px solid ${bg === "rgba(255,255,255,0.04)" ? "rgba(255,255,255,0.06)" : bg}`,
                       boxShadow: near52W
                         ? "0 0 10px rgba(245,158,11,0.45), inset 0 0 12px rgba(245,158,11,0.08)"
+                        : athInfo
+                        ? "0 0 14px rgba(52,211,153,0.65), inset 0 0 16px rgba(52,211,153,0.12)"
                         : near52WH
                         ? "0 0 10px rgba(52,211,153,0.45), inset 0 0 12px rgba(52,211,153,0.08)"
                         : "none",
                       animation: near52W
                         ? "glowPulse52W 2.4s ease-in-out infinite"
+                        : athInfo
+                        ? "glowPulseATH 2.4s ease-in-out infinite"
                         : near52WH
                         ? "glowPulse52WH 2.4s ease-in-out infinite"
                         : "none",
@@ -1255,16 +1267,19 @@ function HeatMap({ prices, capexData, onTickerClick }) {
                       <div style={{ position: "absolute", top: 3, left: 4, fontSize: 8, fontWeight: 800, color: "#c084fc", letterSpacing: "0.05em", lineHeight: 1 }}>E</div>
                     )}
 
-                    {sessionLabel && !near52W && !near52WH && (
+                    {sessionLabel && !near52W && !athInfo && !near52WH && (
                       <div style={{ position: "absolute", top: 3, right: 4, fontSize: 7, fontWeight: 800, color: "rgba(255,255,255,0.55)", letterSpacing: "0.05em", lineHeight: 1 }}>{sessionLabel}</div>
                     )}
                     {near52W && (
                       <div style={{ position: "absolute", top: 3, right: 4, fontSize: 7, fontWeight: 800, color: "#f59e0b", letterSpacing: "0.05em", lineHeight: 1 }}>▼52W</div>
                     )}
+                    {athInfo && (
+                      <div style={{ position: "absolute", top: 3, right: 4, fontSize: 7, fontWeight: 800, color: "#34d399", letterSpacing: "0.05em", lineHeight: 1 }}>ATH</div>
+                    )}
                     {near52WH && (
                       <div style={{ position: "absolute", top: 3, right: 4, fontSize: 7, fontWeight: 800, color: "#34d399", letterSpacing: "0.05em", lineHeight: 1 }}>▲52W</div>
                     )}
-                    <div style={{ fontSize: 12, fontWeight: 700, color: near52W ? "#fef3c7" : near52WH ? "#d1fae5" : "#f1f5f9" }}>{ticker}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: near52W ? "#fef3c7" : (athInfo || near52WH) ? "#d1fae5" : "#f1f5f9" }}>{ticker}</div>
                     {change !== undefined && (
                       <div style={{ fontSize: 10, fontWeight: 600, color: pos ? "#a7f3d0" : "#fca5a5", marginTop: 2 }}>
                         {typeof change === 'number' ? (change >= 0 ? "+" : "") + change + "%" : "—"}
@@ -1279,7 +1294,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
       })}
       
       {tooltip && (
-        <div style={{ position: "fixed", top: tooltip.rect.top - (tooltip.near52W || tooltip.near52WH || tooltip.isUpcomingEarnings ? 68 : 52), left: tooltip.rect.left, background: "rgba(18,18,18,0.95)", border: `1px solid ${tooltip.near52W ? "#f59e0b" : tooltip.near52WH ? "#34d399" : (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171"}44`, borderRadius: 8, padding: "7px 12px", pointerEvents: "none", zIndex: 1000, display: "flex", flexDirection: "column", gap: 4, minWidth: 140 }}>
+        <div style={{ position: "fixed", top: tooltip.rect.top - (tooltip.near52W || tooltip.near52WH || tooltip.athInfo || tooltip.isUpcomingEarnings ? 68 : 52), left: tooltip.rect.left, background: "rgba(18,18,18,0.95)", border: `1px solid ${tooltip.near52W ? "#f59e0b" : tooltip.near52WH ? "#34d399" : (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171"}44`, borderRadius: 8, padding: "7px 12px", pointerEvents: "none", zIndex: 1000, display: "flex", flexDirection: "column", gap: 4, minWidth: 140 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{tooltip.ticker}</span>
             {tooltip.price !== undefined && <span style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0" }}>${tooltip.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
@@ -1305,6 +1320,12 @@ function HeatMap({ prices, capexData, onTickerClick }) {
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
               <span style={{ fontSize: 8, fontWeight: 800, color: "#34d399", background: "rgba(52,211,153,0.15)", border: "1px solid rgba(52,211,153,0.4)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.08em" }}>▲ 52W HIGH ZONE</span>
               <span style={{ fontSize: 10, color: "#34d399" }}>within 10% of ${Number(tooltip.near52WH.raw52High).toFixed(2)}</span>
+            </div>
+          )}
+          {tooltip.athInfo && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <span style={{ fontSize: 8, fontWeight: 800, color: "#34d399", background: "rgba(52,211,153,0.2)", border: "1.5px solid rgba(52,211,153,0.6)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.08em" }}>🏆 ALL TIME HIGH</span>
+              <span style={{ fontSize: 10, color: "#34d399", fontWeight: 700 }}>ATH: ${Number(tooltip.athInfo.raw52High).toFixed(2)}</span>
             </div>
           )}
         </div>
@@ -1470,7 +1491,6 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
   const isShort = tab === "short";
   const accent  = isShort ? "#f59e0b" : "#60a5fa";
 
-  // Watchlist is always derived live from capexData — no local state needed
   const watchList = useMemo(
     () => [...new Set(capexData.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))],
     [capexData]
@@ -1626,35 +1646,31 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
                 }
               </div>
 
-              {/* 52W Range Tracker */}
               <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, fontFamily: "monospace", minWidth: isMobile ? 60 : 100 }}>
                 {has52W ? (
                   <>
-                    {/* Price label — clamped so it never overflows the bar edges */}
-                <div style={{ position: "relative", height: 14 }}>
-                  <div style={{
-                    position: "absolute",
-                    left: `clamp(0%, ${dotPos}%, 100%)`,
-                    top: 0, bottom: 0,
-                    display: "flex", alignItems: "center",
-                    transform: dotPos < 10
-                      ? "translateX(0%)"
-                      : dotPos > 90
-                      ? "translateX(-100%)"
-                      : "translateX(-50%)",
-                  }}>
-                    <span style={{
-                      fontSize: 8.5, fontWeight: 700, color: "#e2e8f0",
-                      whiteSpace: "nowrap",
-                      background: "rgba(24,24,24,0.85)", padding: "1px 4px", borderRadius: 3,
-                    }}>${pLive.toFixed(2)}</span>
-                  </div>
-                </div>
-                    {/* Bar + dot */}
+                    <div style={{ position: "relative", height: 14 }}>
+                      <div style={{
+                        position: "absolute",
+                        left: `clamp(0%, ${dotPos}%, 100%)`,
+                        top: 0, bottom: 0,
+                        display: "flex", alignItems: "center",
+                        transform: dotPos < 10
+                          ? "translateX(0%)"
+                          : dotPos > 90
+                          ? "translateX(-100%)"
+                          : "translateX(-50%)",
+                      }}>
+                        <span style={{
+                          fontSize: 8.5, fontWeight: 700, color: "#e2e8f0",
+                          whiteSpace: "nowrap",
+                          background: "rgba(24,24,24,0.85)", padding: "1px 4px", borderRadius: 3,
+                        }}>${pLive.toFixed(2)}</span>
+                      </div>
+                    </div>
                     <div style={{ position: "relative", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2 }}>
                       <div style={{ position: "absolute", left: `${dotPos}%`, top: "50%", transform: "translate(-50%,-50%)", width: 8, height: 8, borderRadius: "50%", background: dotColor, boxShadow: `0 0 6px ${dotColor}88` }} />
                     </div>
-                    {/* Low / High labels */}
                     <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, color: "#475569", marginTop: 1 }}>
                       <span>{w52L}</span>
                       <span>{w52H}</span>
@@ -1701,7 +1717,6 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
         setData(json.data);
         setLastUpdated(new Date().toLocaleDateString());
       } else {
-        // Change this line to show the real API error if it fails
         setError(json.message || "No ranked data available yet. Run the ETL pipeline to populate the scanner.");
         setAllData([]);
         setData([]);
@@ -2067,6 +2082,10 @@ const GLOBAL_STYLES = `
     0%, 100% { box-shadow: 0 0 10px rgba(52,211,153,0.45), inset 0 0 12px rgba(52,211,153,0.08); border-color: rgba(52,211,153,0.7); }
     50% { box-shadow: 0 0 18px rgba(52,211,153,0.75), 0 0 32px rgba(52,211,153,0.25), inset 0 0 16px rgba(52,211,153,0.14); border-color: #34d399; }
   }
+  @keyframes glowPulseATH {
+    0%, 100% { box-shadow: 0 0 14px rgba(52,211,153,0.65), inset 0 0 16px rgba(52,211,153,0.12); border-color: rgba(52,211,153,0.85); }
+    50% { box-shadow: 0 0 24px rgba(52,211,153,0.9), 0 0 40px rgba(52,211,153,0.35), inset 0 0 20px rgba(52,211,153,0.18); border-color: #34d399; }
+  }
   @keyframes pulseDot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(.7); } }
   .ticker-tape { animation: scroll-left 130s linear infinite; white-space: nowrap; display: inline-flex; gap: 24px; }
   .pulse { animation: pulseDot 2s infinite; }
@@ -2234,9 +2253,6 @@ export default function App() {
     return () => clearInterval(id);
   }, [refresh]);
 
-  // Fast 5s refresh for the 6 market-strip tickers only (indices + crypto).
-  // Runs independently of the full 30s cycle so the strip stays near-live
-  // without hammering the /prices endpoint with the entire watchlist.
   useEffect(() => {
     const fastRefresh = async () => {
       if (document.hidden) return;
@@ -2248,8 +2264,6 @@ export default function App() {
           stripTickers.forEach(ticker => {
             const val = data[ticker];
             if (val != null) {
-              // Shallow-merge at the per-ticker level so chartData written by
-              // the 30s refresh is preserved — fast path only updates price/change/session
               merged[ticker] = { ...prev[ticker], ...val };
             }
           });
@@ -2385,17 +2399,14 @@ export default function App() {
       <style>{GLOBAL_STYLES}</style>
       <div style={{ position: "relative", zIndex: 1, minHeight: "100vh", color: "#fff" }}>
         
-        {/* FIXED TOP BAR: 6 Tickers + Market Clock */}
         <TopBar marketData={marketData} />
 
-        {/* HEADER — offset below fixed bar (mobile bar is ~168px, desktop ~72px) */}
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", marginTop: "var(--topbar-h, 72px)", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
           <div>
             <div style={{ fontSize: 10, color: "#2d3a52", letterSpacing: "0.35em", textTransform: "uppercase", marginBottom: 3 }}>HOW ~$600B+ IN HYPERSCALER CAPEX FLOWS THROUGH AI INFRASTRUCTURE TRACKS</div>
             <div style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", letterSpacing: "-0.01em" }}>AI Capex Flow Intelligence</div>
           </div>
 
-          {/* Theme Toggle (clock moved to fixed bar) */}
           <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
             <button 
               onClick={() => setIsLightMode(!isLightMode)} 
@@ -2504,7 +2515,6 @@ export default function App() {
                 </div>
               </div>
               
-              {/* Data Flow Lines underneath the box */}
               <div style={{ width: 1, height: 28, background: "linear-gradient(to bottom,#fbbf24,transparent)" }} />
               <div style={{ position: "relative", width: "100%", height: 1, background: "linear-gradient(90deg,transparent 5%,rgba(255,255,255,.1) 20%,rgba(255,255,255,.1) 80%,transparent 95%)" }}>
                 {capexData.tracks.map((_, i, arr) => <div key={i} style={{ position: "absolute", top: 0, left: `${(i / (arr.length - 1)) * 70 + 15}%`, width: 1, height: 18, background: "linear-gradient(to bottom,rgba(255,255,255,.15),transparent)" }} />)}
