@@ -1627,34 +1627,40 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
               </div>
 
               {/* 52W Range Tracker */}
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, fontFamily: "monospace", minWidth: isMobile ? 60 : 100 }}>
-                {has52W ? (
-                  <>
-                    {/* Price label row — fixed height so bar is always at the same vertical position */}
-                    <div style={{ position: "relative", height: 14, overflow: "visible" }}>
-                      <span style={{
-                        position: "absolute",
-                        left: `clamp(12px, ${dotPos}%, calc(100% - 12px))`,
-                        transform: "translateX(-50%)",
-                        fontSize: 8.5, fontWeight: 700, color: "#e2e8f0",
-                        whiteSpace: "nowrap", pointerEvents: "none",
-                        background: "rgba(24,24,24,0.85)", padding: "1px 4px", borderRadius: 3,
-                      }}>${pLive.toFixed(2)}</span>
-                    </div>
-                    {/* Bar + dot */}
-                    <div style={{ position: "relative", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2 }}>
-                      <div style={{ position: "absolute", left: `${dotPos}%`, top: "50%", transform: "translate(-50%,-50%)", width: 8, height: 8, borderRadius: "50%", background: dotColor, boxShadow: `0 0 6px ${dotColor}88` }} />
-                    </div>
-                    {/* Low / High labels */}
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, color: "#475569", marginTop: 1 }}>
-                      <span>{w52L}</span>
-                      <span>{w52H}</span>
-                    </div>
-                  </>
-                ) : (
-                  <span style={{ textAlign: "center", color: "#475569", fontSize: 9 }}>—</span>
-                )}
-              </div>
+              {(() => {
+                const pData = prices[item.ticker] || {};
+                const w52L = pData.week52Low;
+                const w52H = pData.week52High;
+                const pLive = pData.price;
+                const has52W = w52L != null && w52H != null && pLive != null && (w52H > w52L);
+                const dotPos = has52W ? Math.max(0, Math.min(100, ((pLive - w52L) / (w52H - w52L)) * 100)) : 50;
+                const dotColor = pos ? "#34d399" : "#f87171";
+                
+                return (
+                  <div className="range-52w" style={{ flex: 1, display: "flex", flexDirection: "column", gap: 3, fontFamily: "monospace", minWidth: 100 }}>
+                    {has52W ? (
+                      <>
+                        {/* Bar + dot + current price label above dot */}
+                        <div style={{ position: "relative", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2 }}>
+                          <div style={{ position: "absolute", left: `${dotPos}%`, top: "50%", transform: "translate(-50%, -50%)", zIndex: 2 }}>
+                            <div style={{ position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)", marginBottom: 3, background: "rgba(24,24,24,0.85)", padding: "1px 5px", borderRadius: 4, fontSize: 8.5, fontWeight: 700, color: "#e2e8f0", whiteSpace: "nowrap" }}>
+                              ${pLive.toFixed(2)}
+                            </div>
+                            <div style={{ width: 8, height: 8, borderRadius: "50%", background: dotColor, boxShadow: `0 0 6px ${dotColor}88` }} />
+                          </div>
+                        </div>
+                        {/* Low / High labels below the bar */}
+                        <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, color: "#475569" }}>
+                          <span>{w52L}</span>
+                          <span>{w52H}</span>
+                        </div>
+                      </>
+                    ) : (
+                      <span style={{ textAlign: "center", color: "#475569", fontSize: 9 }}>—</span>
+                    )}
+                  </div>
+                );
+              })()}
 
               <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, fontSize: isMobile ? 11 : 13, fontWeight: 700, minWidth: isMobile ? 54 : 68, textAlign: "right", flexShrink: 0, color: typeof item.change !== 'number' ? "#334155" : pos ? "#34d399" : "#f87171" }}>
                 {typeof item.change !== 'number' ? "—" : <><span style={{ fontSize: 10 }}>{pos ? "▲" : "▼"}</span>{Math.abs(item.change).toFixed(2)}%</>}
@@ -2084,6 +2090,7 @@ const GLOBAL_STYLES = `
     .header-controls { gap: 8px !important; }
     .panel-wrapper { min-height: 400px; }
     .bottom-grid-all { gap: 10px !important; }
+    .range-52w { flex: 1 1 40px !important; min-width: 0 !important; overflow: hidden !important; }
   }
 `;
 
