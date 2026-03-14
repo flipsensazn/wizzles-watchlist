@@ -1606,7 +1606,7 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
         {sorted.map((item, idx) => {
           const pos  = (typeof item.change === 'number' ? item.change : 0) >= 0;
           return (
-            <div key={item.ticker} style={{ borderRadius: 8, padding: isMobile ? "8px 6px" : "10px 10px", display: "flex", alignItems: "center", gap: isMobile ? 6 : 10, borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background .15s", minWidth: 0, overflow: "hidden" }}
+            <div key={item.ticker} style={{ borderRadius: 8, padding: isMobile ? "8px 6px" : "12px 10px", display: "flex", alignItems: "center", gap: isMobile ? 6 : 10, borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background .15s", minWidth: 0, overflow: "hidden" }}
               onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
               onMouseLeave={e => e.currentTarget.style.background = ""}>
               <span style={{ fontSize: 10, color: "#334155", width: 16, textAlign: "right" }}>{idx + 1}</span>
@@ -1633,7 +1633,7 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
                     {has52W ? (
                       <>
                         {/* Bar + dot + current price label above dot */}
-                        <div style={{ position: "relative", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2 }}>
+                        <div style={{ position: "relative", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2, marginTop: 14, overflow: "visible" }}>
                           <div style={{ position: "absolute", left: `${dotPos}%`, top: "50%", transform: "translate(-50%, -50%)", zIndex: 2 }}>
                             <div style={{ position: "absolute", bottom: "100%", left: "50%", transform: "translateX(-50%)", marginBottom: 3, background: "rgba(24,24,24,0.85)", padding: "1px 5px", borderRadius: 4, fontSize: 8.5, fontWeight: 700, color: "#e2e8f0", whiteSpace: "nowrap" }}>
                               ${pLive.toFixed(2)}
