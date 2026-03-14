@@ -485,6 +485,194 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
   );
 }
 
+// ── RESPONSIVE TOP BAR ───────────────────────────────────
+const TOP_BAR_TICKERS = [
+  { ticker: "^GSPC",   label: "S&P 500", color: "#60a5fa" },
+  { ticker: "^DJI",    label: "DOW",     color: "#34d399" },
+  { ticker: "^IXIC",   label: "NASDAQ",  color: "#c084fc" },
+  { ticker: "BTC-USD", label: "BTC",     color: "#f59e0b" },
+  { ticker: "ETH-USD", label: "ETH",     color: "#60a5fa" },
+  { ticker: "XRP-USD", label: "XRP",     color: "#34d399" },
+];
+
+function TopBar({ marketData }) {
+  const barRef   = useRef(null);
+  const clockRef = useRef(null);
+  const [scale, setScale]     = useState(1);
+  const [isMobile, setIsMobile] = useState(() => window.innerWidth < 768);
+
+  useEffect(() => {
+    const onResize = () => {
+      const w = window.innerWidth;
+      setIsMobile(w < 768);
+    };
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
+  // Desktop-only scale calculation
+  useEffect(() => {
+    if (isMobile) return;
+    const measure = () => {
+      if (!barRef.current || !clockRef.current) return;
+      const barW    = barRef.current.offsetWidth;
+      const clockW  = clockRef.current.offsetWidth;
+      const available = barW - 32 - 14 - clockW;
+      const fullW   = 148 * 6 + 5 * 5;
+      setScale(Math.min(1, Math.max(0.65, available / fullW)));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    if (barRef.current) ro.observe(barRef.current);
+    return () => ro.disconnect();
+  }, [isMobile]);
+
+  function formatPrice(p, t) {
+    if (p == null) return "—";
+    if (t === "BTC-USD" || t === "ETH-USD") return p.toLocaleString("en-US", { maximumFractionDigits: 0, useGrouping: true });
+    if (t === "XRP-USD") return p.toFixed(4);
+    return p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true });
+  }
+
+  // ── MOBILE LAYOUT ────────────────────────────────────────
+  // 3×2 grid of cards + compact clock bar beneath
+  if (isMobile) {
+    return (
+      <div ref={barRef} style={{
+        position: "fixed", top: 0, left: 0, right: 0, zIndex: 1000,
+        background: "rgba(14,14,14,0.98)",
+        borderBottom: "1px solid rgba(255,255,255,.07)",
+        backdropFilter: "blur(12px)",
+        boxShadow: "0 2px 20px rgba(0,0,0,0.7)",
+      }}>
+        {/* 3-column grid of ticker cards */}
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "repeat(3, 1fr)",
+          gap: 3,
+          padding: "4px 4px 0",
+        }}>
+          {TOP_BAR_TICKERS.map(({ ticker, label, color }) => {
+            const entry      = marketData[ticker] || {};
+            const price      = entry.price;
+            const changePct  = entry.change;
+            const pos        = (changePct ?? 0) >= 0;
+            const changeColor = changePct == null ? "#475569" : pos ? "#10b981" : "#ef4444";
+            const sessionLabel = entry?.session === "POST" || entry?.session === "CLOSED" ? "AH"
+                               : entry?.session === "PRE" ? "PM" : null;
+            let absChange = "—";
+            if (price != null && changePct != null) {
+              const diff = price - price / (1 + changePct / 100);
+              absChange = (diff >= 0 ? "+" : "") + diff.toFixed(2);
+            }
+            return (
+              <div key={ticker} style={{
+                background: "linear-gradient(to bottom, #1c1c1c, #111)",
+                border: "1px solid #222",
+                borderRadius: 3,
+                padding: "5px 7px 3px",
+                fontFamily: "'Roboto Condensed', sans-serif",
+                minWidth: 0,
+              }}>
+                {/* Label + session + abs change */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 1 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
+                    <span style={{ fontSize: 10, fontWeight: 800, color, letterSpacing: "0.03em", whiteSpace: "nowrap" }}>{label}</span>
+                    {sessionLabel && <span style={{ fontSize: 6, fontWeight: 800, color: "#94a3b8", background: "#171717", border: "1px solid #333", borderRadius: 2, padding: "0px 2px" }}>{sessionLabel}</span>}
+                  </div>
+                  <span style={{ fontSize: 9, fontWeight: 700, color: changeColor, whiteSpace: "nowrap" }}>{absChange}</span>
+                </div>
+                {/* Price + % */}
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: "#f8fafc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{formatPrice(price, ticker)}</span>
+                  <span style={{ fontSize: 10, fontWeight: 700, color: changeColor, whiteSpace: "nowrap", flexShrink: 0, marginLeft: 2 }}>
+                    {changePct != null ? `${pos ? "+" : ""}${changePct.toFixed(2)}%` : "—"}
+                  </span>
+                </div>
+                {/* Mini sparkline */}
+                <BloombergChart data={entry.chartData} timestamps={entry.chartTimestamps} color={changeColor} />
+              </div>
+            );
+          })}
+        </div>
+        {/* Compact clock strip beneath the grid */}
+        <div style={{
+          display: "flex", alignItems: "center", justifyContent: "center",
+          padding: "3px 8px 4px", gap: 10,
+          borderTop: "1px solid rgba(255,255,255,.04)",
+        }}>
+          <MarketClockCompact />
+        </div>
+      </div>
+    );
+  }
+
+  // ── DESKTOP LAYOUT ───────────────────────────────────────
+  return (
+    <div ref={barRef} style={{
+      position: "fixed", top: 0, left: 0, right: 0, zIndex: 1000,
+      display: "flex", alignItems: "center",
+      padding: "0 16px", height: 72,
+      background: "rgba(14,14,14,0.98)",
+      borderBottom: "1px solid rgba(255,255,255,.07)",
+      backdropFilter: "blur(12px)",
+      boxShadow: "0 2px 20px rgba(0,0,0,0.7)",
+      overflow: "hidden",
+    }}>
+      <div style={{
+        display: "flex", alignItems: "stretch", gap: Math.round(5 * scale),
+        flex: "1 1 0", minWidth: 0,
+        transformOrigin: "left center",
+        transform: `scaleX(${scale}) scaleY(${Math.min(1, scale + 0.15)})`,
+      }}>
+        {TOP_BAR_TICKERS.map(({ ticker, label, color }) => {
+          const entry      = marketData[ticker] || {};
+          const price      = entry.price;
+          const changePct  = entry.change;
+          const pos        = (changePct ?? 0) >= 0;
+          const changeColor = changePct == null ? "#475569" : pos ? "#10b981" : "#ef4444";
+          const sessionLabel = entry?.session === "POST" || entry?.session === "CLOSED" ? "AH"
+                             : entry?.session === "PRE" ? "PM" : null;
+          let absChange = "—";
+          if (price != null && changePct != null) {
+            const diff = price - price / (1 + changePct / 100);
+            absChange = (diff >= 0 ? "+" : "") + diff.toFixed(2);
+          }
+          return (
+            <div key={ticker} style={{
+              display: "flex", flexDirection: "column", justifyContent: "center",
+              padding: "6px 10px 4px", borderRadius: 3,
+              background: "linear-gradient(to bottom, #1c1c1c, #111)",
+              border: "1px solid #222",
+              fontFamily: "'Roboto Condensed', sans-serif",
+              flex: "1 1 0", minWidth: 0, boxSizing: "border-box",
+              overflow: "hidden",
+            }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 1 }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color, letterSpacing: "0.04em", whiteSpace: "nowrap" }}>{label}</span>
+                  {sessionLabel && <span style={{ fontSize: 7, fontWeight: 800, color: "#94a3b8", background: "#171717", border: "1px solid #333", borderRadius: 2, padding: "1px 3px", flexShrink: 0 }}>{sessionLabel}</span>}
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 700, color: changeColor, whiteSpace: "nowrap", flexShrink: 0 }}>{absChange}</span>
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2, gap: 4 }}>
+                <span style={{ fontSize: 13, fontWeight: 700, color: "#f8fafc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{formatPrice(price, ticker)}</span>
+                <span style={{ fontSize: 11, fontWeight: 700, color: changeColor, whiteSpace: "nowrap", flexShrink: 0 }}>
+                  {changePct != null ? `${pos ? "+" : ""}${changePct.toFixed(2)}%` : "—"}
+                </span>
+              </div>
+              <BloombergChart data={entry.chartData} timestamps={entry.chartTimestamps} color={changeColor} />
+            </div>
+          );
+        })}
+      </div>
+      <div ref={clockRef} style={{ flexShrink: 0, marginLeft: 14 }}>
+        <MarketClock />
+      </div>
+    </div>
+  );
+}
+
 // ── MARKET CLOCK ─────────────────────────────────────────
 const NYSE_HOLIDAYS_2025_2026 = new Set([
   "2025-01-01","2025-01-20","2025-02-17","2025-04-18",
@@ -560,122 +748,6 @@ function fmtCountdown(secs) {
   return `${String(h).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")}`;
 }
 
-// ── RESPONSIVE TOP BAR ───────────────────────────────────
-const TOP_BAR_TICKERS = [
-  { ticker: "^GSPC",   label: "S&P 500", color: "#60a5fa" },
-  { ticker: "^DJI",    label: "DOW",     color: "#34d399" },
-  { ticker: "^IXIC",   label: "NASDAQ",  color: "#c084fc" },
-  { ticker: "BTC-USD", label: "BTC",     color: "#f59e0b" },
-  { ticker: "ETH-USD", label: "ETH",     color: "#60a5fa" },
-  { ticker: "XRP-USD", label: "XRP",     color: "#34d399" },
-];
-
-function TopBar({ marketData }) {
-  const barRef    = useRef(null);
-  const clockRef  = useRef(null);
-  // scale: 1 = full size, shrinks toward 0.7 as space gets tight
-  const [scale, setScale] = useState(1);
-
-  useEffect(() => {
-    const measure = () => {
-      if (!barRef.current || !clockRef.current) return;
-      const barW   = barRef.current.offsetWidth;
-      const clockW = clockRef.current.offsetWidth;
-      const padding = 32;    // 16px each side
-      const gap     = 14;    // gap between tickers and clock
-      const available = barW - padding - gap - clockW;
-      // At full scale each card is ~148px, 6 cards + 5 gaps of 5px = 913px
-      const fullW = 148 * 6 + 5 * 5;
-      const ratio = available / fullW;
-      setScale(Math.min(1, Math.max(0.65, ratio)));
-    };
-
-    measure();
-    const ro = new ResizeObserver(measure);
-    ro.observe(barRef.current);
-    return () => ro.disconnect();
-  }, []);
-
-  function formatPrice(p, t) {
-    if (p == null) return "—";
-    if (t === "BTC-USD" || t === "ETH-USD") return p.toLocaleString("en-US", { maximumFractionDigits: 0, useGrouping: true });
-    if (t === "XRP-USD") return p.toFixed(4);
-    return p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true });
-  }
-
-  return (
-    <div ref={barRef} style={{
-      position: "fixed", top: 0, left: 0, right: 0, zIndex: 1000,
-      display: "flex", alignItems: "center",
-      padding: "0 16px", height: 72,
-      background: "rgba(14,14,14,0.98)",
-      borderBottom: "1px solid rgba(255,255,255,.07)",
-      backdropFilter: "blur(12px)",
-      boxShadow: "0 2px 20px rgba(0,0,0,0.7)",
-      overflow: "hidden",
-    }}>
-      {/* Tickers — flex-shrink allowed, scaled via transform */}
-      <div style={{
-        display: "flex", alignItems: "stretch", gap: Math.round(5 * scale),
-        flex: "1 1 0", minWidth: 0,
-        transformOrigin: "left center",
-        transform: `scaleX(${scale}) scaleY(${Math.min(1, scale + 0.15)})`,
-      }}>
-        {TOP_BAR_TICKERS.map(({ ticker, label, color }) => {
-          const entry      = marketData[ticker] || {};
-          const price      = entry.price;
-          const changePct  = entry.change;
-          const pos        = (changePct ?? 0) >= 0;
-          const changeColor = changePct == null ? "#475569" : pos ? "#10b981" : "#ef4444";
-          const sessionLabel = entry?.session === "POST" || entry?.session === "CLOSED" ? "AH"
-                             : entry?.session === "PRE" ? "PM" : null;
-          // Reverse-engineer absolute point/dollar change from price + percentage
-          let absChange = "—";
-          if (price != null && changePct != null) {
-            const prevPrice = price / (1 + (changePct / 100));
-            const diff = price - prevPrice;
-            absChange = (diff >= 0 ? "+" : "") + diff.toFixed(2);
-          }
-
-          return (
-            <div key={ticker} style={{
-              display: "flex", flexDirection: "column", justifyContent: "center",
-              padding: "6px 10px 4px", borderRadius: 3,
-              background: "linear-gradient(to bottom, #1c1c1c, #111)",
-              border: "1px solid #222",
-              fontFamily: "'Roboto Condensed', sans-serif",
-              flex: "1 1 0", minWidth: 0, boxSizing: "border-box",
-              overflow: "hidden",
-            }}>
-              {/* Row 1: Label + session badge | abs change */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 1 }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                  <span style={{ fontSize: 11, fontWeight: 800, color, letterSpacing: "0.04em", whiteSpace: "nowrap" }}>{label}</span>
-                  {sessionLabel && <span style={{ fontSize: 7, fontWeight: 800, color: "#94a3b8", background: "#171717", border: "1px solid #333", borderRadius: 2, padding: "1px 3px", flexShrink: 0 }}>{sessionLabel}</span>}
-                </div>
-                <span style={{ fontSize: 11, fontWeight: 700, color: changeColor, whiteSpace: "nowrap", flexShrink: 0 }}>{absChange}</span>
-              </div>
-              {/* Row 2: Price | % change */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2, gap: 4 }}>
-                <span style={{ fontSize: 13, fontWeight: 700, color: "#f8fafc", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{formatPrice(price, ticker)}</span>
-                <span style={{ fontSize: 11, fontWeight: 700, color: changeColor, whiteSpace: "nowrap", flexShrink: 0 }}>
-                  {changePct != null ? `${pos ? "+" : ""}${changePct.toFixed(2)}%` : "—"}
-                </span>
-              </div>
-              <BloombergChart data={entry.chartData} timestamps={entry.chartTimestamps} color={changeColor} />
-            </div>
-          );
-        })}
-      </div>
-
-      {/* Market Clock — always full size, never compressed */}
-      <div ref={clockRef} style={{ flexShrink: 0, marginLeft: 14 }}>
-        <MarketClock />
-      </div>
-    </div>
-  );
-}
-
 function MarketClock() {
   const [tick, setTick] = useState(() => Date.now());
 
@@ -721,6 +793,43 @@ function MarketClock() {
       </div>
 
       <div style={{ fontSize: 9, color: "#2d3a52", fontFamily: "'DM Mono','Fira Code',monospace", letterSpacing: "0.05em" }}>{etTime}</div>
+    </div>
+  );
+}
+
+// Compact single-line clock for mobile top bar
+function MarketClockCompact() {
+  const [tick, setTick] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setTick(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  const now      = new Date(tick);
+  const { state } = getMarketState(now);
+  const secsLeft = secsUntilNextEvent(now);
+  const countdown = fmtCountdown(secsLeft);
+  const { h, m, s } = getNYTime(now);
+  const etTime = `${String(h % 12 || 12).padStart(2,"0")}:${String(m).padStart(2,"0")}:${String(s).padStart(2,"0")} ${h >= 12 ? "PM" : "AM"} ET`;
+
+  const isOpen  = state === "open";
+  const isPre   = state === "pre";
+  const isPost  = state === "post";
+  const isExt   = isPre || isPost;
+  const dotColor   = isOpen ? "#34d399" : isExt ? "#f59e0b" : "#475569";
+  const label      = isOpen ? "OPEN" : isPre ? "PRE" : isPost ? "AH" : "CLOSED";
+  const labelColor = isOpen ? "#34d399" : isExt ? "#f59e0b" : "#64748b";
+  const subLabel   = isOpen ? "closes" : isExt ? (isPre ? "opens" : "closes") : "opens";
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, fontFamily: "'DM Mono','Fira Code',monospace" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+        <span style={{ width: 5, height: 5, borderRadius: "50%", background: dotColor, display: "inline-block", boxShadow: isOpen ? `0 0 5px ${dotColor}` : "none", animation: isOpen ? "pulseDot 2s infinite" : "none" }} />
+        <span style={{ fontSize: 9, fontWeight: 800, letterSpacing: "0.15em", color: labelColor }}>{label}</span>
+      </div>
+      <span style={{ fontSize: 9, color: "#334155" }}>{subLabel} in</span>
+      <span style={{ fontSize: 13, fontWeight: 800, letterSpacing: "0.06em", color: isOpen ? "#34d399" : isExt ? "#f59e0b" : "#475569" }}>{countdown}</span>
+      <span style={{ fontSize: 9, color: "#2d3a52", letterSpacing: "0.04em" }}>{etTime}</span>
     </div>
   );
 }
@@ -1924,6 +2033,8 @@ function AdminModal({ onClose, onSuccess }) {
 const GLOBAL_STYLES = `
   * { box-sizing: border-box; margin: 0; padding: 0; box-shadow: none !important; }
   html, body { background: #1a1a1f; font-family: 'Inter', sans-serif; }
+  :root { --topbar-h: 72px; }
+  @media (max-width: 767px) { :root { --topbar-h: 172px; } }
   
   html.light-mode { filter: invert(1) hue-rotate(180deg); }
   
@@ -2254,8 +2365,8 @@ export default function App() {
         {/* FIXED TOP BAR: 6 Tickers + Market Clock */}
         <TopBar marketData={marketData} />
 
-        {/* HEADER (below fixed bar) */}
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", marginTop: 72, borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
+        {/* HEADER — offset below fixed bar (mobile bar is ~168px, desktop ~72px) */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 28px", marginTop: "var(--topbar-h, 72px)", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
           <div>
             <div style={{ fontSize: 10, color: "#2d3a52", letterSpacing: "0.35em", textTransform: "uppercase", marginBottom: 3 }}>HOW ~$600B+ IN HYPERSCALER CAPEX FLOWS THROUGH AI INFRASTRUCTURE TRACKS</div>
             <div style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", letterSpacing: "-0.01em" }}>AI Capex Flow Intelligence</div>
