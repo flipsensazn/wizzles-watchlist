@@ -1614,12 +1614,12 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
           const dotColor = pos ? "#34d399" : "#f87171";
 
           return (
-            <div key={item.ticker} style={{ borderRadius: 8, padding: "10px 10px", display: "flex", alignItems: "center", gap: 10, borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background .15s" }}
+            <div key={item.ticker} style={{ borderRadius: 8, padding: "10px 10px", display: "flex", alignItems: "center", gap: isMobile ? 6 : 10, borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background .15s" }}
               onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
               onMouseLeave={e => e.currentTarget.style.background = ""}>
               <span style={{ fontSize: 10, color: "#334155", width: 16, textAlign: "right", flexShrink: 0 }}>{idx + 1}</span>
-              <div style={{ flex: "0 0 auto", minWidth: 60, cursor: "pointer" }} onClick={e => onTickerClick?.(item.ticker, e.currentTarget.getBoundingClientRect())}>
-                <div style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{item.ticker}</div>
+              <div style={{ flex: "0 0 auto", minWidth: isMobile ? 46 : 60, cursor: "pointer" }} onClick={e => onTickerClick?.(item.ticker, e.currentTarget.getBoundingClientRect())}>
+                <div style={{ fontSize: isMobile ? 11 : 13, fontWeight: 700, color: "#f1f5f9" }}>{item.ticker}</div>
                 {item.track
                   ? <div style={{ fontSize: 9, color: item.track.color, marginTop: 1 }}>{item.track.label.split(" ").slice(0,2).join(" ")}</div>
                   : isShort && <div style={{ fontSize: 9, color: "#f59e0b", marginTop: 1 }}>Shortlist</div>
@@ -1627,7 +1627,7 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
               </div>
 
               {/* 52W Range Tracker */}
-              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, fontFamily: "monospace", minWidth: 100 }}>
+              <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, fontFamily: "monospace", minWidth: isMobile ? 60 : 100 }}>
                 {has52W ? (
                   <>
                     {/* Price label row — fixed height so bar is always at the same vertical position */}
@@ -1656,7 +1656,7 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
                 )}
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, fontSize: 13, fontWeight: 700, minWidth: 68, textAlign: "right", flexShrink: 0, color: typeof item.change !== 'number' ? "#334155" : pos ? "#34d399" : "#f87171" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, fontSize: isMobile ? 11 : 13, fontWeight: 700, minWidth: isMobile ? 54 : 68, textAlign: "right", flexShrink: 0, color: typeof item.change !== 'number' ? "#334155" : pos ? "#34d399" : "#f87171" }}>
                 {typeof item.change !== 'number' ? "—" : <><span style={{ fontSize: 10 }}>{pos ? "▲" : "▼"}</span>{Math.abs(item.change).toFixed(2)}%</>}
               </div>
               <button onClick={() => removeTicker(item.ticker)} style={{ background: "none", border: "none", color: "#1e293b", cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1, transition: "color .15s", fontFamily: "inherit", visibility: !isShort || !isAdmin ? "hidden" : "visible", flexShrink: 0 }} onMouseEnter={e => e.currentTarget.style.color = "#ef4444"} onMouseLeave={e => e.currentTarget.style.color = "#1e293b"}>×</button>
