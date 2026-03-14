@@ -1622,7 +1622,7 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
                 const dotColor = pos ? "#34d399" : "#f87171";
                 
                 return (
-                  <div style={{ flex: "1 1 60px", minWidth: 0, display: "flex", alignItems: "center", gap: 4, fontSize: 9, color: "#64748b", fontFamily: "monospace", overflow: "hidden" }}>
+                  <div className="range-52w" style={{ flex: 1, display: "flex", alignItems: "center", gap: 6, fontSize: 9, color: "#64748b", fontFamily: "monospace", minWidth: 100 }}>
                     {has52W ? (
                       <>
                         <span>{w52L}</span>
@@ -2080,6 +2080,7 @@ const GLOBAL_STYLES = `
     .header-controls { gap: 8px !important; }
     .panel-wrapper { min-height: 400px; }
     .bottom-grid-all { gap: 10px !important; }
+    .range-52w { flex: 1 1 40px !important; min-width: 0 !important; overflow: hidden !important; }
   }
 `;
 
