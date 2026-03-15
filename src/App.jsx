@@ -2202,7 +2202,30 @@ export default function App() {
         });
         return merged;
       });
-      setPrices(prev => { const next = { ...prev, ...data }; pricesRef.current = next; return next; });
+      // Deep-merge: strip path returns no historical fields; preserve any that
+      // a prior full refresh already stored for these tickers.
+      setPrices(prev => {
+        const next = { ...prev };
+        for (const [ticker, newVal] of Object.entries(data)) {
+          if (!newVal || typeof newVal !== "object") { next[ticker] = newVal; continue; }
+          const prevVal = prev[ticker];
+          if (prevVal && typeof prevVal === "object") {
+            const HIST_KEYS = ["change5D","change1M","change6M","changeYTD","change1Y",
+                               "week52Low","week52High","earningsDate","chartData","chartTimestamps"];
+            const merged = { ...prevVal, ...newVal };
+            for (const k of HIST_KEYS) {
+              if ((newVal[k] === undefined || newVal[k] === null) && prevVal[k] != null) {
+                merged[k] = prevVal[k];
+              }
+            }
+            next[ticker] = merged;
+          } else {
+            next[ticker] = newVal;
+          }
+        }
+        pricesRef.current = next;
+        return next;
+      });
     });
   }, []);
 
@@ -2263,7 +2286,35 @@ export default function App() {
 
     const allData = await fetchAllPrices(allTickers);
 
-    setPrices(prev => { const next = { ...prev, ...allData }; pricesRef.current = next; return next; });
+    // Deep-merge per ticker so that Finnhub fallback data (which only contains
+    // price/change/session) never stomps the richer Yahoo payload that includes
+    // change5D, change1M, change6M, changeYTD, change1Y, week52Low, week52High.
+    const HIST_KEYS = [
+      "change5D","change1M","change6M","changeYTD","change1Y",
+      "week52Low","week52High","earningsDate","chartData","chartTimestamps",
+    ];
+    setPrices(prev => {
+      const next = { ...prev };
+      for (const [ticker, newVal] of Object.entries(allData)) {
+        if (!newVal || typeof newVal !== "object") { next[ticker] = newVal; continue; }
+        const prevVal = prev[ticker];
+        if (prevVal && typeof prevVal === "object") {
+          // Overlay new fields onto the previous entry, then restore any historical
+          // key the new payload omitted (undefined or null) from the previous value.
+          const merged = { ...prevVal, ...newVal };
+          for (const k of HIST_KEYS) {
+            if ((newVal[k] === undefined || newVal[k] === null) && prevVal[k] != null) {
+              merged[k] = prevVal[k];
+            }
+          }
+          next[ticker] = merged;
+        } else {
+          next[ticker] = newVal;
+        }
+      }
+      pricesRef.current = next;
+      return next;
+    });
     setMarketData(prev => {
       const merged = { ...prev };
       marketTickers.forEach(ticker => {
