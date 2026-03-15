@@ -44,18 +44,34 @@ const SECTORS = [
   },
 ];
 
-function buildPrompt() {
-  return `You are a financial analyst specialising in AI infrastructure capital expenditure.
+// --- PROMPT 1: Determine the total capex spending ---
+function buildPrompt1() {
+  return `You are a financial analyst specializing in AI infrastructure capital expenditure.
 
-The five primary hyperscalers—Amazon (AWS), Microsoft (Azure), Alphabet/Google, Meta, and Oracle—have collectively announced roughly $600 billion or more in AI-related capex for 2025-2026, based on their most recent earnings calls, investor-day presentations, and SEC filings.
+Analyze the most recent public guidance, earnings calls, investor-day presentations, and SEC filings for the five primary hyperscalers: Amazon (AWS), Microsoft (Azure), Alphabet/Google, Meta, and Oracle.
 
-Based on your knowledge of their public guidance and capital allocation priorities, estimate how this total spend flows across the following six infrastructure sectors.
+Determine their collective announced or estimated AI-related capex for 2025-2026. Previously this was roughly $600 billion. 
+
+Respond with ONLY a valid JSON object containing the total estimated amount in billions of USD. No markdown fences, no preamble, no explanation outside the JSON:
+
+{
+  "totalCapexBillions": <integer>
+}`;
+}
+
+// --- PROMPT 2: Allocate the dynamic total across sectors ---
+function buildPrompt2(totalCapex) {
+  return `You are a financial analyst specializing in AI infrastructure capital expenditure.
+
+The five primary hyperscalers (Amazon, Microsoft, Alphabet, Meta, Oracle) have collectively announced roughly $${totalCapex} billion in AI-related capex for 2025-2026.
+
+Based on your knowledge of their public guidance and capital allocation priorities, estimate how this $${totalCapex} billion total spend flows across the following six infrastructure sectors.
 
 Sectors to allocate:
 ${SECTORS.map(s => `• ${s.id} — "${s.label}": ${s.description}`).join("\n")}
 
 Guidelines:
-- The six sectors should sum to roughly 600 (i.e., $600 B total).
+- The six sectors MUST sum to exactly ${totalCapex}.
 - "Compute & Silicon" (chips + foundry + equipment) typically absorbs the largest share (~25-35%).
 - "Neoclouds & Data Centers" (physical build-out) is the second-largest (~18-22%).
 - Use your best estimate for sectors where direct figures are unavailable, flagging confidence accordingly.
@@ -73,6 +89,52 @@ Respond with ONLY a valid JSON array — no markdown fences, no preamble, no exp
   },
   ...six objects total...
 ]`;
+}
+
+// Helper to execute Gemini API requests
+async function callGemini(promptText, apiKey, temperature, maxTokens, timeoutMs = 15000) {
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`,
+      {
+        method:  "POST",
+        signal:  controller.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: promptText }] }],
+          generationConfig: {
+            temperature: temperature,
+            maxOutputTokens: maxTokens,
+          },
+        }),
+      }
+    );
+    clearTimeout(timeout);
+
+    if (!res.ok) {
+      const errText = await res.text();
+      throw new Error(`Gemini API error ${res.status}: ${errText}`);
+    }
+
+    const data = await res.json();
+    const textContent = data?.candidates?.[0]?.content?.parts
+      ?.filter(p => p.text)
+      ?.map(p => p.text)
+      ?.join("") ?? "";
+
+    if (!textContent) throw new Error("Empty response from Gemini");
+
+    const clean = textContent.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
+    return JSON.parse(clean);
+
+  } catch (err) {
+    clearTimeout(timeout);
+    if (err.name === "AbortError") throw new Error(`Gemini request timed out after ${timeoutMs}ms`);
+    throw err;
+  }
 }
 
 export async function onRequest(context) {
@@ -125,7 +187,7 @@ export async function onRequest(context) {
         }
       }
 
-      // 2. Cache miss — call Gemini (15s timeout)
+      // 2. Cache miss — Call Gemini
       const geminiKey = env.GEMINI_API_KEY;
       if (!geminiKey) {
         return new Response(
@@ -134,71 +196,28 @@ export async function onRequest(context) {
         );
       }
 
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 15000);
+      let totalCapex = 600; // Default fallback just in case the first prompt fails structurally
 
-      let geminiRes;
+      // STEP 2A: Execute Prompt 1 (Get Total Capex)
       try {
-        geminiRes = await fetch(
-          `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${geminiKey}`,
-          {
-            method:  "POST",
-            signal:  controller.signal,
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              contents: [{ parts: [{ text: buildPrompt() }] }],
-              generationConfig: {
-                temperature:     0.2,
-                maxOutputTokens: 1500,
-              },
-            }),
-          }
-        );
-      } catch (fetchErr) {
-        const msg = fetchErr.name === "AbortError" ? "Gemini request timed out after 15s" : fetchErr.message;
-        return new Response(JSON.stringify({ error: msg }), { status: 502, headers });
-      } finally {
-        clearTimeout(timeout);
+        const totalResult = await callGemini(buildPrompt1(), geminiKey, 0.1, 100);
+        if (totalResult && typeof totalResult.totalCapexBillions === 'number') {
+          totalCapex = totalResult.totalCapexBillions;
+        }
+      } catch (prompt1Err) {
+        console.warn("Prompt 1 failed, proceeding with default $600B total.", prompt1Err);
+        // We will swallow this error and allow Prompt 2 to execute with the $600B fallback
       }
 
-      if (!geminiRes.ok) {
-        const errText = await geminiRes.text();
-        let errDetail = errText;
-        try {
-          const errJson = JSON.parse(errText);
-          errDetail = errJson?.error?.message || errText;
-        } catch (_) {}
-        return new Response(
-          JSON.stringify({ error: `Gemini API error ${geminiRes.status}`, detail: errDetail }),
-          { status: 502, headers }
-        );
-      }
-
-      const geminiData = await geminiRes.json();
-
-      // Extract text from Gemini response structure
-      const textContent = geminiData?.candidates?.[0]?.content?.parts
-        ?.filter(p => p.text)
-        ?.map(p => p.text)
-        ?.join("") ?? "";
-
-      if (!textContent) {
-        return new Response(
-          JSON.stringify({ error: "Empty response from Gemini", raw: JSON.stringify(geminiData) }),
-          { status: 500, headers }
-        );
-      }
-
-      // Parse JSON — strip any accidental markdown fences
+      // STEP 2B: Execute Prompt 2 (Get Allocations based on dynamic total)
       let allocations;
       try {
-        const clean = textContent.replace(/^```json\s*/i, "").replace(/^```\s*/i, "").replace(/```\s*$/i, "").trim();
-        allocations = JSON.parse(clean);
+        allocations = await callGemini(buildPrompt2(totalCapex), geminiKey, 0.2, 1500);
         if (!Array.isArray(allocations)) throw new Error("Expected a JSON array");
-      } catch (parseErr) {
+      } catch (prompt2Err) {
         return new Response(
-          JSON.stringify({ error: "Failed to parse Gemini response as JSON", raw: textContent }),
-          { status: 500, headers }
+          JSON.stringify({ error: "Failed to gather allocations", detail: prompt2Err.message }),
+          { status: 502, headers }
         );
       }
 
@@ -207,6 +226,7 @@ export async function onRequest(context) {
       allocations = allocations.filter(a => a.id && validIds.has(a.id) && typeof a.capex === "number");
 
       const result = {
+        totalCapexDerived: totalCapex, // Returning this so you can inspect what the model decided
         allocations,
         fetchedAt: Date.now(),
         model:     MODEL,
