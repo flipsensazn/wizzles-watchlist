@@ -9,7 +9,7 @@ const FINNHUB_CRYPTO_MAP = {
   "ETH-USD": "BINANCE:ETHUSDT",
   "XRP-USD": "BINANCE:XRPUSDT",
 };
-const KV_CACHE_KEY  = "priceCache_v8"; // Bumped: wider gap tolerances + 2y spark range
+const KV_CACHE_KEY  = "priceCache_v8"; // Bumped: dual-format spark parsing + 2y range + per-period tolerances
 const KV_CRUMB_KEY  = "yahooSession_v1";
 const CRUMB_TTL_MS  = 55 * 60 * 1000; // 55 minutes
 const USER_AGENT    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -55,15 +55,15 @@ function getHistoricalChanges(timestamps, closes, currentPrice) {
 
   const now = Date.now() / 1000;
 
-  // Per-period tolerance (calendar days): how far off the nearest bar can be before
-  // we return null. Wider tolerances for longer periods absorb weekends, holidays,
-  // and thin trading days without producing blank cells in the UI.
+  // Per-period tolerance: how many calendar days off the closest bar can be.
+  // Wider for longer periods to absorb weekends, holidays, and sparse data
+  // near the edge of the history window without producing blank UI cells.
   const targets = {
-    "5D":  { ts: now - 7   * 86400, maxGapDays: 10 },  // ~1 trading week
-    "1M":  { ts: now - 30  * 86400, maxGapDays: 10 },  // ~1 calendar month
-    "6M":  { ts: now - 182 * 86400, maxGapDays: 14 },  // ~6 months
+    "5D":  { ts: now - 7   * 86400, maxGapDays: 10 },
+    "1M":  { ts: now - 30  * 86400, maxGapDays: 10 },
+    "6M":  { ts: now - 182 * 86400, maxGapDays: 14 },
     "YTD": { ts: new Date(new Date().getFullYear(), 0, 1).getTime() / 1000, maxGapDays: 10 },
-    "1Y":  { ts: now - 365 * 86400, maxGapDays: 14 },  // ~1 year
+    "1Y":  { ts: now - 365 * 86400, maxGapDays: 14 },
   };
 
   const changes = {};
@@ -75,10 +75,7 @@ function getHistoricalChanges(timestamps, closes, currentPrice) {
     for (let i = 0; i < timestamps.length; i++) {
       if (closes[i] == null) continue;
       const diff = Math.abs(timestamps[i] - targetTs);
-      if (diff < minDiff) {
-        minDiff = diff;
-        bestIdx = i;
-      }
+      if (diff < minDiff) { minDiff = diff; bestIdx = i; }
     }
 
     if (bestIdx !== -1 && minDiff < maxGapDays * 86400) {
@@ -209,10 +206,16 @@ export async function onRequest(context) {
            const sData = await sparkRes.json();
            const sResults = sData?.spark?.result || [];
            for (const item of sResults) {
-              // BUG FIX: Removed .response wrapper mapping, maps directly to timestamp/indicators
+              // Yahoo's spark API has returned data in two different structures over time.
+              // Format A (flat):   item.timestamp, item.indicators
+              // Format B (nested): item.response[0].timestamp, item.response[0].indicators
+              // We detect which format is present and handle both, so a Yahoo-side
+              // API change never silently zeroes out all historical change fields.
+              const flat   = item.timestamp?.length > 0;
+              const source = flat ? item : (item.response?.[0] ?? {});
               sparkData[item.symbol] = {
-                 timestamps: item.timestamp || [],
-                 closes: item.indicators?.quote?.[0]?.close || []
+                 timestamps: source.timestamp   || [],
+                 closes:     source.indicators?.quote?.[0]?.close || [],
               };
            }
         }
