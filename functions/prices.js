@@ -1,22 +1,15 @@
 // functions/prices.js
 
 const CACHE_TTL_SECONDS = 60; // 1 minutes — keeps KV writes well under the 1,000/day free tier limit
-// These 6 tickers power the market strip and get a dedicated no-cache fast path
-// so the frontend 5s poll receives fresh data every call.
-// Indices → Yahoo (session-aware, pre/after-hours)
-// Crypto  → Finnhub (near real-time, Yahoo crypto lags 1-2 min)
 const STRIP_TICKERS  = new Set(["^GSPC", "^DJI", "^IXIC", "BTC-USD", "ETH-USD", "XRP-USD"]);
 const INDEX_TICKERS  = ["^GSPC", "^DJI", "^IXIC"];
 const CRYPTO_TICKERS = ["BTC-USD", "ETH-USD", "XRP-USD"];
-// Finnhub uses exchange-prefixed symbols for crypto
 const FINNHUB_CRYPTO_MAP = {
   "BTC-USD": "BINANCE:BTCUSDT",
   "ETH-USD": "BINANCE:ETHUSDT",
   "XRP-USD": "BINANCE:XRPUSDT",
 };
-// v2 key ensures any old REGULAR-session snapshots are not served after this deploy
-const KV_CACHE_KEY  = "priceCache_v5";
-// Crumb is valid for hours — cache it in KV to eliminate 2 serial round trips
+const KV_CACHE_KEY  = "priceCache_v9"; // v9: replaced broken spark with chart endpoint
 const KV_CRUMB_KEY  = "yahooSession_v1";
 const CRUMB_TTL_MS  = 55 * 60 * 1000; // 55 minutes
 const USER_AGENT    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -50,12 +43,50 @@ async function getYahooSession(env) {
         JSON.stringify({ cookie, crumb, timestamp: Date.now() }),
         { expirationTtl: 3600 }
       );
-    } catch (err) {
-      console.error("KV crumb write error:", err);
-    }
+    } catch (err) {}
   }
 
   return { cookie, crumb };
+}
+
+// ── HISTORICAL CHANGE HELPER ─────────────────────────────────────────────────
+function getHistoricalChanges(timestamps, closes, currentPrice) {
+  if (!timestamps || !closes || timestamps.length === 0 || !currentPrice) return {};
+
+  const now = Date.now() / 1000;
+
+  // Per-period tolerance: how many calendar days the nearest bar can be off-target.
+  // Wider for longer periods to absorb weekends, holidays, and sparse data.
+  const targets = {
+    "5D":  { ts: now - 7   * 86400, maxGapDays: 10 },
+    "1M":  { ts: now - 30  * 86400, maxGapDays: 10 },
+    "6M":  { ts: now - 182 * 86400, maxGapDays: 14 },
+    "YTD": { ts: new Date(new Date().getFullYear(), 0, 1).getTime() / 1000, maxGapDays: 10 },
+    "1Y":  { ts: now - 365 * 86400, maxGapDays: 14 },
+  };
+
+  const changes = {};
+
+  for (const [period, { ts: targetTs, maxGapDays }] of Object.entries(targets)) {
+    let bestIdx = -1;
+    let minDiff = Infinity;
+
+    for (let i = 0; i < timestamps.length; i++) {
+      if (closes[i] == null) continue;
+      const diff = Math.abs(timestamps[i] - targetTs);
+      if (diff < minDiff) { minDiff = diff; bestIdx = i; }
+    }
+
+    if (bestIdx !== -1 && minDiff < maxGapDays * 86400) {
+      const oldPrice = closes[bestIdx];
+      changes[period] = oldPrice > 0
+        ? parseFloat((((currentPrice - oldPrice) / oldPrice) * 100).toFixed(2))
+        : null;
+    } else {
+      changes[period] = null;
+    }
+  }
+  return changes;
 }
 
 // ── REQUEST HANDLER ──────────────────────────────────────────────────────────
@@ -79,7 +110,6 @@ export async function onRequest(context) {
     });
   }
 
-  // 1. PARSE TICKERS
   const { searchParams } = new URL(request.url);
   const tickersParam = searchParams.get("tickers");
   const tickers = tickersParam ? [...new Set(tickersParam.split(",").filter(Boolean))] : [];
@@ -88,19 +118,12 @@ export async function onRequest(context) {
     return new Response(JSON.stringify({ error: "No tickers provided" }), { status: 400, headers });
   }
 
-  // 2a. FAST PATH — strip tickers bypass KV cache entirely so the 5s frontend
-  //     poll always gets a live Yahoo quote, not a 60s-stale snapshot.
-  //     Only activates when the request contains ONLY strip tickers (i.e. the
-  //     dedicated fast-refresh call from the frontend, not the full 30s refresh).
   const allStrip = tickers.length > 0 && tickers.every(t => STRIP_TICKERS.has(t));
   if (allStrip) {
     const stripResults = {};
     const FINNHUB_KEY = env.FINNHUB_KEY;
 
-    // ── Run Yahoo (indices) and Finnhub (crypto) in parallel ──────────────
     await Promise.all([
-
-      // Yahoo for ^GSPC, ^DJI, ^IXIC — session-aware, handles pre/after-hours
       (async () => {
         try {
           const { cookie, crumb } = await getYahooSession(env);
@@ -109,7 +132,6 @@ export async function onRequest(context) {
           if (res.ok) {
             const data = await res.json();
             const quotes = data?.quoteResponse?.result || [];
-            console.log(`[strip] Yahoo indices: ${quotes.length} quotes`);
             for (const q of quotes) {
               if (q.regularMarketPrice === undefined) continue;
               const state = q.marketState;
@@ -131,84 +153,75 @@ export async function onRequest(context) {
                 change = q.regularMarketChangePercent ?? 0;
                 session = "REGULAR";
               }
-              stripResults[q.symbol] = {
-                price:   parseFloat(price.toFixed(2)),
-                change:  parseFloat(change.toFixed(2)),
-                session,
-              };
+              stripResults[q.symbol] = { price: parseFloat(price.toFixed(2)), change: parseFloat(change.toFixed(2)), session };
             }
-          } else {
-            console.error(`[strip] Yahoo indices responded ${res.status}`);
           }
-        } catch (err) {
-          console.error("[strip] Yahoo indices error:", err.message);
-        }
+        } catch (err) {}
       })(),
-
-      // Finnhub for BTC-USD, ETH-USD, XRP-USD — near real-time crypto quotes
-      // 3 parallel calls, well within the 60 calls/min free tier limit
       ...CRYPTO_TICKERS.map(async (yahooSymbol) => {
         if (!FINNHUB_KEY) return;
         const finnhubSymbol = FINNHUB_CRYPTO_MAP[yahooSymbol];
         if (!finnhubSymbol) return;
         try {
-          const res = await fetch(
-            `https://finnhub.io/api/v1/quote?symbol=${finnhubSymbol}&token=${FINNHUB_KEY}`
-          );
+          const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${finnhubSymbol}&token=${FINNHUB_KEY}`);
           if (res.ok) {
             const q = await res.json();
-            // Finnhub: c = current price, dp = % change, pc = prev close
             if (q.c != null && q.c > 0) {
-              // Compute % change from prev close if dp missing
               const change = q.dp != null ? q.dp : (q.pc > 0 ? ((q.c - q.pc) / q.pc) * 100 : 0);
-              stripResults[yahooSymbol] = {
-                price:   parseFloat(q.c.toFixed(2)),
-                change:  parseFloat(change.toFixed(2)),
-                session: "REGULAR",
-              };
-              console.log(`[strip] Finnhub ${yahooSymbol}: $${q.c}`);
+              stripResults[yahooSymbol] = { price: parseFloat(q.c.toFixed(2)), change: parseFloat(change.toFixed(2)), session: "REGULAR" };
             }
-          } else {
-            console.error(`[strip] Finnhub ${finnhubSymbol} responded ${res.status}`);
           }
-        } catch (err) {
-          console.error(`[strip] Finnhub ${finnhubSymbol} error:`, err.message);
-        }
+        } catch (err) {}
       }),
-
     ]);
-
-    console.log(`[strip] fast-path returning ${Object.keys(stripResults).length}/6 results`);
     return new Response(JSON.stringify({ data: stripResults, cached: false }), { status: 200, headers });
   }
 
-  // 2. KV PRICE CACHE CHECK
   if (env.SHARED_DATA) {
     try {
       const cached = await env.SHARED_DATA.get(KV_CACHE_KEY, "json");
       if (cached && cached.timestamp && (Date.now() - cached.timestamp < CACHE_TTL_SECONDS * 1000)) {
         const allPresent = tickers.every(t => cached.data && t in cached.data);
-        if (allPresent) {
-          return new Response(JSON.stringify({ data: cached.data, cached: true }), { status: 200, headers });
-        }
+        if (allPresent) return new Response(JSON.stringify({ data: cached.data, cached: true }), { status: 200, headers });
       }
-    } catch (err) {
-      console.error("KV cache read error:", err);
-    }
+    } catch (err) {}
   }
 
-  // 3. FETCH FROM YAHOO (Primary Engine)
   const results = {};
   const FINNHUB_KEY = env.FINNHUB_KEY;
 
   try {
     const { cookie, crumb } = await getYahooSession(env);
-
     const batchSize = 40;
+    
     for (let i = 0; i < tickers.length; i += batchSize) {
       const batch = tickers.slice(i, i + batchSize);
 
-      const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${batch.join(",")}&corsDomain=finance.yahoo.com&formatted=false&crumb=${crumb}`;
+      // ── STEP 1: Fetch 2-year daily chart history for every ticker in parallel.
+      // Uses /v8/finance/chart per ticker — the same endpoint that powers the
+      // Bloomberg macro charts and is confirmed to work reliably.
+      // The /v8/finance/spark endpoint has been removed; it silently returned
+      // empty results and was the root cause of all non-1D percentages being blank.
+      const chartData = {};
+      await Promise.all(batch.map(async (ticker) => {
+        try {
+          const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=2y&interval=1d&crumb=${encodeURIComponent(crumb)}`;
+          const chartRes = await fetch(chartUrl, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } });
+          if (chartRes.ok) {
+            const cd = await chartRes.json();
+            const r  = cd?.chart?.result?.[0];
+            if (r?.timestamp?.length) {
+              chartData[ticker] = {
+                timestamps: r.timestamp,
+                closes:     r.indicators?.quote?.[0]?.close || [],
+              };
+            }
+          }
+        } catch (e) {}
+      }));
+
+      // ── STEP 2: Fetch current quote data for the batch
+      const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${batch.join(",")}&corsDomain=finance.yahoo.com&formatted=false&crumb=${encodeURIComponent(crumb)}`;
       const res = await fetch(url, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } });
 
       if (res.ok) {
@@ -218,7 +231,7 @@ export async function onRequest(context) {
         for (const q of quoteList) {
           if (q.regularMarketPrice === undefined) continue;
 
-          const state = q.marketState; 
+          const state = q.marketState;
           let price, change, session;
 
           if (state === "POST" || state === "POSTPOST") {
@@ -245,9 +258,20 @@ export async function onRequest(context) {
             session = "REGULAR";
           }
 
+          const currentPrice = parseFloat(price.toFixed(2));
+          const cd = chartData[q.symbol];
+          const extraChanges = cd
+            ? getHistoricalChanges(cd.timestamps, cd.closes, currentPrice)
+            : {};
+
           results[q.symbol] = {
-            price:    parseFloat(price.toFixed(2)),
-            change:   parseFloat(change.toFixed(2)),
+            price:      currentPrice,
+            change:     parseFloat(change.toFixed(2)),
+            change5D:   extraChanges["5D"]  ?? null,
+            change1M:   extraChanges["1M"]  ?? null,
+            change6M:   extraChanges["6M"]  ?? null,
+            changeYTD:  extraChanges["YTD"] ?? null,
+            change1Y:   extraChanges["1Y"]  ?? null,
             session,
             week52Low:  q.fiftyTwoWeekLow  != null ? parseFloat(q.fiftyTwoWeekLow.toFixed(2))  : null,
             week52High: q.fiftyTwoWeekHigh != null ? parseFloat(q.fiftyTwoWeekHigh.toFixed(2)) : null,
@@ -261,7 +285,6 @@ export async function onRequest(context) {
       }
     }
 
-    // 4. FETCH 2-DAY INTRADAY CHARTS FOR MACRO TICKERS (For Bloomberg TV UI)
     const MACRO_TICKERS = new Set(["^GSPC", "^DJI", "^IXIC", "BTC-USD", "ETH-USD", "XRP-USD"]);
     const macrosToFetch = tickers.filter(t => MACRO_TICKERS.has(t));
 
@@ -279,50 +302,33 @@ export async function onRequest(context) {
                results[t].chartTimestamps = result.timestamp;
             }
           }
-        } catch (e) {
-          console.error(`Chart fetch error for ${t}:`, e);
-        }
+        } catch (e) {}
       }));
     }
+  } catch (err) {}
 
-  } catch (err) {
-    console.error("Yahoo bulk fetch error:", err);
-  }
-
-  // 5. FINNHUB FALLBACK (only for tickers Yahoo missed)
   const missingTickers = tickers.filter(t => !results[t]);
   if (missingTickers.length > 0 && FINNHUB_KEY) {
     const safeMissing = missingTickers.slice(0, 45);
     const BATCH_SIZE  = 8;
-
     async function fetchFinnhub(t) {
       try {
         const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${t}&token=${FINNHUB_KEY}`);
         if (res.ok) {
           const quote = await res.json();
           if (quote.dp !== null && quote.dp !== undefined) {
-            results[t] = {
-              price:   parseFloat((quote.c ?? 0).toFixed(2)),
-              change:  parseFloat(quote.dp.toFixed(2)),
-              session: "REGULAR",
-            };
+            results[t] = { price: parseFloat((quote.c ?? 0).toFixed(2)), change: parseFloat(quote.dp.toFixed(2)), session: "REGULAR" };
           }
         }
-      } catch (e) {
-        console.error(`Finnhub fallback error for ${t}:`, e);
-      }
+      } catch (e) {}
     }
-
     for (let i = 0; i < safeMissing.length; i += BATCH_SIZE) {
       const batch = safeMissing.slice(i, i + BATCH_SIZE);
       await Promise.all(batch.map(fetchFinnhub));
-      if (i + BATCH_SIZE < safeMissing.length) {
-        await new Promise(resolve => setTimeout(resolve, 200));
-      }
+      if (i + BATCH_SIZE < safeMissing.length) await new Promise(resolve => setTimeout(resolve, 200));
     }
   }
 
-  // 6. WRITE BACK TO KV PRICE CACHE
   if (Object.keys(results).length > 0 && env.SHARED_DATA) {
     try {
       let merged = results;
@@ -332,9 +338,7 @@ export async function onRequest(context) {
       } catch {}
       const cachePayload = JSON.stringify({ data: merged, timestamp: Date.now() });
       await env.SHARED_DATA.put(KV_CACHE_KEY, cachePayload, { expirationTtl: CACHE_TTL_SECONDS * 4 });
-    } catch (err) {
-      console.error("KV cache write error:", err);
-    }
+    } catch (err) {}
   }
 
   return new Response(JSON.stringify({ data: results, cached: false }), { status: 200, headers });
