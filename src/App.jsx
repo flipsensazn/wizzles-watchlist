@@ -2388,10 +2388,14 @@ export default function App() {
     };
   }, [capexData, capexIntel]);
 
-  const liveTotal = useMemo(
-    () => liveCapexData.tracks.reduce((s, t) => s + (t.capex || 0), 0),
-    [liveCapexData]
-  );
+  const liveTotal = useMemo(() => {
+    // If we successfully fetched live intel and it contains our new derived total, use it!
+    if (capexIntelStatus === "success" && capexIntel?.totalCapexDerived) {
+      return capexIntel.totalCapexDerived;
+    }
+    // Otherwise, fallback to manually summing the tracks
+    return liveCapexData.tracks.reduce((s, t) => s + (t.capex || 0), 0);
+  }, [liveCapexData, capexIntel, capexIntelStatus]);
 
   const watchlistTickers = useMemo(() => getAllTickers(capexData), [capexData]);
   const gainers = watchlistTickers.filter(t => (prices[t]?.change ?? prices[t]) > 0).length;
