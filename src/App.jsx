@@ -2366,10 +2366,7 @@ export default function App() {
   }
 
   const allTickerCount = useMemo(() => getAllTickers(capexData).length, [capexData]);
-  const liveTotal = useMemo(
-  () => liveCapexData.tracks.reduce((s, t) => s + (t.capex || 0), 0),
-  [liveCapexData]
-);
+  
   const liveCapexData = useMemo(() => {
     if (!capexIntel?.allocations?.length) return capexData;
     const intelMap = Object.fromEntries(capexIntel.allocations.map(a => [a.id, a]));
@@ -2390,6 +2387,11 @@ export default function App() {
       }),
     };
   }, [capexData, capexIntel]);
+
+  const liveTotal = useMemo(
+    () => liveCapexData.tracks.reduce((s, t) => s + (t.capex || 0), 0),
+    [liveCapexData]
+  );
 
   const watchlistTickers = useMemo(() => getAllTickers(capexData), [capexData]);
   const gainers = watchlistTickers.filter(t => (prices[t]?.change ?? prices[t]) > 0).length;
@@ -2484,7 +2486,13 @@ export default function App() {
               }}>
                 <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 6, fontFamily: "'Roboto Condensed', sans-serif" }}>Total Investment Flow</div>
                 <div className="capex-number" style={{ fontSize: 68, fontWeight: 800, color: "#fbbf24", lineHeight: 1, marginBottom: 8, textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}>~${liveTotal}B{capexIntelStatus === "success" ? "" : "+"}</div>
-                <div style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginBottom: 20, letterSpacing: "0.08em", textTransform: "uppercase" }}>Hyperscaler AI Capex <span style={{ color: "#d97706" }}>(2026 Est.)</span></div>
+                
+                <div style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginBottom: 20, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                  Hyperscaler AI Capex{" "}
+                  <span style={{ color: capexIntelStatus === "success" ? "#34d399" : "#d97706" }}>
+                    {capexIntelStatus === "success" ? "(Live Intel)" : "(2026 Est.)"}
+                  </span>
+                </div>
                 
                 <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
                   {CAPEX_DATA.companies.map(co => {
