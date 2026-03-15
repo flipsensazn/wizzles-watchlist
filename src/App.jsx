@@ -2202,8 +2202,8 @@ export default function App() {
         });
         return merged;
       });
-      // Same deep-merge: initial load uses strip path (no historical fields).
-      // Protect any richer data already in state from a prior refresh().
+      // Deep-merge: initial strip fetch has no historical fields; protect any
+      // richer data already stored from a prior full refresh().
       setPrices(prev => {
         const HIST_KEYS = ["change5D","change1M","change6M","changeYTD","change1Y",
                            "week52Low","week52High","earningsDate","chartData","chartTimestamps"];
@@ -2286,9 +2286,8 @@ export default function App() {
 
     const allData = await fetchAllPrices(allTickers);
 
-    // Deep-merge per ticker: Finnhub fallback only returns {price,change,session}.
-    // Without this, a Finnhub entry would stomp a richer Yahoo entry and delete
-    // the change5D/1M/6M/YTD/1Y fields, blanking the non-1D timeline buttons.
+    // Deep-merge: preserve historical fields (change5D etc.) if new data is partial
+    // (e.g. Finnhub fallback only has price/change/session).
     const HIST_KEYS = ["change5D","change1M","change6M","changeYTD","change1Y",
                        "week52Low","week52High","earningsDate","chartData","chartTimestamps"];
     setPrices(prev => {
