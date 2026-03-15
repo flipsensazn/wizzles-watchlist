@@ -9,7 +9,7 @@ const FINNHUB_CRYPTO_MAP = {
   "ETH-USD": "BINANCE:ETHUSDT",
   "XRP-USD": "BINANCE:XRPUSDT",
 };
-const KV_CACHE_KEY  = "priceCache_v7"; // Bumped to purge old missing-history cache
+const KV_CACHE_KEY  = "priceCache_v8"; // Bumped: wider gap tolerances + 2y spark range
 const KV_CRUMB_KEY  = "yahooSession_v1";
 const CRUMB_TTL_MS  = 55 * 60 * 1000; // 55 minutes
 const USER_AGENT    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -52,42 +52,42 @@ async function getYahooSession(env) {
 // ── HISTORICAL CHANGE HELPER ─────────────────────────────────────────────────
 function getHistoricalChanges(timestamps, closes, currentPrice) {
   if (!timestamps || !closes || timestamps.length === 0 || !currentPrice) return {};
-  
+
   const now = Date.now() / 1000;
+
+  // Per-period tolerance (calendar days): how far off the nearest bar can be before
+  // we return null. Wider tolerances for longer periods absorb weekends, holidays,
+  // and thin trading days without producing blank cells in the UI.
   const targets = {
-    "5D": now - 7 * 86400,
-    "1M": now - 30 * 86400,
-    "6M": now - 182 * 86400,
-    "YTD": new Date(new Date().getFullYear(), 0, 1).getTime() / 1000,
-    "1Y": now - 365 * 86400
+    "5D":  { ts: now - 7   * 86400, maxGapDays: 10 },  // ~1 trading week
+    "1M":  { ts: now - 30  * 86400, maxGapDays: 10 },  // ~1 calendar month
+    "6M":  { ts: now - 182 * 86400, maxGapDays: 14 },  // ~6 months
+    "YTD": { ts: new Date(new Date().getFullYear(), 0, 1).getTime() / 1000, maxGapDays: 10 },
+    "1Y":  { ts: now - 365 * 86400, maxGapDays: 14 },  // ~1 year
   };
 
   const changes = {};
 
-  for (const [period, targetTs] of Object.entries(targets)) {
+  for (const [period, { ts: targetTs, maxGapDays }] of Object.entries(targets)) {
     let bestIdx = -1;
     let minDiff = Infinity;
-    
-    // Find closest trading day to our target
+
     for (let i = 0; i < timestamps.length; i++) {
-        if (closes[i] == null) continue;
-        const diff = Math.abs(timestamps[i] - targetTs);
-        if (diff < minDiff) {
-            minDiff = diff;
-            bestIdx = i;
-        }
+      if (closes[i] == null) continue;
+      const diff = Math.abs(timestamps[i] - targetTs);
+      if (diff < minDiff) {
+        minDiff = diff;
+        bestIdx = i;
+      }
     }
-    
-    // Safety check: must be within a 5-day variance (prevents 1Y from defaulting to 2-month IPO price)
-    if (bestIdx !== -1 && minDiff < 5 * 86400) {
-        const oldPrice = closes[bestIdx];
-        if (oldPrice > 0) {
-            changes[period] = parseFloat((((currentPrice - oldPrice) / oldPrice) * 100).toFixed(2));
-        } else {
-            changes[period] = null;
-        }
+
+    if (bestIdx !== -1 && minDiff < maxGapDays * 86400) {
+      const oldPrice = closes[bestIdx];
+      changes[period] = oldPrice > 0
+        ? parseFloat((((currentPrice - oldPrice) / oldPrice) * 100).toFixed(2))
+        : null;
     } else {
-        changes[period] = null;
+      changes[period] = null;
     }
   }
   return changes;
@@ -203,7 +203,7 @@ export async function onRequest(context) {
 
       let sparkData = {};
       try {
-        const sparkUrl = `https://query1.finance.yahoo.com/v8/finance/spark?symbols=${batch.join(",")}&range=1y&interval=1d&crumb=${crumb}`;
+        const sparkUrl = `https://query1.finance.yahoo.com/v8/finance/spark?symbols=${batch.join(",")}&range=2y&interval=1d&crumb=${crumb}`;
         const sparkRes = await fetch(sparkUrl, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } });
         if (sparkRes.ok) {
            const sData = await sparkRes.json();
