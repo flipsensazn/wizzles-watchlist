@@ -1307,10 +1307,12 @@ function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline }) {
                       <div style={{ position: "absolute", top: 3, right: 4, fontSize: 7, fontWeight: 800, color: "#34d399", letterSpacing: "0.05em", lineHeight: 1 }}>▲52W</div>
                     )}
                     <div style={{ fontSize: 12, fontWeight: 700, color: near52W ? "#fef3c7" : (athInfo || near52WH) ? "#d1fae5" : "#f1f5f9" }}>{ticker}</div>
-                    {change !== undefined && (
+                    {change !== undefined ? (
                       <div style={{ fontSize: 10, fontWeight: 600, color: pos ? "#a7f3d0" : "#fca5a5", marginTop: 2 }}>
-                        {typeof change === 'number' ? (change >= 0 ? "+" : "") + change + "%" : "—"}
+                        {typeof change === 'number' ? (change >= 0 ? "+" : "") + change.toFixed(2) + "%" : "—"}
                       </div>
+                    ) : (
+                      <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>—</div>
                     )}
                   </div>
                 );
@@ -1325,7 +1327,7 @@ function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline }) {
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{tooltip.ticker}</span>
             {tooltip.price !== undefined && <span style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0" }}>${tooltip.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
-            {tooltip.change !== undefined && <span style={{ fontSize: 12, fontWeight: 700, color: (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171" }}>{typeof tooltip.change === 'number' ? (tooltip.change >= 0 ? "+" : "") + tooltip.change + "%" : "—"}</span>}
+            {tooltip.change !== undefined && <span style={{ fontSize: 12, fontWeight: 700, color: (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171" }}>{typeof tooltip.change === 'number' ? (tooltip.change >= 0 ? "+" : "") + tooltip.change.toFixed(2) + "%" : "—"}</span>}
             {tooltip.session && <span style={{ fontSize: 9, fontWeight: 700, color: "#64748b", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.05em" }}>{tooltip.session}</span>}
             <span style={{ fontSize: 10, color: "#475569" }}>{tooltip.track}</span>
           </div>
