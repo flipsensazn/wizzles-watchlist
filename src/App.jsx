@@ -2202,16 +2202,16 @@ export default function App() {
         });
         return merged;
       });
-      // Deep-merge: strip path returns no historical fields; preserve any that
-      // a prior full refresh already stored for these tickers.
+      // Same deep-merge: initial load uses strip path (no historical fields).
+      // Protect any richer data already in state from a prior refresh().
       setPrices(prev => {
+        const HIST_KEYS = ["change5D","change1M","change6M","changeYTD","change1Y",
+                           "week52Low","week52High","earningsDate","chartData","chartTimestamps"];
         const next = { ...prev };
         for (const [ticker, newVal] of Object.entries(data)) {
           if (!newVal || typeof newVal !== "object") { next[ticker] = newVal; continue; }
           const prevVal = prev[ticker];
           if (prevVal && typeof prevVal === "object") {
-            const HIST_KEYS = ["change5D","change1M","change6M","changeYTD","change1Y",
-                               "week52Low","week52High","earningsDate","chartData","chartTimestamps"];
             const merged = { ...prevVal, ...newVal };
             for (const k of HIST_KEYS) {
               if ((newVal[k] === undefined || newVal[k] === null) && prevVal[k] != null) {
@@ -2286,21 +2286,17 @@ export default function App() {
 
     const allData = await fetchAllPrices(allTickers);
 
-    // Deep-merge per ticker so that Finnhub fallback data (which only contains
-    // price/change/session) never stomps the richer Yahoo payload that includes
-    // change5D, change1M, change6M, changeYTD, change1Y, week52Low, week52High.
-    const HIST_KEYS = [
-      "change5D","change1M","change6M","changeYTD","change1Y",
-      "week52Low","week52High","earningsDate","chartData","chartTimestamps",
-    ];
+    // Deep-merge per ticker: Finnhub fallback only returns {price,change,session}.
+    // Without this, a Finnhub entry would stomp a richer Yahoo entry and delete
+    // the change5D/1M/6M/YTD/1Y fields, blanking the non-1D timeline buttons.
+    const HIST_KEYS = ["change5D","change1M","change6M","changeYTD","change1Y",
+                       "week52Low","week52High","earningsDate","chartData","chartTimestamps"];
     setPrices(prev => {
       const next = { ...prev };
       for (const [ticker, newVal] of Object.entries(allData)) {
         if (!newVal || typeof newVal !== "object") { next[ticker] = newVal; continue; }
         const prevVal = prev[ticker];
         if (prevVal && typeof prevVal === "object") {
-          // Overlay new fields onto the previous entry, then restore any historical
-          // key the new payload omitted (undefined or null) from the previous value.
           const merged = { ...prevVal, ...newVal };
           for (const k of HIST_KEYS) {
             if ((newVal[k] === undefined || newVal[k] === null) && prevVal[k] != null) {
