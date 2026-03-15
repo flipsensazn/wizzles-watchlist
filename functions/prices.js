@@ -9,7 +9,7 @@ const FINNHUB_CRYPTO_MAP = {
   "ETH-USD": "BINANCE:ETHUSDT",
   "XRP-USD": "BINANCE:XRPUSDT",
 };
-const KV_CACHE_KEY  = "priceCache_v8"; // Bumped: dual-format spark parsing + 2y range + per-period tolerances
+const KV_CACHE_KEY  = "priceCache_v9"; // v9: replaced broken spark with chart endpoint
 const KV_CRUMB_KEY  = "yahooSession_v1";
 const CRUMB_TTL_MS  = 55 * 60 * 1000; // 55 minutes
 const USER_AGENT    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -55,9 +55,8 @@ function getHistoricalChanges(timestamps, closes, currentPrice) {
 
   const now = Date.now() / 1000;
 
-  // Per-period tolerance: how many calendar days off the closest bar can be.
-  // Wider for longer periods to absorb weekends, holidays, and sparse data
-  // near the edge of the history window without producing blank UI cells.
+  // Per-period tolerance: how many calendar days the nearest bar can be off-target.
+  // Wider for longer periods to absorb weekends, holidays, and sparse data.
   const targets = {
     "5D":  { ts: now - 7   * 86400, maxGapDays: 10 },
     "1M":  { ts: now - 30  * 86400, maxGapDays: 10 },
@@ -198,32 +197,31 @@ export async function onRequest(context) {
     for (let i = 0; i < tickers.length; i += batchSize) {
       const batch = tickers.slice(i, i + batchSize);
 
-      let sparkData = {};
-      try {
-        const sparkUrl = `https://query1.finance.yahoo.com/v8/finance/spark?symbols=${batch.join(",")}&range=2y&interval=1d&crumb=${crumb}`;
-        const sparkRes = await fetch(sparkUrl, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } });
-        if (sparkRes.ok) {
-           const sData = await sparkRes.json();
-           const sResults = sData?.spark?.result || [];
-           for (const item of sResults) {
-              // Yahoo's spark API has returned data in two different structures over time.
-              // Format A (flat):   item.timestamp, item.indicators
-              // Format B (nested): item.response[0].timestamp, item.response[0].indicators
-              // We detect which format is present and handle both, so a Yahoo-side
-              // API change never silently zeroes out all historical change fields.
-              const flat   = item.timestamp?.length > 0;
-              const source = flat ? item : (item.response?.[0] ?? {});
-              sparkData[item.symbol] = {
-                 timestamps: source.timestamp   || [],
-                 closes:     source.indicators?.quote?.[0]?.close || [],
+      // ── STEP 1: Fetch 2-year daily chart history for every ticker in parallel.
+      // Uses /v8/finance/chart per ticker — the same endpoint that powers the
+      // Bloomberg macro charts and is confirmed to work reliably.
+      // The /v8/finance/spark endpoint has been removed; it silently returned
+      // empty results and was the root cause of all non-1D percentages being blank.
+      const chartData = {};
+      await Promise.all(batch.map(async (ticker) => {
+        try {
+          const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=2y&interval=1d&crumb=${encodeURIComponent(crumb)}`;
+          const chartRes = await fetch(chartUrl, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } });
+          if (chartRes.ok) {
+            const cd = await chartRes.json();
+            const r  = cd?.chart?.result?.[0];
+            if (r?.timestamp?.length) {
+              chartData[ticker] = {
+                timestamps: r.timestamp,
+                closes:     r.indicators?.quote?.[0]?.close || [],
               };
-           }
-        }
-      } catch (e) {
-        console.error("Spark fetch error:", e);
-      }
-      
-      const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${batch.join(",")}&corsDomain=finance.yahoo.com&formatted=false&crumb=${crumb}`;
+            }
+          }
+        } catch (e) {}
+      }));
+
+      // ── STEP 2: Fetch current quote data for the batch
+      const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${batch.join(",")}&corsDomain=finance.yahoo.com&formatted=false&crumb=${encodeURIComponent(crumb)}`;
       const res = await fetch(url, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } });
 
       if (res.ok) {
@@ -233,7 +231,7 @@ export async function onRequest(context) {
         for (const q of quoteList) {
           if (q.regularMarketPrice === undefined) continue;
 
-          const state = q.marketState; 
+          const state = q.marketState;
           let price, change, session;
 
           if (state === "POST" || state === "POSTPOST") {
@@ -261,19 +259,19 @@ export async function onRequest(context) {
           }
 
           const currentPrice = parseFloat(price.toFixed(2));
-          let extraChanges = {};
-          if (sparkData[q.symbol]) {
-             extraChanges = getHistoricalChanges(sparkData[q.symbol].timestamps, sparkData[q.symbol].closes, currentPrice);
-          }
+          const cd = chartData[q.symbol];
+          const extraChanges = cd
+            ? getHistoricalChanges(cd.timestamps, cd.closes, currentPrice)
+            : {};
 
           results[q.symbol] = {
             price:      currentPrice,
             change:     parseFloat(change.toFixed(2)),
-            change5D:   extraChanges["5D"] ?? null,
-            change1M:   extraChanges["1M"] ?? null,
-            change6M:   extraChanges["6M"] ?? null,
+            change5D:   extraChanges["5D"]  ?? null,
+            change1M:   extraChanges["1M"]  ?? null,
+            change6M:   extraChanges["6M"]  ?? null,
             changeYTD:  extraChanges["YTD"] ?? null,
-            change1Y:   extraChanges["1Y"] ?? null,
+            change1Y:   extraChanges["1Y"]  ?? null,
             session,
             week52Low:  q.fiftyTwoWeekLow  != null ? parseFloat(q.fiftyTwoWeekLow.toFixed(2))  : null,
             week52High: q.fiftyTwoWeekHigh != null ? parseFloat(q.fiftyTwoWeekHigh.toFixed(2)) : null,
