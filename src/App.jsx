@@ -38,6 +38,18 @@ function fmtMarketCap(n) {
   return "$" + num.toLocaleString();
 }
 
+function getChangeForTimeline(entry, timeline) {
+  if (!entry || typeof entry !== "object") return entry?.change ?? entry;
+  switch(timeline) {
+    case "5D":  return entry.change5D;
+    case "1M":  return entry.change1M;
+    case "6M":  return entry.change6M;
+    case "YTD": return entry.changeYTD;
+    case "1Y":  return entry.change1Y;
+    default:    return entry.change; // Fallback to 1D
+  }
+}
+
 // ── QUOTE SUMMARY (for company popup) ────────────────────
 const quoteCache = {};
 const QUOTE_CACHE_TTL = 5 * 60 * 1000;
@@ -1133,7 +1145,6 @@ function getNear52WHighInfo(priceEntry) {
   return null;
 }
 
-
 function getATHInfo(priceEntry) {
   if (!priceEntry) return null;
   const { price, week52High } = priceEntry;
@@ -1143,7 +1154,8 @@ function getATHInfo(priceEntry) {
   }
   return null;
 }
-function HeatMap({ prices, capexData, onTickerClick }) {
+
+function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline }) {
   const isMobile = useMobile();
   const [tooltip, setTooltip] = useState(null);
 
@@ -1171,8 +1183,23 @@ function HeatMap({ prices, capexData, onTickerClick }) {
     <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: isMobile ? "12px 8px" : 20, height: "100%", overflowY: "auto", overflowX: "hidden", boxSizing: "border-box", width: "100%" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
         <div>
-          <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0" }}>Portfolio Heat Map</h3>
-          <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>All tracked tickers · color = 1D performance</p>
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", margin: 0 }}>Portfolio Heat Map</h3>
+            <div style={{ display: "flex", background: "rgba(255,255,255,0.05)", borderRadius: 6, padding: 2 }}>
+              {["1D", "5D", "1M", "6M", "YTD", "1Y"].map(t => (
+                <button key={t} onClick={() => setTimeline(t)} style={{
+                  background: timeline === t ? "rgba(255,255,255,0.1)" : "transparent",
+                  color: timeline === t ? "#e2e8f0" : "#64748b",
+                  border: "none", borderRadius: 4, padding: "2px 8px",
+                  fontSize: 10, fontWeight: timeline === t ? 700 : 500,
+                  cursor: "pointer", transition: "all .15s"
+                }}>
+                  {t}
+                </button>
+              ))}
+            </div>
+          </div>
+          <p style={{ fontSize: 11, color: "#475569", marginTop: 6 }}>All tracked tickers · color = {timeline} performance</p>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 10, color: "#64748b" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -1200,7 +1227,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
             <div style={{ display: "flex", flexWrap: "wrap", gap: isMobile ? 4 : 6, minHeight: 40 }}>
               {cells.map(ticker => {
                 const entry = prices[ticker];
-                const change = entry?.change ?? entry;
+                const change = getChangeForTimeline(entry, timeline);
                 const currentPrice = entry?.price;
                 const session = entry?.session;
                 const sessionLabel = session === "POST" || session === "CLOSED" ? "AH" : session === "PRE" ? "PM" : null;
@@ -1335,7 +1362,7 @@ function HeatMap({ prices, capexData, onTickerClick }) {
 }
 
 // ── DONUT CHART ───────────────────────────────────────────
-function DonutChart({ prices, capexData, capexIntel, capexIntelStatus, capexIntelError }) {
+function DonutChart({ prices, capexData, capexIntel, capexIntelStatus, capexIntelError, timeline }) {
   const isMobile = useMobile();
   const [hovered, setHovered] = useState(null);
   const total = useMemo(() => capexData.tracks.reduce((s, t) => s + (t.capex || 0), 0), [capexData]);
@@ -1375,11 +1402,11 @@ function DonutChart({ prices, capexData, capexIntel, capexIntelStatus, capexInte
   const trackPerf = useMemo(() =>
     capexData.tracks.map(track => {
       const tickers = [...new Set(track.subsectors.flatMap(s => s.tickers))];
-      const changes = tickers.map(t => prices[t]?.change ?? prices[t]).filter(v => typeof v === 'number');
+      const changes = tickers.map(t => getChangeForTimeline(prices[t], timeline)).filter(v => typeof v === 'number');
       const avg = changes.length ? changes.reduce((a, b) => a + b, 0) / changes.length : 0;
       return { ...track, avg };
     }).sort((a, b) => b.avg - a.avg),
-  [capexData, prices]);
+  [capexData, prices, timeline]);
 
   const segments = useMemo(() =>
     segmentShapes.map(s => {
@@ -1481,7 +1508,7 @@ function DonutChart({ prices, capexData, capexIntel, capexIntelStatus, capexInte
 }
 
 // ── WATCHLIST ─────────────────────────────────────────────
-function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSaveShortlist }) {
+function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSaveShortlist, timeline }) {
   const isMobile = useMobile();
   const [tab, setTab]         = useState("watch");
   const [input, setInput]     = useState("");
@@ -1523,7 +1550,7 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
 
   const TRACK_SHORT = { compute: "Compute", networking: "Network", photonics: "Photonics", neoclouds: "Data Ctr", power: "Power", frontier: "Frontier" };
 
-  const enriched     = list.map(t => ({ ticker: t, change: prices[t]?.change ?? prices[t], track: sectorMap[t] ?? null }));
+  const enriched     = list.map(t => ({ ticker: t, change: getChangeForTimeline(prices[t], timeline), track: sectorMap[t] ?? null }));
   const filtered     = filter === "all" ? enriched : enriched.filter(x => x.track?.id === filter);
   const sorted       = [...filtered].sort((a, b) => sortDir === "desc"
     ? ((typeof b.change === 'number' ? b.change : -999) - (typeof a.change === 'number' ? a.change : -999))
@@ -2159,6 +2186,7 @@ export default function App() {
   const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
   const [bottomTab, setBottomTab] = useState("all");
+  const [timeline, setTimeline] = useState("1D");
   const [popup, setPopup] = useState(null); 
 
   useEffect(() => {
@@ -2558,14 +2586,14 @@ export default function App() {
             
             {bottomTab === "all" ? (
               <div className="bottom-grid-all">
-                <div className="span-2 panel-wrapper"><div className="panel-inner"><HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} /></div></div>
-                <div className="span-1 panel-wrapper"><div className="panel-inner"><Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} /></div></div>
-                <div className="span-1 panel-wrapper"><div className="panel-inner"><DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} capexIntelStatus={capexIntelStatus} capexIntelError={capexIntelError} /></div></div>
+                <div className="span-2 panel-wrapper"><div className="panel-inner"><HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} timeline={timeline} setTimeline={setTimeline} /></div></div>
+                <div className="span-1 panel-wrapper"><div className="panel-inner"><Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} timeline={timeline} /></div></div>
+                <div className="span-1 panel-wrapper"><div className="panel-inner"><DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} capexIntelStatus={capexIntelStatus} capexIntelError={capexIntelError} timeline={timeline} /></div></div>
                 <div className="span-2 panel-wrapper"><div className="panel-inner"><MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} /></div></div>
               </div>
-            ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} />
-              : bottomTab === "donut" ? <DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} capexIntelStatus={capexIntelStatus} capexIntelError={capexIntelError} />
-              : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} />
+            ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} timeline={timeline} setTimeline={setTimeline} />
+              : bottomTab === "donut" ? <DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} capexIntelStatus={capexIntelStatus} capexIntelError={capexIntelError} timeline={timeline} />
+              : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} timeline={timeline} />
               : <MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} />
             }
           </div>
