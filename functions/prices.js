@@ -9,7 +9,7 @@ const FINNHUB_CRYPTO_MAP = {
   "ETH-USD": "BINANCE:ETHUSDT",
   "XRP-USD": "BINANCE:XRPUSDT",
 };
-const KV_CACHE_KEY  = "priceCache_v6"; // Bumped cache key to enforce new data structure
+const KV_CACHE_KEY  = "priceCache_v7"; // Bumped to purge old missing-history cache
 const KV_CRUMB_KEY  = "yahooSession_v1";
 const CRUMB_TTL_MS  = 55 * 60 * 1000; // 55 minutes
 const USER_AGENT    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -43,9 +43,7 @@ async function getYahooSession(env) {
         JSON.stringify({ cookie, crumb, timestamp: Date.now() }),
         { expirationTtl: 3600 }
       );
-    } catch (err) {
-      console.error("KV crumb write error:", err);
-    }
+    } catch (err) {}
   }
 
   return { cookie, crumb };
@@ -53,15 +51,15 @@ async function getYahooSession(env) {
 
 // ── HISTORICAL CHANGE HELPER ─────────────────────────────────────────────────
 function getHistoricalChanges(timestamps, closes, currentPrice) {
-  if (!timestamps || !closes || timestamps.length === 0) return {};
+  if (!timestamps || !closes || timestamps.length === 0 || !currentPrice) return {};
   
   const now = Date.now() / 1000;
   const targets = {
-    "5D": now - 7 * 86400, // Roughly 1 week calendar time
+    "5D": now - 7 * 86400,
     "1M": now - 30 * 86400,
     "6M": now - 182 * 86400,
-    "1Y": now - 365 * 86400,
-    "YTD": new Date(new Date().getFullYear(), 0, 1).getTime() / 1000
+    "YTD": new Date(new Date().getFullYear(), 0, 1).getTime() / 1000,
+    "1Y": now - 365 * 86400
   };
 
   const changes = {};
@@ -69,6 +67,8 @@ function getHistoricalChanges(timestamps, closes, currentPrice) {
   for (const [period, targetTs] of Object.entries(targets)) {
     let bestIdx = -1;
     let minDiff = Infinity;
+    
+    // Find closest trading day to our target
     for (let i = 0; i < timestamps.length; i++) {
         if (closes[i] == null) continue;
         const diff = Math.abs(timestamps[i] - targetTs);
@@ -78,7 +78,8 @@ function getHistoricalChanges(timestamps, closes, currentPrice) {
         }
     }
     
-    if (bestIdx !== -1) {
+    // Safety check: must be within a 5-day variance (prevents 1Y from defaulting to 2-month IPO price)
+    if (bestIdx !== -1 && minDiff < 5 * 86400) {
         const oldPrice = closes[bestIdx];
         if (oldPrice > 0) {
             changes[period] = parseFloat((((currentPrice - oldPrice) / oldPrice) * 100).toFixed(2));
@@ -113,7 +114,6 @@ export async function onRequest(context) {
     });
   }
 
-  // 1. PARSE TICKERS
   const { searchParams } = new URL(request.url);
   const tickersParam = searchParams.get("tickers");
   const tickers = tickersParam ? [...new Set(tickersParam.split(",").filter(Boolean))] : [];
@@ -122,7 +122,6 @@ export async function onRequest(context) {
     return new Response(JSON.stringify({ error: "No tickers provided" }), { status: 400, headers });
   }
 
-  // 2a. FAST PATH
   const allStrip = tickers.length > 0 && tickers.every(t => STRIP_TICKERS.has(t));
   if (allStrip) {
     const stripResults = {};
@@ -158,16 +157,10 @@ export async function onRequest(context) {
                 change = q.regularMarketChangePercent ?? 0;
                 session = "REGULAR";
               }
-              stripResults[q.symbol] = {
-                price:   parseFloat(price.toFixed(2)),
-                change:  parseFloat(change.toFixed(2)),
-                session,
-              };
+              stripResults[q.symbol] = { price: parseFloat(price.toFixed(2)), change: parseFloat(change.toFixed(2)), session };
             }
           }
-        } catch (err) {
-          console.error("[strip] Yahoo indices error:", err.message);
-        }
+        } catch (err) {}
       })(),
       ...CRYPTO_TICKERS.map(async (yahooSymbol) => {
         if (!FINNHUB_KEY) return;
@@ -182,28 +175,22 @@ export async function onRequest(context) {
               stripResults[yahooSymbol] = { price: parseFloat(q.c.toFixed(2)), change: parseFloat(change.toFixed(2)), session: "REGULAR" };
             }
           }
-        } catch (err) {
-          console.error(`[strip] Finnhub error:`, err.message);
-        }
+        } catch (err) {}
       }),
     ]);
     return new Response(JSON.stringify({ data: stripResults, cached: false }), { status: 200, headers });
   }
 
-  // 2. KV PRICE CACHE CHECK
   if (env.SHARED_DATA) {
     try {
       const cached = await env.SHARED_DATA.get(KV_CACHE_KEY, "json");
       if (cached && cached.timestamp && (Date.now() - cached.timestamp < CACHE_TTL_SECONDS * 1000)) {
         const allPresent = tickers.every(t => cached.data && t in cached.data);
-        if (allPresent) {
-          return new Response(JSON.stringify({ data: cached.data, cached: true }), { status: 200, headers });
-        }
+        if (allPresent) return new Response(JSON.stringify({ data: cached.data, cached: true }), { status: 200, headers });
       }
     } catch (err) {}
   }
 
-  // 3. FETCH FROM YAHOO (Primary Engine)
   const results = {};
   const FINNHUB_KEY = env.FINNHUB_KEY;
 
@@ -214,18 +201,18 @@ export async function onRequest(context) {
     for (let i = 0; i < tickers.length; i += batchSize) {
       const batch = tickers.slice(i, i + batchSize);
 
-      // --- NEW: Fetch spark data (1-year daily chart) for the batch ---
       let sparkData = {};
       try {
-        const sparkUrl = `https://query2.finance.yahoo.com/v8/finance/spark?symbols=${batch.join(",")}&range=1y&interval=1d`;
-        const sparkRes = await fetch(sparkUrl, { headers: { "User-Agent": USER_AGENT } });
+        const sparkUrl = `https://query1.finance.yahoo.com/v8/finance/spark?symbols=${batch.join(",")}&range=1y&interval=1d&crumb=${crumb}`;
+        const sparkRes = await fetch(sparkUrl, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } });
         if (sparkRes.ok) {
            const sData = await sparkRes.json();
            const sResults = sData?.spark?.result || [];
            for (const item of sResults) {
+              // BUG FIX: Removed .response wrapper mapping, maps directly to timestamp/indicators
               sparkData[item.symbol] = {
-                 timestamps: item.response?.[0]?.timestamp || [],
-                 closes: item.response?.[0]?.indicators?.quote?.[0]?.close || []
+                 timestamps: item.timestamp || [],
+                 closes: item.indicators?.quote?.[0]?.close || []
               };
            }
         }
@@ -297,7 +284,6 @@ export async function onRequest(context) {
       }
     }
 
-    // 4. FETCH 2-DAY INTRADAY CHARTS FOR MACRO TICKERS
     const MACRO_TICKERS = new Set(["^GSPC", "^DJI", "^IXIC", "BTC-USD", "ETH-USD", "XRP-USD"]);
     const macrosToFetch = tickers.filter(t => MACRO_TICKERS.has(t));
 
@@ -318,15 +304,12 @@ export async function onRequest(context) {
         } catch (e) {}
       }));
     }
-
   } catch (err) {}
 
-  // 5. FINNHUB FALLBACK (only for tickers Yahoo missed)
   const missingTickers = tickers.filter(t => !results[t]);
   if (missingTickers.length > 0 && FINNHUB_KEY) {
     const safeMissing = missingTickers.slice(0, 45);
     const BATCH_SIZE  = 8;
-
     async function fetchFinnhub(t) {
       try {
         const res = await fetch(`https://finnhub.io/api/v1/quote?symbol=${t}&token=${FINNHUB_KEY}`);
@@ -338,17 +321,13 @@ export async function onRequest(context) {
         }
       } catch (e) {}
     }
-
     for (let i = 0; i < safeMissing.length; i += BATCH_SIZE) {
       const batch = safeMissing.slice(i, i + BATCH_SIZE);
       await Promise.all(batch.map(fetchFinnhub));
-      if (i + BATCH_SIZE < safeMissing.length) {
-        await new Promise(resolve => setTimeout(resolve, 200));
-      }
+      if (i + BATCH_SIZE < safeMissing.length) await new Promise(resolve => setTimeout(resolve, 200));
     }
   }
 
-  // 6. WRITE BACK TO KV PRICE CACHE
   if (Object.keys(results).length > 0 && env.SHARED_DATA) {
     try {
       let merged = results;
