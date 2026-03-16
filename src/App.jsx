@@ -2352,10 +2352,35 @@ export default function App() {
       .then(res => res.json())
       .then(data => { if (data.news) setNewsFeed(data.news); })
       .catch(e => console.log("News fetch failed"));
-    fetch("/x-feed")
-      .then(res => res.json())
-      .then(data => { if (data.posts) setXPosts(data.posts); })
-      .catch(e => console.log("X feed fetch failed"));
+    // Fetch @wallstengine directly from browser via CORS proxy
+const NITTER_INSTANCES = [
+  "https://xcancel.com/wallstengine/rss",
+  "https://nitter.poast.org/wallstengine/rss",
+  "https://nitter.net/wallstengine/rss",
+];
+(async () => {
+  for (const rssUrl of NITTER_INSTANCES) {
+    try {
+      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(rssUrl)}`;
+      const res = await fetch(proxyUrl);
+      const json = await res.json();
+      const xml = json.contents || "";
+      if (!xml.includes("<item>")) continue;
+      const posts = [];
+      const matches = xml.matchAll(/<item>([\s\S]*?)<\/item>/g);
+      for (const m of matches) {
+        const body = m[1];
+        const rawTitle = (body.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/) || body.match(/<title>([\s\S]*?)<\/title>/) || [])[1] || "";
+        const link    = (body.match(/<link>([^<]*)<\/link>/) || [])[1] || "";
+        const pubDate = (body.match(/<pubDate>(.*?)<\/pubDate>/) || [])[1] || "";
+        const title   = rawTitle.replace(/<[^>]+>/g, "").replace(/^R to @\S+:\s*/i, "").trim();
+        if (title && link) posts.push({ title, link, pubDate });
+        if (posts.length >= 20) break;
+      }
+      if (posts.length > 0) { setXPosts(posts); break; }
+    } catch (e) { continue; }
+  }
+})();
 
     setCapexIntelStatus("loading");
     const intelController = new AbortController();
