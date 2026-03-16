@@ -6,7 +6,7 @@ export async function onRequest(context) {
   const headers = {
     "Access-Control-Allow-Origin": "*",
     "Content-Type": "application/json",
-    "Cache-Control": "public, max-age=180", // Cache for 3 minutes to stay fresh but prevent rate-limits
+    "Cache-Control": "public, max-age=60", // <-- Updated to 60 seconds (1 minute)
   };
 
   if (request.method === "OPTIONS") {
