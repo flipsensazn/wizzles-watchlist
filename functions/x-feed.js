@@ -1,5 +1,5 @@
 // functions/x-feed.js
-// Fetches @wallstengine posts via RSS proxy (no X API key required)
+// Fetches @wallstengine posts via XCancel RSS (most reliable from CF edge)
 
 export async function onRequest(context) {
   const { request, env } = context;
@@ -25,109 +25,72 @@ export async function onRequest(context) {
     });
   }
 
-  // ── Strategy 1: RSS2JSON public API (most reliable from CF edge) ──────────
-  try {
-    const nitterRss = encodeURIComponent("https://nitter.poast.org/wallstengine/rss");
-    const rss2jsonUrl = `https://api.rss2json.com/v1/api.json?rss_url=${nitterRss}&count=20`;
-
-    const res = await fetch(rss2jsonUrl, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-      cf: { cacheTtl: 300 },
-    });
-
-    if (res.ok) {
-      const data = await res.json();
-      if (data.status === "ok" && data.items?.length > 0) {
-        const posts = data.items.map(item => ({
-          title: (item.title || "").replace(/^R to @\S+:\s*/i, "").trim(),
-          link:  item.link  || "",
-          pubDate: item.pubDate || "",
-        })).filter(p => p.title && p.link);
-
-        if (posts.length > 0) {
-          return new Response(JSON.stringify({ posts, source: "rss2json" }), { status: 200, headers });
-        }
-      }
-    }
-  } catch (e) {
-    // fall through to next strategy
-  }
-
-  // ── Strategy 2: RSSHub hosted instance (alternative proxy) ────────────────
-  const RSSHUB_INSTANCES = [
-    "https://rsshub.app/twitter/user/wallstengine",
-    "https://rsshub.rssforever.com/twitter/user/wallstengine",
+  // All RSS endpoint candidates in priority order
+  const FEED_URLS = [
+    "https://xcancel.com/wallstengine/rss",
+    "https://nitter.net/wallstengine/rss",
+    "https://nitter.poast.org/wallstengine/rss",
+    "https://nitter.privacydev.net/wallstengine/rss",
+    "https://nitter.space/wallstengine/rss",
+    "https://nitter.1d4.us/wallstengine/rss",
   ];
 
-  for (const url of RSSHUB_INSTANCES) {
+  for (const url of FEED_URLS) {
     try {
       const res = await fetch(url, {
-        headers: { "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)" },
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          "Accept": "application/rss+xml, application/xml, text/xml, */*",
+        },
         cf: { cacheTtl: 300 },
+        signal: AbortSignal.timeout(5000),
       });
 
       if (!res.ok) continue;
 
       const xml = await res.text();
+      if (!xml.includes("<item>")) continue;
+
       const posts = [];
       const itemMatches = xml.matchAll(/<item>([\s\S]*?)<\/item>/g);
 
       for (const match of itemMatches) {
         const body = match[1];
+
         const rawTitle =
           (body.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/) ||
            body.match(/<title>([\s\S]*?)<\/title>/) || [])[1] || "";
-        const link    = (body.match(/<link>([^<]*)<\/link>/)    || [])[1] || "";
+
+        const link    = (body.match(/<link>([^<]*)<\/link>/)    || [])[1] || 
+                        (body.match(/<guid[^>]*>([^<]*)<\/guid>/) || [])[1] || "";
         const pubDate = (body.match(/<pubDate>(.*?)<\/pubDate>/) || [])[1] || "";
-        const title   = rawTitle.replace(/<[^>]+>/g, "").replace(/^R to @\S+:\s*/i, "").trim();
+
+        // Strip HTML tags and clean up prefixes Nitter/XCancel add
+        const title = rawTitle
+          .replace(/<[^>]+>/g, "")
+          .replace(/^R to @\S+:\s*/i, "")
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          .replace(/&quot;/g, '"')
+          .trim();
 
         if (title && link) posts.push({ title, link, pubDate });
         if (posts.length >= 20) break;
       }
 
       if (posts.length > 0) {
-        return new Response(JSON.stringify({ posts, source: "rsshub" }), { status: 200, headers });
+        const source = new URL(url).hostname;
+        return new Response(
+          JSON.stringify({ posts, source }),
+          { status: 200, headers }
+        );
       }
     } catch (e) {
       continue;
     }
   }
 
-  // ── Strategy 3: Fetch tweets via SocialData unofficial RSS ────────────────
-  try {
-    const socialUrl = "https://socialdata.tools/twitter/user/wallstengine/tweets.rss";
-    const res = await fetch(socialUrl, {
-      headers: { "User-Agent": "Mozilla/5.0" },
-      cf: { cacheTtl: 300 },
-    });
-
-    if (res.ok) {
-      const xml = await res.text();
-      const posts = [];
-      const itemMatches = xml.matchAll(/<item>([\s\S]*?)<\/item>/g);
-
-      for (const match of itemMatches) {
-        const body = match[1];
-        const rawTitle =
-          (body.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/) ||
-           body.match(/<title>([\s\S]*?)<\/title>/) || [])[1] || "";
-        const link    = (body.match(/<link>([^<]*)<\/link>/)    || [])[1] || "";
-        const pubDate = (body.match(/<pubDate>(.*?)<\/pubDate>/) || [])[1] || "";
-        const title   = rawTitle.replace(/<[^>]+>/g, "").trim();
-
-        if (title && link) posts.push({ title, link, pubDate });
-        if (posts.length >= 20) break;
-      }
-
-      if (posts.length > 0) {
-        return new Response(JSON.stringify({ posts, source: "socialdata" }), { status: 200, headers });
-      }
-    }
-  } catch (e) {
-    // fall through
-  }
-
-  // ── All strategies failed ─────────────────────────────────────────────────
   return new Response(
     JSON.stringify({ posts: [], error: "All feed sources unavailable" }),
     { status: 200, headers }
