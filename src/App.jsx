@@ -1122,6 +1122,16 @@ function TrackPane({ track, prices, isAdmin, onAddTicker, onRemoveTicker, onTick
   );
 }
 
+function lerpHex(a, b, t) {
+  const ah = parseInt(a.replace("#", ""), 16),
+        ar = (ah >> 16) & 255, ag = (ah >> 8) & 255, ab = ah & 255;
+  const bh = parseInt(b.replace("#", ""), 16),
+        br = (bh >> 16) & 255, bg = (bh >> 8) & 255, bb = bh & 255;
+  const rr = Math.round(ar + (br - ar) * t),
+        rg = Math.round(ag + (bg - ag) * t),
+        rb = Math.round(ab + (bb - ab) * t);
+  return "#" + ((1 << 24) + (rr << 16) + (rg << 8) + rb).toString(16).slice(1);
+}
 function FearGreedGauge() {
   const [cnnData, setCnnData] = useState(null);
 
