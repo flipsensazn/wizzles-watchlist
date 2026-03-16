@@ -2652,54 +2652,55 @@ export default function App() {
         <TopBar marketData={marketData} />
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", marginTop: "var(--topbar-h, 72px)", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
-          <div>
+          
+          {/* LEFT SIDE: Title & Controls Stacked */}
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", letterSpacing: "-0.01em" }}>AI Capex Flow Intelligence</div>
-          </div>
 
-          <div className="header-controls" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+            <div className="header-controls" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
+              {!isAdmin ? (
+                <button onClick={handleUnlock} style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", color: "#64748b", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>
+                  🔒 Login
+                </button>
+              ) : (
+                <span style={{ fontSize: 10, background: "rgba(52,211,153,0.1)", color: "#34d399", border: "1px solid rgba(52,211,153,0.3)", padding: "4px 10px", borderRadius: 6, fontWeight: 700 }}>
+                  🔓 EDITING ACTIVE
+                </span>
+              )}
 
-            {!isAdmin ? (
-              <button onClick={handleUnlock} style={{ background: "none", border: "1px solid rgba(255,255,255,0.1)", color: "#64748b", borderRadius: 8, padding: "5px 12px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>
-                🔒 Login
-              </button>
-            ) : (
-              <span style={{ fontSize: 10, background: "rgba(52,211,153,0.1)", color: "#34d399", border: "1px solid rgba(52,211,153,0.3)", padding: "4px 10px", borderRadius: 6, fontWeight: 700 }}>
-                🔓 EDITING ACTIVE
+              <span className="pulse" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#64748b" }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#34d399", display: "inline-block", boxShadow: "0 0 6px #34d399" }} />{gainers} advancing
               </span>
-            )}
-
-            <span className="pulse" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#64748b" }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#34d399", display: "inline-block", boxShadow: "0 0 6px #34d399" }} />{gainers} advancing
-            </span>
-            <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#64748b" }}>
-              <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f87171", display: "inline-block", boxShadow: "0 0 6px #f87171" }} />{losers} declining
-            </span>
-            <span style={{ fontSize: 11, color: "#2d3a52" }}>{allTickerCount} tickers</span>
-            <button onClick={refresh} disabled={refreshing} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 8, color: "#64748b", padding: "5px 12px", cursor: "pointer", fontSize: 11, fontFamily: "inherit", opacity: refreshing ? 0.5 : 1 }}>
-              {refreshing ? "↻" : `↻${lastUpdated ? " · " + lastUpdated : ""}`}
-            </button>
-            <a
-              href="https://wizzleswatchlist.substack.com/"
-              target="_blank"
-              rel="noopener noreferrer"
-              style={{
-                display: "inline-flex", alignItems: "center", gap: 6,
-                fontSize: 11, fontWeight: 700, color: "#f59e0b",
-                background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.3)",
-                borderRadius: 8, padding: "5px 13px", textDecoration: "none",
-                letterSpacing: "0.04em", transition: "all .18s",
-                fontFamily: "'DM Mono','Fira Code',monospace",
-              }}
-              onMouseEnter={e => { e.currentTarget.style.background = "rgba(245,158,11,0.16)"; e.currentTarget.style.borderColor = "rgba(245,158,11,0.6)"; }}
-              onMouseLeave={e => { e.currentTarget.style.background = "rgba(245,158,11,0.08)"; e.currentTarget.style.borderColor = "rgba(245,158,11,0.3)"; }}
-            >
-              <span style={{ fontSize: 13 }}>✉</span> Wizzle's Watchlist ↗
-            </a>
+              <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#64748b" }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f87171", display: "inline-block", boxShadow: "0 0 6px #f87171" }} />{losers} declining
+              </span>
+              <span style={{ fontSize: 11, color: "#2d3a52" }}>{allTickerCount} tickers</span>
+              <button onClick={refresh} disabled={refreshing} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 8, color: "#64748b", padding: "5px 12px", cursor: "pointer", fontSize: 11, fontFamily: "inherit", opacity: refreshing ? 0.5 : 1 }}>
+                {refreshing ? "↻" : `↻${lastUpdated ? " · " + lastUpdated : ""}`}
+              </button>
+              <a
+                href="https://wizzleswatchlist.substack.com/"
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  display: "inline-flex", alignItems: "center", gap: 6,
+                  fontSize: 11, fontWeight: 700, color: "#f59e0b",
+                  background: "rgba(245,158,11,0.08)", border: "1px solid rgba(245,158,11,0.3)",
+                  borderRadius: 8, padding: "5px 13px", textDecoration: "none",
+                  letterSpacing: "0.04em", transition: "all .18s",
+                  fontFamily: "'DM Mono','Fira Code',monospace",
+                }}
+                onMouseEnter={e => { e.currentTarget.style.background = "rgba(245,158,11,0.16)"; e.currentTarget.style.borderColor = "rgba(245,158,11,0.6)"; }}
+                onMouseLeave={e => { e.currentTarget.style.background = "rgba(245,158,11,0.08)"; e.currentTarget.style.borderColor = "rgba(245,158,11,0.3)"; }}
+              >
+                <span style={{ fontSize: 13 }}>✉</span> Wizzle's Watchlist ↗
+              </a>
+            </div>
           </div>
 
+          {/* RIGHT SIDE: Fear & Greed Gauge */}
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}>
             <FearGreedGauge />
-        
           </div>
 
         </div>
