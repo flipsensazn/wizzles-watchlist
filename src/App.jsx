@@ -2377,6 +2377,7 @@ export default function App() {
   useEffect(() => { scannerPoolRef.current = scannerPool; }, [scannerPool]);
   useEffect(() => { shortListRef.current   = shortList;   }, [shortList]);
 
+// ── PRIMARY DATA FETCH ──
   useEffect(() => {
     fetch("/scanner")
       .then(res => res.json())
@@ -2388,8 +2389,40 @@ export default function App() {
       .then(data => { if (data.capexData && (data.capexData.version ?? 0) >= CAPEX_DATA.version) { setCapexData(data.capexData); capexDataRef.current = data.capexData; } })
       .catch(e => console.log("Capex fetch failed"));
     
-    // Auto-updating Sector News Feed
-    useEffect(() => {
+    // (Notice that the Sector News useEffect is NO LONGER nested inside here!)
+    
+    setCapexIntelStatus("loading");
+    const intelController = new AbortController();
+    const intelTimeout = setTimeout(() => intelController.abort(), 20000);
+    fetch("/capex-intel", { signal: intelController.signal })
+      .then(res => res.json())
+      .then(data => {
+        clearTimeout(intelTimeout);
+        if (data.error) {
+          setCapexIntelStatus("error");
+          setCapexIntelError(data.detail ? `${data.error} — ${data.detail}` : data.error);
+        } else if (data.allocations?.length) {
+          setCapexIntel(data);
+          setCapexIntelStatus("success");
+        } else {
+          setCapexIntelStatus("error");
+          setCapexIntelError("No allocations returned from API.");
+        }
+      })
+      .catch(e => {
+        clearTimeout(intelTimeout);
+        setCapexIntelStatus("error");
+        setCapexIntelError(e.name === "AbortError" ? "Request timed out — Gemini took too long" : (e.message || "Network error"));
+      });
+
+    fetch("/shortlist")
+      .then(res => res.json())
+      .then(data => { if (Array.isArray(data.tickers)) { setShortList(data.tickers); shortListRef.current = data.tickers; } })
+      .catch(e => console.log("Shortlist fetch failed"));
+  }, []);
+
+  // ── SEPARATE: Auto-updating Sector News Feed ──
+  useEffect(() => {
     const fetchSectorNews = () => {
       fetch("/news")
         .then(res => res.json())
