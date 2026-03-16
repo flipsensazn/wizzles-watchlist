@@ -2159,36 +2159,54 @@ const XFeed = memo(function XFeed() {
   const feedRef = useRef(null);
 
   useEffect(() => {
-    // Function to force the widget script to re-scan the DOM
-    const loadTwitter = () => {
+    const renderFeed = () => {
       if (window.twttr && window.twttr.widgets && feedRef.current) {
-        window.twttr.widgets.load(feedRef.current);
+        // Clear any duplicate renders
+        feedRef.current.innerHTML = ""; 
+        
+        // Explicitly create the timeline using the JS API
+        window.twttr.widgets.createTimeline(
+          {
+            sourceType: "profile",
+            screenName: "wallstengine"
+          },
+          feedRef.current,
+          {
+            theme: "dark",
+            chrome: "noheader nofooter noborders transparent",
+            height: 400 // Explicitly set iframe height
+          }
+        );
       }
     };
 
-    if (!document.getElementById("twitter-wjs")) {
+    if (!window.twttr) {
       const script = document.createElement("script");
       script.id = "twitter-wjs";
       script.src = "https://platform.twitter.com/widgets.js";
       script.async = true;
-      script.onload = loadTwitter; // Run once the script is downloaded
+      script.onload = renderFeed;
       document.body.appendChild(script);
     } else {
-      loadTwitter(); // Run immediately if the script already exists
+      if (window.twttr.widgets) {
+        renderFeed();
+      } else {
+        window.twttr.ready(renderFeed);
+      }
     }
   }, []);
 
   return (
-    <div ref={feedRef} style={{ height: "100%", overflowY: "auto", overflowX: "hidden", borderRadius: 4, background: "rgba(18,18,18,0.5)" }}>
-      <a
-        className="twitter-timeline"
-        data-theme="dark"
-        data-chrome="noheader nofooter noborders transparent"
-        href="https://twitter.com/wallstengine?ref_src=twsrc%5Etfw"
-      >
-        Tweets by @wallstengine
-      </a>
-    </div>
+    <div 
+      ref={feedRef} 
+      style={{ 
+        height: 400, 
+        overflowY: "auto", 
+        overflowX: "hidden", 
+        borderRadius: 4, 
+        background: "rgba(18,18,18,0.5)" 
+      }} 
+    />
   );
 });
 
@@ -2642,12 +2660,14 @@ export default function App() {
           <div className="top-node-layout" style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
             
             <div style={{ display: "flex", alignItems: "stretch", justifyContent: "center", gap: 20, width: "100%" }}>
+              
               {/* LEFT SIDE: Sector News */}
               <div className="side-panel" style={{ flex: "1 1 0", maxWidth: 350, minWidth: 250, display: "flex", flexDirection: "column" }}>
                 <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 8, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ fontSize: 14 }}>🗞</span> Sector News
                 </div>
-                <div style={{ flex: 1, background: "linear-gradient(to bottom, #1c1917, #0a0a0a)", border: "1px solid #27272a", borderRadius: 4, padding: "12px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)" }}>
+                {/* Fixed height to 400 instead of flex: 1 */}
+                <div style={{ height: 400, background: "linear-gradient(to bottom, #1c1917, #0a0a0a)", border: "1px solid #27272a", borderRadius: 4, padding: "12px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)" }}>
                   {newsFeed.length === 0 ? (
                     <div style={{ color: "#475569", fontSize: 11, textAlign: "center", marginTop: 20 }}>Loading news...</div>
                   ) : (
@@ -2733,7 +2753,8 @@ export default function App() {
                 <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 8, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ fontSize: 14 }}>𝕏</span> @wallstengine
                 </div>
-                <div style={{ flex: 1, background: "linear-gradient(to bottom, #1c1917, #0a0a0a)", border: "1px solid #27272a", borderRadius: 4, overflow: "hidden", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)" }}>
+                {/* Fixed height to 400 instead of flex: 1 */}
+                <div style={{ height: 400, background: "linear-gradient(to bottom, #1c1917, #0a0a0a)", border: "1px solid #27272a", borderRadius: 4, overflow: "hidden", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)" }}>
                   <XFeed />
                 </div>
               </div>
