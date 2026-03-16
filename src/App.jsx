@@ -2154,18 +2154,18 @@ function AdminModal({ onClose, onSuccess }) {
   );
 }
 
-// ── X / TWITTER FEED COMPONENT ────────────────────────────
-const XFeed = memo(function XFeed() {
-  const [tweets, setTweets] = useState([]);
+// ── BLOOMBERG FEED COMPONENT ────────────────────────────
+const BloombergFeed = memo(function BloombergFeed() {
+  const [news, setNews] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetch("/xfeed")
+    fetch("/market-news")
       .then(res => res.json())
       .then(data => {
-        if (data.tweets) {
-          setTweets(data.tweets);
+        if (data.news) {
+          setNews(data.news);
         } else {
           setError(data.error || "Failed to load feed");
         }
@@ -2178,43 +2178,47 @@ const XFeed = memo(function XFeed() {
   }, []);
 
   if (loading) {
-    return <div style={{ padding: 16, color: "#475569", fontSize: 11, textAlign: "center" }}>Loading posts...</div>;
+    return <div style={{ padding: 16, color: "#475569", fontSize: 11, textAlign: "center" }}>Loading feeds...</div>;
   }
 
   if (error) {
     return <div style={{ padding: 16, color: "#f87171", fontSize: 11, textAlign: "center" }}>⚠ {error}</div>;
   }
 
-  if (tweets.length === 0) {
-    return <div style={{ padding: 16, color: "#475569", fontSize: 11, textAlign: "center" }}>No recent posts found.</div>;
+  if (news.length === 0) {
+    return <div style={{ padding: 16, color: "#475569", fontSize: 11, textAlign: "center" }}>No news for today yet.</div>;
   }
 
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
-      {tweets.map((tweet, i) => (
-        <a 
-          key={i} 
-          href={tweet.link} 
-          target="_blank" 
-          rel="noopener noreferrer" 
-          style={{ 
-            padding: "12px 14px", 
-            borderBottom: i < tweets.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none", 
-            textDecoration: "none",
-            display: "block",
-            transition: "background 0.15s"
-          }}
-          onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.03)"}
-          onMouseLeave={e => e.currentTarget.style.background = "transparent"}
-        >
-          <div style={{ fontSize: 12, color: "#e2e8f0", lineHeight: 1.45, fontWeight: 500, marginBottom: 6 }}>
-            {tweet.title}
-          </div>
-          <div style={{ fontSize: 9, color: "#64748b", display: "flex", justifyContent: "flex-end" }}>
-            {tweet.pubDate ? new Date(tweet.pubDate).toLocaleDateString() : "Recent"}
-          </div>
-        </a>
-      ))}
+      {news.map((item, i) => {
+        const timeStr = new Date(item.timestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
+        return (
+          <a 
+            key={i} 
+            href={item.link} 
+            target="_blank" 
+            rel="noopener noreferrer" 
+            style={{ 
+              padding: "12px 14px", 
+              borderBottom: i < news.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none", 
+              textDecoration: "none",
+              display: "block",
+              transition: "background 0.15s"
+            }}
+            onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.03)"}
+            onMouseLeave={e => e.currentTarget.style.background = "transparent"}
+          >
+            <div style={{ fontSize: 9, color: "#fbbf24", fontWeight: 700, marginBottom: 4, letterSpacing: "0.05em", display: "flex", justifyContent: "space-between" }}>
+              <span>{item.category}</span>
+              <span style={{ color: "#64748b" }}>{timeStr} ET</span>
+            </div>
+            <div style={{ fontSize: 12, color: "#e2e8f0", lineHeight: 1.4, fontWeight: 600 }}>
+              {item.title}
+            </div>
+          </a>
+        );
+      })}
     </div>
   );
 });
@@ -2808,14 +2812,13 @@ const NITTER_INSTANCES = [
                 </div>
               </div>
 
-              {/* RIGHT SIDE: X Feed */}
+             {/* RIGHT SIDE: Bloomberg Feed */}
               <div className="side-panel" style={{ flex: "1 1 0", maxWidth: 350, minWidth: 250, display: "flex", flexDirection: "column" }}>
                 <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 8, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
-                  <span style={{ fontSize: 14 }}>𝕏</span> @wallstengine
+                  <span style={{ fontSize: 14 }}>🌐</span> Bloomberg Live
                 </div>
-                {/* Changed height to 250 */}
-                <div style={{ height: 250, background: "linear-gradient(to bottom, #1c1917, #0a0a0a)", border: "1px solid #27272a", borderRadius: 4, overflow: "hidden", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)" }}>
-                  <XFeed newsFeed={xPosts} />
+                <div style={{ height: 250, background: "linear-gradient(to bottom, #1c1917, #0a0a0a)", border: "1px solid #27272a", borderRadius: 4, overflowY: "auto", overflowX: "hidden", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)" }}>
+                  <BloombergFeed />
                 </div>
               </div>
             </div>
