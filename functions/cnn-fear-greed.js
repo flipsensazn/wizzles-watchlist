@@ -11,6 +11,7 @@ export async function onRequest(context) {
   const headers = {
     "Access-Control-Allow-Origin": corsOrigin,
     "Content-Type": "application/json",
+    "Cache-Control": "public, max-age=300, s-maxage=900"
   };
 
   try {
