@@ -1174,10 +1174,26 @@ function computeFearGreed(prices) {
   return { score, label, color, emoji, breadth1D, breadth1M, avgRange, medVol };
 }
 
-function FearGreedGauge({ prices }) {
-  const fg = useMemo(() => computeFearGreed(prices), [prices]);
+function FearGreedGauge() {
+  const [cnnData, setCnnData] = useState(null);
 
-  if (!fg) {
+  useEffect(() => {
+    // Fetch from your new Cloudflare function proxy
+    fetch("/cnn-fear-greed")
+      .then(res => res.json())
+      .then(data => {
+        if (!data.error) {
+          setCnnData({
+             score: data.score,
+             // Map CNN's string to your desired UI text
+             label: data.label.replace("_", " ").toUpperCase(), 
+          });
+        }
+      })
+      .catch(console.error);
+  }, []);
+
+  if (!cnnData) {
     return (
       <div style={{
         width: 210, padding: "10px 14px",
@@ -1185,19 +1201,26 @@ function FearGreedGauge({ prices }) {
         borderRadius: 10, display: "flex", alignItems: "center",
         justifyContent: "center", fontSize: 11, color: "#334155", minHeight: 120,
       }}>
-        Loading…
+        Loading CNN Index…
       </div>
     );
   }
 
-  const { score, label, color, emoji, breadth1D, breadth1M, avgRange } = fg;
+  const { score, label } = cnnData;
+
+  // Determine the color based on the CNN score
+  let color, emoji;
+  if (score <= 24)      { color = "#ef4444"; emoji = "😱"; } // Extreme Fear
+  else if (score <= 44) { color = "#f97316"; emoji = "😰"; } // Fear
+  else if (score <= 55) { color = "#facc15"; emoji = "😐"; } // Neutral
+  else if (score <= 75) { color = "#86efac"; emoji = "😄"; } // Greed
+  else                  { color = "#22c55e"; emoji = "🤑"; } // Extreme Greed
 
   // ── SVG semi-circle gauge ──
   const W = 210, H = 118;
   const cx = W / 2, cy = H - 6;
-  const RO = 80, RI = 55; // outer / inner radius
+  const RO = 80, RI = 55;
 
-  // Colour stops: left=fear → right=greed
   const STOPS = [
     { t: 0,    hex: "#ef4444" },
     { t: 0.25, hex: "#f97316" },
@@ -1205,6 +1228,7 @@ function FearGreedGauge({ prices }) {
     { t: 0.75, hex: "#86efac" },
     { t: 1,    hex: "#22c55e" },
   ];
+  
   function arcColor(t) {
     for (let i = 0; i < STOPS.length - 1; i++) {
       if (t >= STOPS[i].t && t <= STOPS[i+1].t) {
@@ -1215,12 +1239,11 @@ function FearGreedGauge({ prices }) {
     return STOPS[STOPS.length-1].hex;
   }
 
-  // 60 arc slices
   const SLICES = 60;
   const arcPaths = [];
   for (let i = 0; i < SLICES; i++) {
     const t1 = i / SLICES, t2 = (i+1) / SLICES;
-    const a1 = Math.PI - t1 * Math.PI;  // 180° → 0° (left to right across the top)
+    const a1 = Math.PI - t1 * Math.PI; 
     const a2 = Math.PI - t2 * Math.PI;
     const x1o = cx + RO*Math.cos(a1), y1o = cy - RO*Math.sin(a1);
     const x2o = cx + RO*Math.cos(a2), y2o = cy - RO*Math.sin(a2);
@@ -1232,7 +1255,6 @@ function FearGreedGauge({ prices }) {
     });
   }
 
-  // Dark overlay dims the un-filled right portion
   const fillT    = score / 100;
   const fillAng  = Math.PI - fillT * Math.PI;
   const dimLarge = fillT < 0.5 ? 1 : 0;
@@ -1242,7 +1264,6 @@ function FearGreedGauge({ prices }) {
   const dXI2 = cx + RI, dYI2 = cy;
   const dimPath = `M${dX1},${dY1} A${RO},${RO} 0 ${dimLarge},1 ${dX2},${dY2} L${dXI2},${dYI2} A${RI},${RI} 0 ${dimLarge},0 ${dXI1},${dYI1} Z`;
 
-  // Needle angle
   const needleAng = Math.PI - fillT * Math.PI;
   const nLen = RO - 7;
   const nx = cx + nLen*Math.cos(needleAng), ny = cy - nLen*Math.sin(needleAng);
@@ -1256,20 +1277,14 @@ function FearGreedGauge({ prices }) {
       flexShrink: 0,
       minWidth: 210,
     }}>
-      {/* Title */}
       <div style={{ fontSize: 9, fontWeight: 700, color: "#475569", letterSpacing: "0.15em", textTransform: "uppercase", textAlign: "center", marginBottom: 2 }}>
-        Fear &amp; Greed Index
+        CNN Fear &amp; Greed Index
       </div>
 
-      {/* Gauge SVG */}
       <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: "block", overflow: "visible" }}>
-        {/* Arc slices */}
         {arcPaths.map((s, i) => <path key={i} d={s.d} fill={s.fill} opacity={0.88} />)}
-
-        {/* Dim overlay for un-scored right portion */}
         {score < 100 && <path d={dimPath} fill="rgba(8,8,10,0.60)" />}
 
-        {/* Tick marks at 0 / 25 / 50 / 75 / 100 */}
         {[0, 25, 50, 75, 100].map(v => {
           const a = Math.PI - (v/100)*Math.PI;
           return (
@@ -1281,7 +1296,6 @@ function FearGreedGauge({ prices }) {
           );
         })}
 
-        {/* Edge labels */}
         {[{v:0,lbl:"Fear"},{v:100,lbl:"Greed"}].map(({v,lbl}) => {
           const a = Math.PI - (v/100)*Math.PI;
           const tx = cx + (RO+20)*Math.cos(a), ty = cy - (RO+20)*Math.sin(a);
@@ -1291,7 +1305,6 @@ function FearGreedGauge({ prices }) {
           );
         })}
 
-        {/* Needle */}
         <line x1={cx} y1={cy} x2={nx} y2={ny}
           stroke={color} strokeWidth="2.5" strokeLinecap="round"
           style={{ filter: `drop-shadow(0 0 3px ${color})` }}
@@ -1300,7 +1313,6 @@ function FearGreedGauge({ prices }) {
           style={{ filter: `drop-shadow(0 0 6px ${color}aa)` }}
         />
 
-        {/* Score number inside donut hole */}
         <text x={cx} y={cy - RI/2 - 2} textAnchor="middle"
           fontSize="28" fontWeight="800" fill={color}
           style={{ filter: `drop-shadow(0 0 10px ${color}55)` }}>
@@ -1308,23 +1320,8 @@ function FearGreedGauge({ prices }) {
         </text>
       </svg>
 
-      {/* Sentiment label */}
       <div style={{ textAlign: "center", fontSize: 13, fontWeight: 800, color, letterSpacing: "0.03em", marginTop: -4, lineHeight: 1.3 }}>
         {emoji} {label}
-      </div>
-
-      {/* Sub-signal pills */}
-      <div style={{ display: "flex", justifyContent: "space-around", marginTop: 9, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.05)" }}>
-        {[
-          { lbl: "Breadth",  val: Math.round(breadth1D * 100) + "%" },
-          { lbl: "1M Momo",  val: Math.round(breadth1M * 100) + "%" },
-          { lbl: "52W Pos",  val: Math.round(avgRange  * 100) + "%" },
-        ].map(({ lbl, val }) => (
-          <div key={lbl} style={{ textAlign: "center" }}>
-            <div style={{ fontSize: 9, color: "#334155", letterSpacing: "0.08em", textTransform: "uppercase" }}>{lbl}</div>
-            <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginTop: 2 }}>{val}</div>
-          </div>
-        ))}
       </div>
     </div>
   );
