@@ -18,8 +18,6 @@ export async function onRequest(context) {
   }
 
   try {
-    // We use Twitter's own internal Syndication API (the one their widgets use)
-    // This bypasses Nitter and doesn't require an API key.
     const url = "https://syndication.twitter.com/srv/timeline-profile/screen-name/wallstengine";
     
     const res = await fetch(url, {
@@ -34,38 +32,64 @@ export async function onRequest(context) {
 
     const html = await res.text();
     
-    // The timeline data is injected into the HTML as a massive JSON object
     const match = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
     if (!match || !match[1]) {
       return new Response(JSON.stringify({ error: "Could not locate feed data." }), { status: 500, headers });
     }
 
     const data = JSON.parse(match[1]);
-    const tweets = [];
+    const entries = data?.props?.pageProps?.timeline?.entries || [];
     
-    // Recursively search the JSON tree for tweet objects to protect against X changing their data structure
-    function findTweets(obj) {
-      if (!obj || typeof obj !== 'object') return;
-      
-      // If an object has these three fields, it's a tweet
-      if (obj.id_str && obj.text && obj.created_at) {
-        tweets.push({
-          title: obj.text,
-          link: `https://x.com/wallstengine/status/${obj.id_str}`,
-          pubDate: obj.created_at
-        });
-        return; // Stop digging here so we don't accidentally grab a quote-tweet's internal data instead of the main tweet
-      }
-      
-      for (const key in obj) {
-        findTweets(obj[key]);
+    let tweets = [];
+
+    // Path 1: Parse the official timeline array. 
+    // This ensures we only get feed items and ignore the "What's Happening" trending sidebar data.
+    if (entries.length > 0) {
+      for (const entry of entries) {
+        if (entry.entryId && entry.entryId.startsWith("tweet-") && entry.content?.tweet) {
+          const t = entry.content.tweet;
+          const author = t.user?.screen_name;
+          tweets.push({
+            // If it's a retweet, add an RT tag so the UI makes sense
+            title: author && author.toLowerCase() !== "wallstengine" ? `RT @${author}: ${t.text}` : t.text,
+            link: `https://x.com/${author || 'wallstengine'}/status/${t.id_str}`,
+            pubDate: t.created_at,
+            timestamp: new Date(t.created_at).getTime()
+          });
+        }
       }
     }
 
-    findTweets(data);
+    // Path 2: Fallback recursive search if X unexpectedly changes their JSON layout.
+    // Strictly filtered to ONLY pull tweets authored by the target account.
+    if (tweets.length === 0) {
+      function findTweets(obj) {
+        if (!obj || typeof obj !== 'object') return;
+        if (obj.id_str && obj.text && obj.created_at) {
+          if (obj.user?.screen_name?.toLowerCase() === "wallstengine") {
+            tweets.push({
+              title: obj.text,
+              link: `https://x.com/wallstengine/status/${obj.id_str}`,
+              pubDate: obj.created_at,
+              timestamp: new Date(obj.created_at).getTime()
+            });
+            return; // Stop digging here so we don't grab nested quote-tweet data
+          }
+        }
+        for (const key in obj) {
+          findTweets(obj[key]);
+        }
+      }
+      findTweets(data);
+    }
 
-    // Deduplicate by link and take the most recent 10
-    const uniqueTweets = Array.from(new Map(tweets.map(t => [t.link, t])).values());
+    // Deduplicate by link
+    const uniqueMap = new Map();
+    tweets.forEach(t => uniqueMap.set(t.link, t));
+    const uniqueTweets = Array.from(uniqueMap.values());
+
+    // Sort chronologically (newest first) to fix Pinned Tweets throwing off the order
+    uniqueTweets.sort((a, b) => b.timestamp - a.timestamp);
 
     return new Response(JSON.stringify({ tweets: uniqueTweets.slice(0, 10) }), { status: 200, headers });
 
