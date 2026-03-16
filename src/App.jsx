@@ -2321,7 +2321,6 @@ export default function App() {
   const [capexIntelStatus, setCapexIntelStatus] = useState("idle");
   const [capexIntelError, setCapexIntelError] = useState(null);
   const [newsFeed, setNewsFeed] = useState([]);
-  const [xPosts, setXPosts] = useState([]);
 
   const [activeTrack, setActiveTrack] = useState(null);
   const [prices, setPrices] = useState({});
