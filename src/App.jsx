@@ -2154,56 +2154,47 @@ function AdminModal({ onClose, onSuccess }) {
   );
 }
 
-// ── X / TWITTER FEED COMPONENT ────────────────────────────
-const XFeed = memo(function XFeed() {
-  const containerRef = useRef(null);
-
-  useEffect(() => {
-    if (!containerRef.current) return;
-    
-    // 1. Manually inject a fresh anchor tag to ensure React doesn't strip it
-    containerRef.current.innerHTML = `
-      <a 
-        class="twitter-timeline" 
-        data-theme="dark" 
-        data-height="250" 
-        data-chrome="noheader nofooter noborders transparent" 
-        href="https://twitter.com/wallstengine">
-        Tweets by @wallstengine
-      </a>
-    `;
-    
-    // 2. Function to force X to parse our specific container
-    const loadTwitter = () => {
-      if (window.twttr && window.twttr.widgets) {
-        window.twttr.widgets.load(containerRef.current);
-      }
-    };
-
-    // 3. Load script if missing, otherwise just parse
-    if (!window.twttr) {
-      const script = document.createElement("script");
-      script.id = "twitter-wjs";
-      script.src = "https://platform.twitter.com/widgets.js";
-      script.async = true;
-      script.onload = loadTwitter;
-      document.body.appendChild(script);
-    } else {
-      loadTwitter();
-    }
-  }, []);
+// ── X / NEWS FEED COMPONENT (Reliable replacement) ────────
+const XFeed = memo(function XFeed({ newsFeed = [] }) {
+  if (!newsFeed.length) {
+    return (
+      <div style={{
+        height: 250, display: "flex", alignItems: "center",
+        justifyContent: "center", color: "#334155", fontSize: 11,
+        background: "rgba(18,18,18,0.5)", borderRadius: 4,
+      }}>
+        Loading feed…
+      </div>
+    );
+  }
 
   return (
-    <div 
-      ref={containerRef} 
-      style={{ 
-        height: 250, 
-        overflowY: "auto", 
-        overflowX: "hidden", 
-        borderRadius: 4, 
-        background: "rgba(18,18,18,0.5)" 
-      }} 
-    />
+    <div style={{
+      height: 250, overflowY: "auto", borderRadius: 4,
+      background: "rgba(18,18,18,0.5)", display: "flex",
+      flexDirection: "column", gap: 1,
+    }}>
+      {newsFeed.map((item, i) => (
+        <a key={i} href={item.link} target="_blank" rel="noopener noreferrer"
+          style={{
+            display: "block", padding: "8px 10px", textDecoration: "none",
+            borderBottom: "1px solid rgba(255,255,255,0.04)",
+            transition: "background .15s",
+          }}
+          onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
+          onMouseLeave={e => e.currentTarget.style.background = ""}
+        >
+          <div style={{ fontSize: 11, fontWeight: 600, color: "#e2e8f0",
+            lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2,
+            WebkitBoxOrient: "vertical", overflow: "hidden" }}>
+            {item.title}
+          </div>
+          <div style={{ fontSize: 9, color: "#475569", marginTop: 3 }}>
+            {item.publisher} · {item.publishedAt || ""}
+          </div>
+        </a>
+      ))}
+    </div>
   );
 });
 
