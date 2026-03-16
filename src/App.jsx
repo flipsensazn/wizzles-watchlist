@@ -46,7 +46,7 @@ function getChangeForTimeline(entry, timeline) {
     case "6M":  return entry.change6M;
     case "YTD": return entry.changeYTD;
     case "1Y":  return entry.change1Y;
-    default:    return entry.change; // Fallback to 1D
+    default:    return entry.change;
   }
 }
 
@@ -1122,6 +1122,214 @@ function TrackPane({ track, prices, isAdmin, onAddTicker, onRemoveTicker, onTick
   );
 }
 
+// ── FEAR & GREED INDEX ─────────────────────────────────────────────────────
+// Derives a live sentiment score from the price data already loaded in the app.
+// Four signals mirror the methodology of CNN's Fear & Greed Index:
+//   1. Breadth (1D)  — % of tracked tickers advancing today
+//   2. Momentum (1M) — % of tracked tickers with a positive 1-month return
+//   3. 52W Position  — avg price location within each ticker's 52-week range
+//   4. Volatility    — median absolute 1D move (higher vol → more fear)
+
+function lerpHex(hex1, hex2, t) {
+  const p = h => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
+  const [r1,g1,b1] = p(hex1), [r2,g2,b2] = p(hex2);
+  const r = Math.round(r1+(r2-r1)*t), g = Math.round(g1+(g2-g1)*t), b = Math.round(b1+(b2-b1)*t);
+  return `#${r.toString(16).padStart(2,"0")}${g.toString(16).padStart(2,"0")}${b.toString(16).padStart(2,"0")}`;
+}
+
+function computeFearGreed(prices) {
+  const entries = Object.values(prices).filter(e => e && typeof e === "object" && e.price != null);
+  if (entries.length < 5) return null;
+
+  // Signal 1 — 1D breadth
+  const with1D = entries.filter(e => typeof e.change === "number");
+  const breadth1D = with1D.length ? with1D.filter(e => e.change > 0).length / with1D.length : 0.5;
+
+  // Signal 2 — 1M momentum breadth
+  const with1M = entries.filter(e => typeof e.change1M === "number");
+  const breadth1M = with1M.length ? with1M.filter(e => e.change1M > 0).length / with1M.length : 0.5;
+
+  // Signal 3 — avg 52W range position (0 = at 52W low, 1 = at 52W high)
+  const rangePos = entries
+    .filter(e => e.week52Low != null && e.week52High != null && e.week52High > e.week52Low)
+    .map(e => Math.min(1, Math.max(0, (e.price - e.week52Low) / (e.week52High - e.week52Low))));
+  const avgRange = rangePos.length ? rangePos.reduce((a,b) => a+b, 0) / rangePos.length : 0.5;
+
+  // Signal 4 — volatility (high vol = fear; 0% → 1.0 score, 4%+ → 0 score)
+  const absMoves = with1D.map(e => Math.abs(e.change)).sort((a,b) => a-b);
+  const medVol = absMoves[Math.floor(absMoves.length / 2)] ?? 1;
+  const volScore = Math.max(0, Math.min(1, 1 - medVol / 4));
+
+  // Composite — weights sum to 1
+  const raw = breadth1D * 0.30 + breadth1M * 0.25 + avgRange * 0.30 + volScore * 0.15;
+  const score = Math.round(Math.min(100, Math.max(0, raw * 100)));
+
+  let label, color, emoji;
+  if (score <= 20)      { label = "Extreme Fear"; color = "#ef4444"; emoji = "😱"; }
+  else if (score <= 40) { label = "Fear";          color = "#f97316"; emoji = "😰"; }
+  else if (score <= 60) { label = "Neutral";       color = "#facc15"; emoji = "😐"; }
+  else if (score <= 80) { label = "Greed";         color = "#86efac"; emoji = "😄"; }
+  else                  { label = "Extreme Greed"; color = "#22c55e"; emoji = "🤑"; }
+
+  return { score, label, color, emoji, breadth1D, breadth1M, avgRange, medVol };
+}
+
+function FearGreedGauge({ prices }) {
+  const fg = useMemo(() => computeFearGreed(prices), [prices]);
+
+  if (!fg) {
+    return (
+      <div style={{
+        width: 210, padding: "10px 14px",
+        background: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.07)",
+        borderRadius: 10, display: "flex", alignItems: "center",
+        justifyContent: "center", fontSize: 11, color: "#334155", minHeight: 120,
+      }}>
+        Loading…
+      </div>
+    );
+  }
+
+  const { score, label, color, emoji, breadth1D, breadth1M, avgRange } = fg;
+
+  // ── SVG semi-circle gauge ──
+  const W = 210, H = 118;
+  const cx = W / 2, cy = H - 6;
+  const RO = 80, RI = 55; // outer / inner radius
+
+  // Colour stops: left=fear → right=greed
+  const STOPS = [
+    { t: 0,    hex: "#ef4444" },
+    { t: 0.25, hex: "#f97316" },
+    { t: 0.5,  hex: "#facc15" },
+    { t: 0.75, hex: "#86efac" },
+    { t: 1,    hex: "#22c55e" },
+  ];
+  function arcColor(t) {
+    for (let i = 0; i < STOPS.length - 1; i++) {
+      if (t >= STOPS[i].t && t <= STOPS[i+1].t) {
+        const local = (t - STOPS[i].t) / (STOPS[i+1].t - STOPS[i].t);
+        return lerpHex(STOPS[i].hex, STOPS[i+1].hex, local);
+      }
+    }
+    return STOPS[STOPS.length-1].hex;
+  }
+
+  // 60 arc slices
+  const SLICES = 60;
+  const arcPaths = [];
+  for (let i = 0; i < SLICES; i++) {
+    const t1 = i / SLICES, t2 = (i+1) / SLICES;
+    const a1 = Math.PI - t1 * Math.PI;  // 180° → 0° (left to right across the top)
+    const a2 = Math.PI - t2 * Math.PI;
+    const x1o = cx + RO*Math.cos(a1), y1o = cy - RO*Math.sin(a1);
+    const x2o = cx + RO*Math.cos(a2), y2o = cy - RO*Math.sin(a2);
+    const x1i = cx + RI*Math.cos(a1), y1i = cy - RI*Math.sin(a1);
+    const x2i = cx + RI*Math.cos(a2), y2i = cy - RI*Math.sin(a2);
+    arcPaths.push({
+      d: `M${x1o},${y1o} A${RO},${RO} 0 0,1 ${x2o},${y2o} L${x2i},${y2i} A${RI},${RI} 0 0,0 ${x1i},${y1i} Z`,
+      fill: arcColor((t1+t2)/2),
+    });
+  }
+
+  // Dark overlay dims the un-filled right portion
+  const fillT    = score / 100;
+  const fillAng  = Math.PI - fillT * Math.PI;
+  const dimLarge = fillT < 0.5 ? 1 : 0;
+  const dX1 = cx + RO*Math.cos(fillAng), dY1 = cy - RO*Math.sin(fillAng);
+  const dX2 = cx + RO, dY2 = cy;
+  const dXI1 = cx + RI*Math.cos(fillAng), dYI1 = cy - RI*Math.sin(fillAng);
+  const dXI2 = cx + RI, dYI2 = cy;
+  const dimPath = `M${dX1},${dY1} A${RO},${RO} 0 ${dimLarge},1 ${dX2},${dY2} L${dXI2},${dYI2} A${RI},${RI} 0 ${dimLarge},0 ${dXI1},${dYI1} Z`;
+
+  // Needle angle
+  const needleAng = Math.PI - fillT * Math.PI;
+  const nLen = RO - 7;
+  const nx = cx + nLen*Math.cos(needleAng), ny = cy - nLen*Math.sin(needleAng);
+
+  return (
+    <div style={{
+      padding: "10px 14px 8px",
+      background: "rgba(0,0,0,0.28)",
+      border: "1px solid rgba(255,255,255,0.07)",
+      borderRadius: 10,
+      flexShrink: 0,
+      minWidth: 210,
+    }}>
+      {/* Title */}
+      <div style={{ fontSize: 9, fontWeight: 700, color: "#475569", letterSpacing: "0.15em", textTransform: "uppercase", textAlign: "center", marginBottom: 2 }}>
+        Fear &amp; Greed Index
+      </div>
+
+      {/* Gauge SVG */}
+      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: "block", overflow: "visible" }}>
+        {/* Arc slices */}
+        {arcPaths.map((s, i) => <path key={i} d={s.d} fill={s.fill} opacity={0.88} />)}
+
+        {/* Dim overlay for un-scored right portion */}
+        {score < 100 && <path d={dimPath} fill="rgba(8,8,10,0.60)" />}
+
+        {/* Tick marks at 0 / 25 / 50 / 75 / 100 */}
+        {[0, 25, 50, 75, 100].map(v => {
+          const a = Math.PI - (v/100)*Math.PI;
+          return (
+            <line key={v}
+              x1={cx + (RO+3)*Math.cos(a)} y1={cy - (RO+3)*Math.sin(a)}
+              x2={cx + (RO+9)*Math.cos(a)} y2={cy - (RO+9)*Math.sin(a)}
+              stroke="rgba(255,255,255,0.2)" strokeWidth="1.5"
+            />
+          );
+        })}
+
+        {/* Edge labels */}
+        {[{v:0,lbl:"Fear"},{v:100,lbl:"Greed"}].map(({v,lbl}) => {
+          const a = Math.PI - (v/100)*Math.PI;
+          const tx = cx + (RO+20)*Math.cos(a), ty = cy - (RO+20)*Math.sin(a);
+          return (
+            <text key={v} x={tx} y={ty} fontSize="8" fill="rgba(255,255,255,0.28)"
+              textAnchor="middle" dominantBaseline="middle">{lbl}</text>
+          );
+        })}
+
+        {/* Needle */}
+        <line x1={cx} y1={cy} x2={nx} y2={ny}
+          stroke={color} strokeWidth="2.5" strokeLinecap="round"
+          style={{ filter: `drop-shadow(0 0 3px ${color})` }}
+        />
+        <circle cx={cx} cy={cy} r={5} fill={color}
+          style={{ filter: `drop-shadow(0 0 6px ${color}aa)` }}
+        />
+
+        {/* Score number inside donut hole */}
+        <text x={cx} y={cy - RI/2 - 2} textAnchor="middle"
+          fontSize="28" fontWeight="800" fill={color}
+          style={{ filter: `drop-shadow(0 0 10px ${color}55)` }}>
+          {score}
+        </text>
+      </svg>
+
+      {/* Sentiment label */}
+      <div style={{ textAlign: "center", fontSize: 13, fontWeight: 800, color, letterSpacing: "0.03em", marginTop: -4, lineHeight: 1.3 }}>
+        {emoji} {label}
+      </div>
+
+      {/* Sub-signal pills */}
+      <div style={{ display: "flex", justifyContent: "space-around", marginTop: 9, paddingTop: 8, borderTop: "1px solid rgba(255,255,255,0.05)" }}>
+        {[
+          { lbl: "Breadth",  val: Math.round(breadth1D * 100) + "%" },
+          { lbl: "1M Momo",  val: Math.round(breadth1M * 100) + "%" },
+          { lbl: "52W Pos",  val: Math.round(avgRange  * 100) + "%" },
+        ].map(({ lbl, val }) => (
+          <div key={lbl} style={{ textAlign: "center" }}>
+            <div style={{ fontSize: 9, color: "#334155", letterSpacing: "0.08em", textTransform: "uppercase" }}>{lbl}</div>
+            <div style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", marginTop: 2 }}>{val}</div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 // ── HEAT MAP ──────────────────────────────────────────────
 function getNear52WLowInfo(priceEntry) {
   if (!priceEntry) return null;
@@ -1181,8 +1389,11 @@ function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline }) {
 
   return (
     <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: isMobile ? "12px 8px" : 20, height: "100%", overflowY: "auto", overflowX: "hidden", boxSizing: "border-box", width: "100%" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
-        <div>
+      {/* ── HEADER: title + timeline (left) | Fear & Greed gauge (right) ── */}
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+
+        {/* LEFT column: title row + legend below it */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", margin: 0 }}>Portfolio Heat Map</h3>
             <div style={{ display: "flex", background: "rgba(255,255,255,0.05)", borderRadius: 6, padding: 2 }}>
@@ -1199,22 +1410,26 @@ function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline }) {
               ))}
             </div>
           </div>
-          <p style={{ fontSize: 11, color: "#475569", marginTop: 6 }}>All tracked tickers · color = {timeline} performance</p>
+
+          {/* Legend — moved here from top-right */}
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", fontSize: 10, color: "#64748b" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(251,191,36,0.25)", border: "1px solid #f59e0b", boxShadow: "0 0 6px #f59e0b88", flexShrink: 0 }} />
+              <span>within 25% of 52W low</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(52,211,153,0.25)", border: "1px solid #34d399", boxShadow: "0 0 6px #34d39988", flexShrink: 0 }} />
+              <span>within 10% of 52W high</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(52,211,153,0.35)", border: "2.5px solid #34d399", boxShadow: "0 0 8px #34d399cc", flexShrink: 0 }} />
+              <span>All Time High (ATH)</span>
+            </div>
+          </div>
         </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 10, color: "#64748b" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(251,191,36,0.25)", border: "1px solid #f59e0b", boxShadow: "0 0 6px #f59e0b88" }} />
-            <span>within 25% of 52W low</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(52,211,153,0.25)", border: "1px solid #34d399", boxShadow: "0 0 6px #34d39988" }} />
-            <span>within 10% of 52W high</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(52,211,153,0.35)", border: "2.5px solid #34d399", boxShadow: "0 0 8px #34d399cc" }} />
-            <span>All Time High (ATH)</span>
-          </div>
-        </div>
+
+        {/* RIGHT: Fear & Greed gauge — fed by the same prices prop already in scope */}
+        <FearGreedGauge prices={prices} />
       </div>
       {trackCells.map(({ track, cells }) => {
         return (
@@ -2202,8 +2417,6 @@ export default function App() {
         });
         return merged;
       });
-      // Deep-merge: initial strip fetch has no historical fields; protect any
-      // richer data already stored from a prior full refresh().
       setPrices(prev => {
         const HIST_KEYS = ["change5D","change1M","change6M","changeYTD","change1Y",
                            "week52Low","week52High","earningsDate","chartData","chartTimestamps"];
@@ -2286,8 +2499,6 @@ export default function App() {
 
     const allData = await fetchAllPrices(allTickers);
 
-    // Deep-merge: preserve historical fields (change5D etc.) if new data is partial
-    // (e.g. Finnhub fallback only has price/change/session).
     const HIST_KEYS = ["change5D","change1M","change6M","changeYTD","change1Y",
                        "week52Low","week52High","earningsDate","chartData","chartTimestamps"];
     setPrices(prev => {
@@ -2465,11 +2676,9 @@ export default function App() {
   }, [capexData, capexIntel]);
 
   const liveTotal = useMemo(() => {
-    // If we successfully fetched live intel and it contains our new derived total, use it!
     if (capexIntelStatus === "success" && capexIntel?.totalCapexDerived) {
       return capexIntel.totalCapexDerived;
     }
-    // Otherwise, fallback to manually summing the tracks
     return liveCapexData.tracks.reduce((s, t) => s + (t.capex || 0), 0);
   }, [liveCapexData, capexIntel, capexIntelStatus]);
 
