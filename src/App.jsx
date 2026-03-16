@@ -2156,18 +2156,30 @@ function AdminModal({ onClose, onSuccess }) {
 
 // ── X / TWITTER FEED COMPONENT ────────────────────────────
 const XFeed = memo(function XFeed() {
+  const feedRef = useRef(null);
+
   useEffect(() => {
+    // Function to force the widget script to re-scan the DOM
+    const loadTwitter = () => {
+      if (window.twttr && window.twttr.widgets && feedRef.current) {
+        window.twttr.widgets.load(feedRef.current);
+      }
+    };
+
     if (!document.getElementById("twitter-wjs")) {
       const script = document.createElement("script");
       script.id = "twitter-wjs";
       script.src = "https://platform.twitter.com/widgets.js";
       script.async = true;
+      script.onload = loadTwitter; // Run once the script is downloaded
       document.body.appendChild(script);
+    } else {
+      loadTwitter(); // Run immediately if the script already exists
     }
   }, []);
 
   return (
-    <div style={{ height: "100%", overflowY: "auto", overflowX: "hidden", borderRadius: 4, background: "rgba(18,18,18,0.5)" }}>
+    <div ref={feedRef} style={{ height: "100%", overflowY: "auto", overflowX: "hidden", borderRadius: 4, background: "rgba(18,18,18,0.5)" }}>
       <a
         className="twitter-timeline"
         data-theme="dark"
