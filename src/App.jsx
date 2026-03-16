@@ -1122,58 +1122,6 @@ function TrackPane({ track, prices, isAdmin, onAddTicker, onRemoveTicker, onTick
   );
 }
 
-// ── FEAR & GREED INDEX ─────────────────────────────────────────────────────
-// Derives a live sentiment score from the price data already loaded in the app.
-// Four signals mirror the methodology of CNN's Fear & Greed Index:
-//   1. Breadth (1D)  — % of tracked tickers advancing today
-//   2. Momentum (1M) — % of tracked tickers with a positive 1-month return
-//   3. 52W Position  — avg price location within each ticker's 52-week range
-//   4. Volatility    — median absolute 1D move (higher vol → more fear)
-
-function lerpHex(hex1, hex2, t) {
-  const p = h => [parseInt(h.slice(1,3),16), parseInt(h.slice(3,5),16), parseInt(h.slice(5,7),16)];
-  const [r1,g1,b1] = p(hex1), [r2,g2,b2] = p(hex2);
-  const r = Math.round(r1+(r2-r1)*t), g = Math.round(g1+(g2-g1)*t), b = Math.round(b1+(b2-b1)*t);
-  return `#${r.toString(16).padStart(2,"0")}${g.toString(16).padStart(2,"0")}${b.toString(16).padStart(2,"0")}`;
-}
-
-function computeFearGreed(prices) {
-  const entries = Object.values(prices).filter(e => e && typeof e === "object" && e.price != null);
-  if (entries.length < 5) return null;
-
-  // Signal 1 — 1D breadth
-  const with1D = entries.filter(e => typeof e.change === "number");
-  const breadth1D = with1D.length ? with1D.filter(e => e.change > 0).length / with1D.length : 0.5;
-
-  // Signal 2 — 1M momentum breadth
-  const with1M = entries.filter(e => typeof e.change1M === "number");
-  const breadth1M = with1M.length ? with1M.filter(e => e.change1M > 0).length / with1M.length : 0.5;
-
-  // Signal 3 — avg 52W range position (0 = at 52W low, 1 = at 52W high)
-  const rangePos = entries
-    .filter(e => e.week52Low != null && e.week52High != null && e.week52High > e.week52Low)
-    .map(e => Math.min(1, Math.max(0, (e.price - e.week52Low) / (e.week52High - e.week52Low))));
-  const avgRange = rangePos.length ? rangePos.reduce((a,b) => a+b, 0) / rangePos.length : 0.5;
-
-  // Signal 4 — volatility (high vol = fear; 0% → 1.0 score, 4%+ → 0 score)
-  const absMoves = with1D.map(e => Math.abs(e.change)).sort((a,b) => a-b);
-  const medVol = absMoves[Math.floor(absMoves.length / 2)] ?? 1;
-  const volScore = Math.max(0, Math.min(1, 1 - medVol / 4));
-
-  // Composite — weights sum to 1
-  const raw = breadth1D * 0.30 + breadth1M * 0.25 + avgRange * 0.30 + volScore * 0.15;
-  const score = Math.round(Math.min(100, Math.max(0, raw * 100)));
-
-  let label, color, emoji;
-  if (score <= 20)      { label = "Extreme Fear"; color = "#ef4444"; emoji = "😱"; }
-  else if (score <= 40) { label = "Fear";          color = "#f97316"; emoji = "😰"; }
-  else if (score <= 60) { label = "Neutral";       color = "#facc15"; emoji = "😐"; }
-  else if (score <= 80) { label = "Greed";         color = "#86efac"; emoji = "😄"; }
-  else                  { label = "Extreme Greed"; color = "#22c55e"; emoji = "🤑"; }
-
-  return { score, label, color, emoji, breadth1D, breadth1M, avgRange, medVol };
-}
-
 function FearGreedGauge() {
   const [cnnData, setCnnData] = useState(null);
 
