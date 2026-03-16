@@ -2156,51 +2156,48 @@ function AdminModal({ onClose, onSuccess }) {
 
 // ── X / TWITTER FEED COMPONENT ────────────────────────────
 const XFeed = memo(function XFeed() {
-  const feedRef = useRef(null);
+  const containerRef = useRef(null);
 
   useEffect(() => {
-    const renderFeed = () => {
-      if (window.twttr && window.twttr.widgets && feedRef.current) {
-        // Clear any duplicate renders
-        feedRef.current.innerHTML = ""; 
-        
-        // Explicitly create the timeline using the JS API
-        window.twttr.widgets.createTimeline(
-          {
-            sourceType: "profile",
-            screenName: "wallstengine"
-          },
-          feedRef.current,
-          {
-            theme: "dark",
-            chrome: "noheader nofooter noborders transparent",
-            height: 400 // Explicitly set iframe height
-          }
-        );
+    if (!containerRef.current) return;
+    
+    // 1. Manually inject a fresh anchor tag to ensure React doesn't strip it
+    containerRef.current.innerHTML = `
+      <a 
+        class="twitter-timeline" 
+        data-theme="dark" 
+        data-height="250" 
+        data-chrome="noheader nofooter noborders transparent" 
+        href="https://twitter.com/wallstengine">
+        Tweets by @wallstengine
+      </a>
+    `;
+    
+    // 2. Function to force X to parse our specific container
+    const loadTwitter = () => {
+      if (window.twttr && window.twttr.widgets) {
+        window.twttr.widgets.load(containerRef.current);
       }
     };
 
+    // 3. Load script if missing, otherwise just parse
     if (!window.twttr) {
       const script = document.createElement("script");
       script.id = "twitter-wjs";
       script.src = "https://platform.twitter.com/widgets.js";
       script.async = true;
-      script.onload = renderFeed;
+      script.onload = loadTwitter;
       document.body.appendChild(script);
     } else {
-      if (window.twttr.widgets) {
-        renderFeed();
-      } else {
-        window.twttr.ready(renderFeed);
-      }
+      loadTwitter();
     }
   }, []);
 
   return (
     <div 
-      ref={feedRef} 
+      ref={containerRef} 
       style={{ 
-        height: 400, 
+        height: 250, 
         overflowY: "auto", 
         overflowX: "hidden", 
         borderRadius: 4, 
@@ -2666,8 +2663,8 @@ export default function App() {
                 <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 8, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ fontSize: 14 }}>🗞</span> Sector News
                 </div>
-                {/* Fixed height to 400 instead of flex: 1 */}
-                <div style={{ height: 400, background: "linear-gradient(to bottom, #1c1917, #0a0a0a)", border: "1px solid #27272a", borderRadius: 4, padding: "12px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)" }}>
+                {/* Changed height to 250 */}
+                <div style={{ height: 250, background: "linear-gradient(to bottom, #1c1917, #0a0a0a)", border: "1px solid #27272a", borderRadius: 4, padding: "12px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)" }}>
                   {newsFeed.length === 0 ? (
                     <div style={{ color: "#475569", fontSize: 11, textAlign: "center", marginTop: 20 }}>Loading news...</div>
                   ) : (
@@ -2691,7 +2688,7 @@ export default function App() {
                 </div>
               </div>
 
-              {/* CENTER: Existing Hyperscaler Box */}
+             {/* CENTER: Existing Hyperscaler Box */}
               <div className="top-node-center" style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "0 0 auto", width: "100%", maxWidth: 540 }}>
                 <div style={{ 
                   width: "100%", 
@@ -2753,8 +2750,8 @@ export default function App() {
                 <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 8, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
                   <span style={{ fontSize: 14 }}>𝕏</span> @wallstengine
                 </div>
-                {/* Fixed height to 400 instead of flex: 1 */}
-                <div style={{ height: 400, background: "linear-gradient(to bottom, #1c1917, #0a0a0a)", border: "1px solid #27272a", borderRadius: 4, overflow: "hidden", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)" }}>
+                {/* Changed height to 250 */}
+                <div style={{ height: 250, background: "linear-gradient(to bottom, #1c1917, #0a0a0a)", border: "1px solid #27272a", borderRadius: 4, overflow: "hidden", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)" }}>
                   <XFeed />
                 </div>
               </div>
