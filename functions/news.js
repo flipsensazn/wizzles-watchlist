@@ -50,9 +50,9 @@ export async function onRequest(context) {
   try {
     const { cookie, crumb } = await getYahooSession(env);
     
-    // Core basket of tickers representing the hyperscalers and sub-sectors
-    const basket = "NVDA,AMD,TSM,AVGO,AMZN,MSFT,GOOG,META,SMCI,ANET,VRT,VST,MU,EQIX,PLTR";
-    const newsUrl = `https://query1.finance.yahoo.com/v2/finance/news?symbols=${basket}&crumb=${crumb}`;
+    // We use the search endpoint targeting top hyperscalers and AI infrastructure
+    const basket = "NVDA,AMD,MSFT,GOOG,AMZN,META,TSM,SMCI";
+    const newsUrl = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(basket)}&quotesCount=0&newsCount=15&crumb=${crumb}`;
 
     const res = await fetch(newsUrl, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } });
 
