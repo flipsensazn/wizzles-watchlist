@@ -2743,7 +2743,7 @@ export default function App() {
                 </div>
                 {/* Changed height to 250 */}
                 <div style={{ height: 250, background: "linear-gradient(to bottom, #1c1917, #0a0a0a)", border: "1px solid #27272a", borderRadius: 4, overflow: "hidden", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)" }}>
-                  <XFeed />
+                  <XFeed newsFeed={newsFeed} />
                 </div>
               </div>
             </div>
