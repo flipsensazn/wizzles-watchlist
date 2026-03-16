@@ -40,7 +40,7 @@ export async function onRequest(context) {
   const headers = {
     "Access-Control-Allow-Origin": corsOrigin,
     "Content-Type": "application/json",
-    "Cache-Control": "public, max-age=300, s-maxage=300"
+    "Cache-Control": "public, max-age=60, s-maxage=60" // <-- Updated to 1 minute
   };
 
   if (request.method === "OPTIONS") {
