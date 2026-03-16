@@ -2161,27 +2161,43 @@ const BloombergFeed = memo(function BloombergFeed() {
   const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetch("/market-news")
-      .then(res => res.json())
-      .then(data => {
-        if (data.news) {
-          setNews(data.news);
-        } else {
-          setError(data.error || "Failed to load feed");
-        }
-        setLoading(false);
-      })
-      .catch(err => {
-        setError("Network error fetching feed");
-        setLoading(false);
-      });
+    const fetchNews = () => {
+      fetch("/market-news")
+        .then(res => res.json())
+        .then(data => {
+          if (data.news) {
+            setNews(data.news);
+            setError(null); // Clear any previous errors on success
+          } else {
+            setError(data.error || "Failed to load feed");
+          }
+          setLoading(false);
+        })
+        .catch(err => {
+          setError("Network error fetching feed");
+          setLoading(false);
+        });
+    };
+
+    // 1. Fetch immediately on load
+    fetchNews();
+
+    // 2. Automatically check for updates every 1 minute
+    const intervalId = setInterval(() => {
+      // Only fetch if the user is actually looking at the tab to save bandwidth
+      if (!document.hidden) {
+        fetchNews();
+      }
+    }, 60000); 
+
+    return () => clearInterval(intervalId);
   }, []);
 
-  if (loading) {
+  if (loading && news.length === 0) {
     return <div style={{ padding: 16, color: "#475569", fontSize: 11, textAlign: "center" }}>Loading feeds...</div>;
   }
 
-  if (error) {
+  if (error && news.length === 0) {
     return <div style={{ padding: 16, color: "#f87171", fontSize: 11, textAlign: "center" }}>⚠ {error}</div>;
   }
 
@@ -2371,63 +2387,32 @@ export default function App() {
       .then(res => res.json())
       .then(data => { if (data.capexData && (data.capexData.version ?? 0) >= CAPEX_DATA.version) { setCapexData(data.capexData); capexDataRef.current = data.capexData; } })
       .catch(e => console.log("Capex fetch failed"));
+    
+    // Auto-updating Sector News Feed
+    useEffect(() => {
+    const fetchSectorNews = () => {
+      fetch("/news")
+        .then(res => res.json())
+        .then(data => { 
+          if (data.news) setNewsFeed(data.news); 
+        })
+        .catch(e => console.log("News fetch failed"));
+    };
 
-    // Fetch the new sector news feed
-    fetch("/news")
-      .then(res => res.json())
-      .then(data => { if (data.news) setNewsFeed(data.news); })
-      .catch(e => console.log("News fetch failed"));
-    // Fetch @wallstengine directly from browser via CORS proxy
-// Fetch @wallstengine directly from browser via CORS proxy
-const NITTER_INSTANCES = [
-  "https://xcancel.com/wallstengine/rss",
-  "https://nitter.poast.org/wallstengine/rss",
-  "https://nitter.net/wallstengine/rss",
-];
+    // 1. Fetch immediately on load
+    fetchSectorNews();
 
-(async () => {
-  for (const rssUrl of NITTER_INSTANCES) {
-    try {
-      const proxyUrl = `https://api.allorigins.win/get?url=${encodeURIComponent(rssUrl)}`;
-      const res = await fetch(proxyUrl);
-      if (!res.ok) continue;
-
-      const json = await res.json();
-      const xml = json.contents || "";
-      if (!xml.includes("<item>")) continue;
-
-      const posts = [];
-      const matches = xml.matchAll(/<item>([\s\S]*?)<\/item>/g);
-      for (const m of matches) {
-        const body = m[1];
-
-        const rawTitle =
-          (body.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/) ||
-           body.match(/<title>([\s\S]*?)<\/title>/) || [])[1] || "";
-
-        const link    = (body.match(/<link>([^<]*)<\/link>/)    || [])[1] || "";
-        const pubDate = (body.match(/<pubDate>(.*?)<\/pubDate>/) || [])[1] || "";
-
-        const title = rawTitle
-          .replace(/<[^>]+>/g, "")
-          .replace(/^R to @\S+:\s*/i, "")
-          .trim();
-
-        if (title && link) posts.push({ title, link, pubDate });
-        if (posts.length >= 20) break;
+    // 2. Automatically check for updates every 1 minute (60,000 ms)
+    const newsInterval = setInterval(() => {
+      // Only fetch if the user is actually looking at the tab
+      if (!document.hidden) {
+        fetchSectorNews();
       }
+    }, 60000); 
 
-      if (posts.length > 0) {
-        setXPosts(posts);
-        break; // stop after first working source
-      }
-    } catch (e) {
-      // try next instance
-      continue;
-    }
-  }
-})();
-
+    return () => clearInterval(newsInterval);
+  }, []);
+    
     setCapexIntelStatus("loading");
     const intelController = new AbortController();
     const intelTimeout = setTimeout(() => intelController.abort(), 20000);
