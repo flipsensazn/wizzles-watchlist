@@ -137,114 +137,64 @@ const CAPEX_DATA = {
       id: "compute", label: "Compute & Silicon", value: "~$180B", capex: 180,
       color: "#60a5fa", borderColor: "#3b82f6",
       subsectors: [
-        { id: "gpu", label: "GPU & AI Accelerators", badge: null, tickers: ["NVDA","AMD","INTC"],
-          materials: ["Cobalt","Tungsten","Silicon Wafer 300mm","HBM DRAM"] },
-        { id: "memory", label: "Memory & Storage", badge: "HBM CRITICAL", badgeColor: "#f59e0b",
-          tickers: ["MU","WDC","STX"],
-          materials: ["HBM3e Stacks","LPDDR5","3D NAND Flash","Silicon Wafer 300mm"] },
-        { id: "asic", label: "Custom ASICs & TPUs", badge: null, tickers: ["AVGO","MRVL","QCOM"],
-          materials: ["Advanced Packaging CoWoS","HBM","EUV Photomasks"] },
-        { id: "foundry", label: "Leading-Edge Foundry", badge: "CAPACITY CONSTRAINED", badgeColor: "#f59e0b",
-          tickers: ["TSM"], materials: ["Silicon Carbide","Neon Gas","EUV Resist","Cobalt"] },
-        { id: "equip", label: "Semiconductor Equipment", badge: null, tickers: ["AMAT","LRCX","ASML"],
-          materials: ["Rare Earth Magnets","Fluorine Gas","Quartz"] },
-        { id: "packaging", label: "Advanced Packaging", badge: null, tickers: ["AMKR","ASX","CAMT","ONTO","KLAC"],
-          materials: ["Advanced Packaging CoWoS","HBM","Fan-Out Wafer"] },
+        { id: "gpu", label: "GPU & AI Accelerators", badge: null, tickers: ["NVDA","AMD","INTC"], materials: ["Cobalt","Tungsten","Silicon Wafer 300mm","HBM DRAM"] },
+        { id: "memory", label: "Memory & Storage", badge: "HBM CRITICAL", badgeColor: "#f59e0b", tickers: ["MU","WDC","STX"], materials: ["HBM3e Stacks","LPDDR5","3D NAND Flash","Silicon Wafer 300mm"] },
+        { id: "asic", label: "Custom ASICs & TPUs", badge: null, tickers: ["AVGO","MRVL","QCOM"], materials: ["Advanced Packaging CoWoS","HBM","EUV Photomasks"] },
+        { id: "foundry", label: "Leading-Edge Foundry", badge: "CAPACITY CONSTRAINED", badgeColor: "#f59e0b", tickers: ["TSM"], materials: ["Silicon Carbide","Neon Gas","EUV Resist","Cobalt"] },
+        { id: "equip", label: "Semiconductor Equipment", badge: null, tickers: ["AMAT","LRCX","ASML"], materials: ["Rare Earth Magnets","Fluorine Gas","Quartz"] },
+        { id: "packaging", label: "Advanced Packaging", badge: null, tickers: ["AMKR","ASX","CAMT","ONTO","KLAC"], materials: ["Advanced Packaging CoWoS","HBM","Fan-Out Wafer"] },
       ],
     },
     {
       id: "networking", label: "Networking & Connectivity", value: "~$50B", capex: 50,
       color: "#34d399", borderColor: "#10b981",
       subsectors: [
-        { id: "eth", label: "Ethernet Switching", badge: null, tickers: ["ANET","CSCO","HPE"],
-          materials: ["Copper Cat8","PCB Laminate","Silicon"] },
-        { id: "cable", label: "Cables & Connectors", badge: null, tickers: ["GLW"],
-          materials: ["Copper","Optical Fiber SiO2","Polymer Cladding"] },
-        { id: "cyber", label: "Cybersecurity", badge: null, tickers: ["PANW","CRWD","ZS"],
-          materials: ["Secure Enclaves","HSM Hardware","Zero Trust Infrastructure"] },
+        { id: "eth", label: "Ethernet Switching", badge: null, tickers: ["ANET","CSCO","HPE"], materials: ["Copper Cat8","PCB Laminate","Silicon"] },
+        { id: "cable", label: "Cables & Connectors", badge: null, tickers: ["GLW"], materials: ["Copper","Optical Fiber SiO2","Polymer Cladding"] },
+        { id: "cyber", label: "Cybersecurity", badge: null, tickers: ["PANW","CRWD","ZS"], materials: ["Secure Enclaves","HSM Hardware","Zero Trust Infrastructure"] },
       ],
     },
     {
       id: "photonics", label: "Photonics & Interconnects", value: "~$40B", capex: 35,
       color: "#fbbf24", borderColor: "#f59e0b",
       subsectors: [
-        { id: "engine", label: "Optical Engine & Transceiver L1", badge: null,
-          tickers: ["LITE","COHR","AAOI","ALMU","MTSI","FN","POET","SIVE"],
-          materials: ["InP Chips","Silicon Photonics Dies","Single-Mode Fiber"] },
-        { id: "inp", label: "InP Substrate & Epiwafer L2", badge: "EXTREME BOTTLENECK", badgeColor: "#ef4444",
-          tickers: ["AXTI","IQEPF","SLOIF"],
-          materials: [
-            { name: "Indium", constraint: "CRITICAL — 70% supply from China", color: "#ef4444" },
-            { name: "Phosphorus", constraint: "Moderate supply risk", color: "#f59e0b" },
-            { name: "InP Wafer 2-4\"", constraint: "Capacity severely limited", color: "#ef4444" },
-            { name: "Gallium", constraint: "China export controls active", color: "#ef4444" },
-          ] },
-        { id: "epitaxy", label: "Epitaxy Equipment L3", badge: null, tickers: ["VECO"],
-          materials: ["Trimethylindium TMIn","Phosphine PH3","Quartz Chambers"] },
-        { id: "siph", label: "SiPh Foundry L4", badge: null, tickers: ["TSEM","GFS"],
-          materials: ["Silicon-on-Insulator Wafers","Germanium","TiN Electrodes"] },
-        { id: "interconnects", label: "High-Speed Interconnects", badge: null, tickers: ["APH","TEL","ALAB"],
-          materials: ["High-Speed Copper","Differential Pair PCB","Signal Integrity"] },
+        { id: "engine", label: "Optical Engine & Transceiver L1", badge: null, tickers: ["LITE","COHR","AAOI","ALMU","MTSI","FN","POET","SIVE"], materials: ["InP Chips","Silicon Photonics Dies","Single-Mode Fiber"] },
+        { id: "inp", label: "InP Substrate & Epiwafer L2", badge: "EXTREME BOTTLENECK", badgeColor: "#ef4444", tickers: ["AXTI","IQEPF","SLOIF"], materials: [ { name: "Indium", constraint: "CRITICAL — 70% supply from China", color: "#ef4444" }, { name: "Phosphorus", constraint: "Moderate supply risk", color: "#f59e0b" }, { name: "InP Wafer 2-4\"", constraint: "Capacity severely limited", color: "#ef4444" }, { name: "Gallium", constraint: "China export controls active", color: "#ef4444" }, ] },
+        { id: "epitaxy", label: "Epitaxy Equipment L3", badge: null, tickers: ["VECO"], materials: ["Trimethylindium TMIn","Phosphine PH3","Quartz Chambers"] },
+        { id: "siph", label: "SiPh Foundry L4", badge: null, tickers: ["TSEM","GFS"], materials: ["Silicon-on-Insulator Wafers","Germanium","TiN Electrodes"] },
+        { id: "interconnects", label: "High-Speed Interconnects", badge: null, tickers: ["APH","TEL","ALAB"], materials: ["High-Speed Copper","Differential Pair PCB","Signal Integrity"] },
       ],
     },
     {
       id: "neoclouds", label: "Neoclouds & Data Centers", value: "~$120B", capex: 120,
       color: "#c084fc", borderColor: "#a855f7",
       subsectors: [
-        { id: "reit", label: "Hyperscale REITs", badge: null, tickers: ["EQIX","DLR","AMT","IRM"],
-          materials: ["Structural Steel","Concrete","Copper Busbar","Fiber"] },
-        { id: "neocloud", label: "GPU Cloud Operators", badge: "RAPID GROWTH", badgeColor: "#34d399",
-          tickers: ["CIFR","IREN","CORZ","APLD","CRWV","NBIS"],
-          materials: ["Power Infrastructure","Cooling Systems","High-density Racks"] },
-        { id: "servers", label: "AI Server Infrastructure", badge: null, tickers: ["SMCI","DELL"],
-          materials: ["Copper Heat Pipes","PCB","Aluminum Extrusions"] },
-        { id: "mep", label: "Mechanical, Electrical & Plumbing", badge: null, tickers: ["FIX","EME","MTZ"],
-          materials: ["Electrical Conduit","HVAC Systems","Industrial Piping"] },
+        { id: "reit", label: "Hyperscale REITs", badge: null, tickers: ["EQIX","DLR","AMT","IRM"], materials: ["Structural Steel","Concrete","Copper Busbar","Fiber"] },
+        { id: "neocloud", label: "GPU Cloud Operators", badge: "RAPID GROWTH", badgeColor: "#34d399", tickers: ["CIFR","IREN","CORZ","APLD","CRWV","NBIS"], materials: ["Power Infrastructure","Cooling Systems","High-density Racks"] },
+        { id: "servers", label: "AI Server Infrastructure", badge: null, tickers: ["SMCI","DELL"], materials: ["Copper Heat Pipes","PCB","Aluminum Extrusions"] },
+        { id: "mep", label: "Mechanical, Electrical & Plumbing", badge: null, tickers: ["FIX","EME","MTZ"], materials: ["Electrical Conduit","HVAC Systems","Industrial Piping"] },
       ],
     },
     {
       id: "power", label: "Power & Cooling", value: "~$45B", capex: 45,
       color: "#fb923c", borderColor: "#f97316",
       subsectors: [
-        { id: "grid", label: "Power Generation & Utilities", badge: "GRID BOTTLENECK", badgeColor: "#ef4444",
-          tickers: ["VST","NEE","BE"],
-          materials: ["Copper Grid","Silicon Steel Transformers","Lithium Storage"] },
-        { id: "nuclear", label: "Nuclear", badge: "EMERGING", badgeColor: "#fb923c",
-          tickers: ["OKLO","SMR","LEU","ASPI"],
-          materials: ["Enriched Uranium","Zirconium Cladding","Boron Control Rods"] },
-        { id: "ups", label: "Power Management & UPS", badge: null, tickers: ["ETN","VRT","PLPC","ENS"],
-          materials: ["Silicon Carbide SiC","Electrolytic Capacitors","Copper Winding"] },
-        { id: "cooling", label: "Liquid & Immersion Cooling", badge: "EMERGING", badgeColor: "#60a5fa",
-          tickers: ["NVT","MOD"], materials: ["Dielectric Fluid","Copper Cold Plates","Deionized Water"] },
+        { id: "grid", label: "Power Generation & Utilities", badge: "GRID BOTTLENECK", badgeColor: "#ef4444", tickers: ["VST","NEE","BE"], materials: ["Copper Grid","Silicon Steel Transformers","Lithium Storage"] },
+        { id: "nuclear", label: "Nuclear", badge: "EMERGING", badgeColor: "#fb923c", tickers: ["OKLO","SMR","LEU","ASPI"], materials: ["Enriched Uranium","Zirconium Cladding","Boron Control Rods"] },
+        { id: "ups", label: "Power Management & UPS", badge: null, tickers: ["ETN","VRT","PLPC","ENS"], materials: ["Silicon Carbide SiC","Electrolytic Capacitors","Copper Winding"] },
+        { id: "cooling", label: "Liquid & Immersion Cooling", badge: "EMERGING", badgeColor: "#60a5fa", tickers: ["NVT","MOD"], materials: ["Dielectric Fluid","Copper Cold Plates","Deionized Water"] },
       ],
     },
     {
       id: "frontier", label: "Frontier / Speculative", value: "Early", capex: 15,
       color: "#f472b6", borderColor: "#ec4899",
       subsectors: [
-        { id: "quantum", label: "Quantum Computing", badge: "SPECULATIVE", badgeColor: "#f472b6",
-          tickers: ["IONQ","RGTI","QUBT","ARQQ"],
-          materials: [
-            { name: "Helium-3", constraint: "CRITICAL — extremely scarce", color: "#ef4444" },
-            { name: "Niobium", constraint: "Limited processing capacity", color: "#f59e0b" },
-            { name: "Sapphire Substrate", constraint: "Moderate availability", color: "#60a5fa" },
-          ] },
-        { id: "neuro", label: "Neuromorphic & Edge AI", badge: "EARLY STAGE", badgeColor: "#c084fc",
-          tickers: ["ARM","OSS"], materials: ["Phase-Change Materials","Memristive Oxides","Hafnium Oxide"] },
-        { id: "space", label: "Space", badge: "EARLY STAGE", badgeColor: "#c084fc",
-          tickers: ["RKLB","ASTS"], materials: ["Phase-Change Materials","Memristive Oxides","Hafnium Oxide"] },
-        { id: "saas", label: "SaaS", badge: null, tickers: ["PLTR","SNOW","NOW"],
-          materials: ["Cloud Infrastructure","API Gateways","Multi-tenant Architecture"] },
-        { id: "robotics", label: "Robotics", badge: "EMERGING", badgeColor: "#c084fc",
-          tickers: ["TER","SYM","TSLA"],
-          materials: ["Servo Motors","LiDAR Sensors","Carbon Fiber Composites"] },
-        { id: "metals", label: "Precious Metals & Commodities", badge: "MACRO HEDGE", badgeColor: "#f59e0b",
-          tickers: ["USAS","COPX","SLV","GLD","NEM"],
-          materials: [
-            { name: "Gold", constraint: "Safe haven demand rising", color: "#f59e0b" },
-            { name: "Silver", constraint: "Industrial + monetary demand", color: "#94a3b8" },
-            { name: "Copper", constraint: "CRITICAL — AI grid buildout demand", color: "#fb923c" },
-          ] },
+        { id: "quantum", label: "Quantum Computing", badge: "SPECULATIVE", badgeColor: "#f472b6", tickers: ["IONQ","RGTI","QUBT","ARQQ"], materials: [ { name: "Helium-3", constraint: "CRITICAL — extremely scarce", color: "#ef4444" }, { name: "Niobium", constraint: "Limited processing capacity", color: "#f59e0b" }, { name: "Sapphire Substrate", constraint: "Moderate availability", color: "#60a5fa" }, ] },
+        { id: "neuro", label: "Neuromorphic & Edge AI", badge: "EARLY STAGE", badgeColor: "#c084fc", tickers: ["ARM","OSS"], materials: ["Phase-Change Materials","Memristive Oxides","Hafnium Oxide"] },
+        { id: "space", label: "Space", badge: "EARLY STAGE", badgeColor: "#c084fc", tickers: ["RKLB","ASTS"], materials: ["Phase-Change Materials","Memristive Oxides","Hafnium Oxide"] },
+        { id: "saas", label: "SaaS", badge: null, tickers: ["PLTR","SNOW","NOW"], materials: ["Cloud Infrastructure","API Gateways","Multi-tenant Architecture"] },
+        { id: "robotics", label: "Robotics", badge: "EMERGING", badgeColor: "#c084fc", tickers: ["TER","SYM","TSLA"], materials: ["Servo Motors","LiDAR Sensors","Carbon Fiber Composites"] },
+        { id: "metals", label: "Precious Metals & Commodities", badge: "MACRO HEDGE", badgeColor: "#f59e0b", tickers: ["USAS","COPX","SLV","GLD","NEM"], materials: [ { name: "Gold", constraint: "Safe haven demand rising", color: "#f59e0b" }, { name: "Silver", constraint: "Industrial + monetary demand", color: "#94a3b8" }, { name: "Copper", constraint: "CRITICAL — AI grid buildout demand", color: "#fb923c" }, ] },
       ],
     },
   ],
@@ -382,7 +332,6 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
           {data?.name && data.name !== ticker && <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.4 }}>{data.name}</div>}
         </div>
         
-        {/* Top Right Controls */}
         <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
           {data?.earningsDate && (
             <div style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(192,132,252,0.12)", border: "1px solid rgba(192,132,252,0.3)", padding: "4px 8px", borderRadius: 6 }}>
@@ -404,7 +353,6 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
         ) : (
           <div style={{ display: "flex", gap: 20 }}>
             
-            {/* LEFT COLUMN: Data Stats */}
             <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
               {(data.sector !== "—" || data.industry !== "—") && (
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
@@ -441,10 +389,8 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
               )}
             </div>
 
-            {/* RIGHT COLUMN: News & Charts */}
             <div style={{ width: 220, display: "flex", flexDirection: "column", flexShrink: 0 }}>
               
-              {/* LATEST NEWS BANNER */}
               {data.news && (
                 <div style={{ marginBottom: 14, padding: "8px 10px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
@@ -2208,6 +2154,32 @@ function AdminModal({ onClose, onSuccess }) {
   );
 }
 
+// ── X / TWITTER FEED COMPONENT ────────────────────────────
+const XFeed = memo(function XFeed() {
+  useEffect(() => {
+    if (!document.getElementById("twitter-wjs")) {
+      const script = document.createElement("script");
+      script.id = "twitter-wjs";
+      script.src = "https://platform.twitter.com/widgets.js";
+      script.async = true;
+      document.body.appendChild(script);
+    }
+  }, []);
+
+  return (
+    <div style={{ height: "100%", overflowY: "auto", overflowX: "hidden", borderRadius: 4, background: "rgba(18,18,18,0.5)" }}>
+      <a
+        className="twitter-timeline"
+        data-theme="dark"
+        data-chrome="noheader nofooter noborders transparent"
+        href="https://twitter.com/wallstengine?ref_src=twsrc%5Etfw"
+      >
+        Tweets by @wallstengine
+      </a>
+    </div>
+  );
+});
+
 // ── GLOBAL STYLES ─────────────────────────────────────────
 const GLOBAL_STYLES = `
   * { box-sizing: border-box; margin: 0; padding: 0; box-shadow: none !important; }
@@ -2251,6 +2223,9 @@ const GLOBAL_STYLES = `
     .panel-wrapper { min-height: 500px; height: auto; }
     .panel-inner { position: relative; height: 100%; }
   }
+  @media (max-width: 1100px) {
+    .side-panel { display: none !important; }
+  }
   @media (max-width: 767px) {
     html, body { overflow-x: hidden; }
     .track-grid { grid-template-columns: repeat(2, minmax(0,1fr)) !important; }
@@ -2286,6 +2261,7 @@ export default function App() {
   const [capexIntel, setCapexIntel] = useState(null);
   const [capexIntelStatus, setCapexIntelStatus] = useState("idle");
   const [capexIntelError, setCapexIntelError] = useState(null);
+  const [newsFeed, setNewsFeed] = useState([]);
   
   const [activeTrack, setActiveTrack] = useState(null);
   const [prices, setPrices] = useState({});
@@ -2351,6 +2327,12 @@ export default function App() {
       .then(res => res.json())
       .then(data => { if (data.capexData && (data.capexData.version ?? 0) >= CAPEX_DATA.version) { setCapexData(data.capexData); capexDataRef.current = data.capexData; } })
       .catch(e => console.log("Capex fetch failed"));
+
+    // Fetch the new sector news feed
+    fetch("/news")
+      .then(res => res.json())
+      .then(data => { if (data.news) setNewsFeed(data.news); })
+      .catch(e => console.log("News fetch failed"));
 
     setCapexIntelStatus("loading");
     const intelController = new AbortController();
@@ -2645,65 +2627,114 @@ export default function App() {
 
         <div className="main-content" style={{ maxWidth: 1480, margin: "0 auto", padding: "32px 20px", display: "flex", flexDirection: "column", gap: 28, overflowX: "hidden", boxSizing: "border-box", width: "100%" }}>
           
-          <div className="top-node-layout" style={{ display: "flex", alignItems: "flex-start", justifyContent: "center" }}>
-            <div className="top-node-center" style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "0 0 auto" }}>
-              <div style={{ 
-                width: "100%", maxWidth: 540, 
-                borderRadius: 4, 
-                padding: "26px 30px", 
-                textAlign: "center", 
-                background: "linear-gradient(to bottom, #1c1917, #0a0a0a)", 
-                border: "1px solid #27272a", 
-                borderTop: "3px solid #fbbf24", 
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 12px rgba(0,0,0,0.6)" 
-              }}>
-                <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 6, fontFamily: "'Roboto Condensed', sans-serif" }}>Total Investment Flow</div>
-                <div className="capex-number" style={{ fontSize: 68, fontWeight: 800, color: "#fbbf24", lineHeight: 1, marginBottom: 8, textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}>~${liveTotal}B{capexIntelStatus === "success" ? "" : "+"}</div>
-                
-                <div style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginBottom: 20, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                  Hyperscaler AI Capex{" "}
-                  <span style={{ color: capexIntelStatus === "success" ? "#34d399" : "#d97706" }}>
-                    {capexIntelStatus === "success" ? "(Live Intel)" : "(2026 Est.)"}
-                  </span>
+          <div className="top-node-layout" style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%" }}>
+            
+            <div style={{ display: "flex", alignItems: "stretch", justifyContent: "center", gap: 20, width: "100%" }}>
+              {/* LEFT SIDE: Sector News */}
+              <div className="side-panel" style={{ flex: "1 1 0", maxWidth: 350, minWidth: 250, display: "flex", flexDirection: "column" }}>
+                <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 8, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 14 }}>🗞</span> Sector News
                 </div>
-                
-                <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
-                  {CAPEX_DATA.companies.map(co => {
-                    const entry = marketData[co];
-                    const pos = (entry?.change ?? 0) >= 0;
-                    const sessionLabel = entry?.session === "POST" || entry?.session === "CLOSED" ? "AH" : entry?.session === "PRE" ? "PM" : null;
-                    return (
-                      <div key={co} style={{ 
-                        display: "flex", flexDirection: "column", alignItems: "center", 
-                        padding: "8px 12px", borderRadius: 2, minWidth: 85, 
-                        background: "linear-gradient(to bottom, #262626, #0a0a0a)", 
-                        border: "1px solid #171717",
-                        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02), 0 2px 4px rgba(0,0,0,0.5)",
-                        fontFamily: "'Roboto Condensed', sans-serif"
-                      }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 4 }}>
-                          <span style={{ fontSize: 12, fontWeight: 800, color: "#f8fafc", letterSpacing: "0.02em" }}>{co}</span>
-                          {sessionLabel && <span style={{ fontSize: 7, fontWeight: 800, color: "#94a3b8", background: "#171717", border: "1px solid #333", borderRadius: 2, padding: "1px 3px" }}>{sessionLabel}</span>}
+                <div style={{ flex: 1, background: "linear-gradient(to bottom, #1c1917, #0a0a0a)", border: "1px solid #27272a", borderRadius: 4, padding: "12px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)" }}>
+                  {newsFeed.length === 0 ? (
+                    <div style={{ color: "#475569", fontSize: 11, textAlign: "center", marginTop: 20 }}>Loading news...</div>
+                  ) : (
+                    newsFeed.slice(0, 15).map((item, i) => (
+                      <a key={i} href={item.link} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "block", borderBottom: i < Math.min(newsFeed.length, 15) - 1 ? "1px solid rgba(255,255,255,0.05)" : "none", paddingBottom: i < Math.min(newsFeed.length, 15) - 1 ? 12 : 0 }}>
+                        {item.relatedTickers && (
+                          <div style={{ fontSize: 9, color: "#fbbf24", fontWeight: 700, marginBottom: 4, letterSpacing: "0.05em" }}>
+                            {item.relatedTickers.slice(0, 4).join(", ")}
+                          </div>
+                        )}
+                        <div style={{ fontSize: 12, color: "#e2e8f0", lineHeight: 1.4, fontWeight: 600, marginBottom: 6 }}>
+                          {item.title}
                         </div>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: sessionLabel ? "rgba(255,255,255,0.6)" : "#f8fafc", marginBottom: 2 }}>
-                          {entry?.price ? "$" + entry.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
-                        </span>
-                        {entry?.change !== undefined && entry?.change !== null ? (
-                          <span style={{ fontSize: 12, fontWeight: 700, color: pos ? "#10b981" : "#ef4444" }}>
-                            {pos ? "+" : ""}{entry.change.toFixed(2)}%
-                          </span>
-                        ) : <span style={{ fontSize: 11, color: "#475569" }}>—</span>}
-                      </div>
-                    );
-                  })}
+                        <div style={{ fontSize: 9, color: "#64748b", display: "flex", justifyContent: "space-between" }}>
+                          <span>{item.publisher}</span>
+                          <span>{new Date(item.providerPublishTime * 1000).toLocaleDateString()}</span>
+                        </div>
+                      </a>
+                    ))
+                  )}
                 </div>
               </div>
-              
+
+              {/* CENTER: Existing Hyperscaler Box */}
+              <div className="top-node-center" style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "0 0 auto", width: "100%", maxWidth: 540 }}>
+                <div style={{ 
+                  width: "100%", 
+                  borderRadius: 4, 
+                  padding: "26px 30px", 
+                  textAlign: "center", 
+                  background: "linear-gradient(to bottom, #1c1917, #0a0a0a)", 
+                  border: "1px solid #27272a", 
+                  borderTop: "3px solid #fbbf24", 
+                  boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 12px rgba(0,0,0,0.6)",
+                  boxSizing: "border-box",
+                  height: "100%"
+                }}>
+                  <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 6, fontFamily: "'Roboto Condensed', sans-serif" }}>Total Investment Flow</div>
+                  <div className="capex-number" style={{ fontSize: 68, fontWeight: 800, color: "#fbbf24", lineHeight: 1, marginBottom: 8, textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}>~${liveTotal}B{capexIntelStatus === "success" ? "" : "+"}</div>
+                  
+                  <div style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginBottom: 20, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+                    Hyperscaler AI Capex{" "}
+                    <span style={{ color: capexIntelStatus === "success" ? "#34d399" : "#d97706" }}>
+                      {capexIntelStatus === "success" ? "(Live Intel)" : "(2026 Est.)"}
+                    </span>
+                  </div>
+                  
+                  <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
+                    {CAPEX_DATA.companies.map(co => {
+                      const entry = marketData[co];
+                      const pos = (entry?.change ?? 0) >= 0;
+                      const sessionLabel = entry?.session === "POST" || entry?.session === "CLOSED" ? "AH" : entry?.session === "PRE" ? "PM" : null;
+                      return (
+                        <div key={co} style={{ 
+                          display: "flex", flexDirection: "column", alignItems: "center", 
+                          padding: "8px 12px", borderRadius: 2, minWidth: 85, 
+                          background: "linear-gradient(to bottom, #262626, #0a0a0a)", 
+                          border: "1px solid #171717",
+                          boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02), 0 2px 4px rgba(0,0,0,0.5)",
+                          fontFamily: "'Roboto Condensed', sans-serif"
+                        }}>
+                          <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 4 }}>
+                            <span style={{ fontSize: 12, fontWeight: 800, color: "#f8fafc", letterSpacing: "0.02em" }}>{co}</span>
+                            {sessionLabel && <span style={{ fontSize: 7, fontWeight: 800, color: "#94a3b8", background: "#171717", border: "1px solid #333", borderRadius: 2, padding: "1px 3px" }}>{sessionLabel}</span>}
+                          </div>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: sessionLabel ? "rgba(255,255,255,0.6)" : "#f8fafc", marginBottom: 2 }}>
+                            {entry?.price ? "$" + entry.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
+                          </span>
+                          {entry?.change !== undefined && entry?.change !== null ? (
+                            <span style={{ fontSize: 12, fontWeight: 700, color: pos ? "#10b981" : "#ef4444" }}>
+                              {pos ? "+" : ""}{entry.change.toFixed(2)}%
+                            </span>
+                          ) : <span style={{ fontSize: 11, color: "#475569" }}>—</span>}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+
+              {/* RIGHT SIDE: X Feed */}
+              <div className="side-panel" style={{ flex: "1 1 0", maxWidth: 350, minWidth: 250, display: "flex", flexDirection: "column" }}>
+                <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 8, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
+                  <span style={{ fontSize: 14 }}>𝕏</span> @wallstengine
+                </div>
+                <div style={{ flex: 1, background: "linear-gradient(to bottom, #1c1917, #0a0a0a)", border: "1px solid #27272a", borderRadius: 4, overflow: "hidden", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)" }}>
+                  <XFeed />
+                </div>
+              </div>
+            </div>
+
+            {/* Downward Connector Lines */}
+            <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%", maxWidth: 540 }}>
               <div style={{ width: 1, height: 28, background: "linear-gradient(to bottom,#fbbf24,transparent)" }} />
               <div style={{ position: "relative", width: "100%", height: 1, background: "linear-gradient(90deg,transparent 5%,rgba(255,255,255,.1) 20%,rgba(255,255,255,.1) 80%,transparent 95%)" }}>
                 {capexData.tracks.map((_, i, arr) => <div key={i} style={{ position: "absolute", top: 0, left: `${(i / (arr.length - 1)) * 70 + 15}%`, width: 1, height: 18, background: "linear-gradient(to bottom,rgba(255,255,255,.15),transparent)" }} />)}
               </div>
             </div>
+
           </div>
 
           <div className="track-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(0,1fr))", gap: 10, paddingTop: 8 }}>
