@@ -1195,10 +1195,9 @@ function getATHInfo(priceEntry) {
   return null;
 }
 
-function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline, isAdmin, shortList = [], onSaveShortlist }) {
+function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline, isAdmin, shortList = [], onSaveShortlist, activeFilter, setActiveFilter }) {
   const isMobile = useMobile();
   const [tooltip, setTooltip] = useState(null);
-  const [activeFilter, setActiveFilter] = useState(null);
 
   const trackCells = useMemo(() =>
     capexData.tracks.map(track => ({
@@ -1612,7 +1611,7 @@ function DonutChart({ prices, capexData, capexIntel, capexIntelStatus, capexInte
 }
 
 // ── WATCHLIST ─────────────────────────────────────────────
-function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSaveShortlist, timeline }) {
+function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSaveShortlist, timeline, activeFilter }) {
   const isMobile = useMobile();
   const [tab, setTab]         = useState("watch");
   const [input, setInput]     = useState("");
@@ -1654,8 +1653,26 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
 
   const TRACK_SHORT = { compute: "Compute", networking: "Network", photonics: "Photonics", neoclouds: "Data Ctr", power: "Power", frontier: "Frontier" };
 
-  const enriched     = list.map(t => ({ ticker: t, change: getChangeForTimeline(prices[t], timeline), track: sectorMap[t] ?? null }));
-  const filtered     = filter === "all" ? enriched : enriched.filter(x => x.track?.id === filter);
+  const enriched = list.map(t => ({ ticker: t, change: getChangeForTimeline(prices[t], timeline), track: sectorMap[t] ?? null }));
+  let filtered   = filter === "all" ? enriched : enriched.filter(x => x.track?.id === filter);
+
+  if (activeFilter) {
+    filtered = filtered.filter(item => {
+      const entry = prices[item.ticker];
+      const near52W = getNear52WLowInfo(entry);
+      const athInfo = !near52W ? getATHInfo(entry) : null;
+      const near52WH = !near52W && !athInfo ? getNear52WHighInfo(entry) : null;
+      const earningsDate = entry?.earningsDate;
+      const isUpcomingEarnings = earningsDate && (earningsDate * 1000 - Date.now() <= 3 * 86400000) && (earningsDate * 1000 - Date.now() >= -86400000);
+
+      if (activeFilter === "near52WLow") return !!near52W;
+      if (activeFilter === "near52WHigh") return !!near52WH;
+      if (activeFilter === "ath") return !!athInfo;
+      if (activeFilter === "earnings") return !!isUpcomingEarnings;
+      return true;
+    });
+  }
+
   const sorted       = [...filtered].sort((a, b) => sortDir === "desc"
     ? ((typeof b.change === 'number' ? b.change : -999) - (typeof a.change === 'number' ? a.change : -999))
     : ((typeof a.change === 'number' ? a.change : 999)  - (typeof b.change === 'number' ? b.change : 999)));
@@ -2278,6 +2295,7 @@ export default function App() {
   const [refreshing, setRefreshing] = useState(false);
   const [bottomTab, setBottomTab] = useState("all");
   const [timeline, setTimeline] = useState("1D");
+  const [activeFilter, setActiveFilter] = useState(null);
   const [popup, setPopup] = useState(null); 
 
   useEffect(() => {
@@ -2706,14 +2724,14 @@ export default function App() {
             
             {bottomTab === "all" ? (
               <div className="bottom-grid-all">
-                <div className="span-2 panel-wrapper"><div className="panel-inner"><HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} timeline={timeline} setTimeline={setTimeline} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} /></div></div>
-                <div className="span-1 panel-wrapper"><div className="panel-inner"><Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} timeline={timeline} /></div></div>
+                <div className="span-2 panel-wrapper"><div className="panel-inner"><HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} timeline={timeline} setTimeline={setTimeline} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} activeFilter={activeFilter} setActiveFilter={setActiveFilter} /></div></div>
+                <div className="span-1 panel-wrapper"><div className="panel-inner"><Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} timeline={timeline} activeFilter={activeFilter} /></div></div>
                 <div className="span-1 panel-wrapper"><div className="panel-inner"><DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} capexIntelStatus={capexIntelStatus} capexIntelError={capexIntelError} timeline={timeline} /></div></div>
                 <div className="span-2 panel-wrapper"><div className="panel-inner"><MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} /></div></div>
               </div>
-            ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} timeline={timeline} setTimeline={setTimeline} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} />
+            ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} timeline={timeline} setTimeline={setTimeline} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} activeFilter={activeFilter} setActiveFilter={setActiveFilter} />
               : bottomTab === "donut" ? <DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} capexIntelStatus={capexIntelStatus} capexIntelError={capexIntelError} timeline={timeline} />
-              : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} timeline={timeline} />
+              : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} timeline={timeline} activeFilter={activeFilter} />
               : <MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} />
             }
           </div>
