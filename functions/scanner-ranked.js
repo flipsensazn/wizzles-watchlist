@@ -7,11 +7,14 @@ export async function onRequest(context) {
   const origin = request.headers.get("Origin") || "";
   const corsOrigin = origin === ALLOWED_ORIGIN ? ALLOWED_ORIGIN : "";
 
-  const headers = {
-    "Access-Control-Allow-Origin": corsOrigin,
-    "Content-Type": "application/json",
-    "Vary": "Origin",
-  };
+  // Add this to your response headers in scanner-ranked.js
+const headers = {
+  "Access-Control-Allow-Origin": corsOrigin,
+  "Content-Type": "application/json",
+  "Vary": "Origin",
+  // Cache at the CDN edge for 12 hours, browser for 1 hour
+  "Cache-Control": "public, max-age=3600, s-maxage=43200" 
+};
 
   if (request.method === "OPTIONS") {
     return new Response(null, {
