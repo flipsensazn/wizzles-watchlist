@@ -140,12 +140,12 @@ const CAPEX_DATA = {
         { id: "gpu", label: "GPU & AI Accelerators", badge: null, tickers: ["NVDA","AMD","INTC"],
           materials: ["Cobalt","Tungsten","Silicon Wafer 300mm","HBM DRAM"] },
         { id: "memory", label: "Memory & Storage", badge: "HBM CRITICAL", badgeColor: "#f59e0b",
-          tickers: ["MU","WDC","SNDK"],
+          tickers: ["MU","WDC","STX"],
           materials: ["HBM3e Stacks","LPDDR5","3D NAND Flash","Silicon Wafer 300mm"] },
         { id: "asic", label: "Custom ASICs & TPUs", badge: null, tickers: ["AVGO","MRVL","QCOM"],
           materials: ["Advanced Packaging CoWoS","HBM","EUV Photomasks"] },
         { id: "foundry", label: "Leading-Edge Foundry", badge: "CAPACITY CONSTRAINED", badgeColor: "#f59e0b",
-          tickers: ["TSM","TSEM","GFS"], materials: ["Silicon Carbide","Neon Gas","EUV Resist","Cobalt"] },
+          tickers: ["TSM"], materials: ["Silicon Carbide","Neon Gas","EUV Resist","Cobalt"] },
         { id: "equip", label: "Semiconductor Equipment", badge: null, tickers: ["AMAT","LRCX","ASML"],
           materials: ["Rare Earth Magnets","Fluorine Gas","Quartz"] },
         { id: "packaging", label: "Advanced Packaging", badge: null, tickers: ["AMKR","ASX","CAMT","ONTO","KLAC"],
@@ -158,9 +158,7 @@ const CAPEX_DATA = {
       subsectors: [
         { id: "eth", label: "Ethernet Switching", badge: null, tickers: ["ANET","CSCO","HPE"],
           materials: ["Copper Cat8","PCB Laminate","Silicon"] },
-        { id: "trans", label: "Optical Transceivers 400G/800G", badge: "HIGH DEMAND", badgeColor: "#f59e0b",
-          tickers: ["LITE","COHR"], materials: ["Indium Phosphide","Gallium Arsenide","Single-Mode Fiber"] },
-        { id: "cable", label: "Cables & Connectors", badge: null, tickers: ["FN"],
+        { id: "cable", label: "Cables & Connectors", badge: null, tickers: ["GLW"],
           materials: ["Copper","Optical Fiber SiO2","Polymer Cladding"] },
         { id: "cyber", label: "Cybersecurity", badge: null, tickers: ["PANW","CRWD","ZS"],
           materials: ["Secure Enclaves","HSM Hardware","Zero Trust Infrastructure"] },
@@ -171,7 +169,7 @@ const CAPEX_DATA = {
       color: "#fbbf24", borderColor: "#f59e0b",
       subsectors: [
         { id: "engine", label: "Optical Engine & Transceiver L1", badge: null,
-          tickers: ["LITE","COHR","AAOI","ALMU","MTSI","FN","POET"],
+          tickers: ["LITE","COHR","AAOI","ALMU","MTSI","FN","POET","SIVE"],
           materials: ["InP Chips","Silicon Photonics Dies","Single-Mode Fiber"] },
         { id: "inp", label: "InP Substrate & Epiwafer L2", badge: "EXTREME BOTTLENECK", badgeColor: "#ef4444",
           tickers: ["AXTI","IQEPF","SLOIF"],
@@ -185,7 +183,7 @@ const CAPEX_DATA = {
           materials: ["Trimethylindium TMIn","Phosphine PH3","Quartz Chambers"] },
         { id: "siph", label: "SiPh Foundry L4", badge: null, tickers: ["TSEM","GFS"],
           materials: ["Silicon-on-Insulator Wafers","Germanium","TiN Electrodes"] },
-        { id: "interconnects", label: "High-Speed Interconnects", badge: null, tickers: ["APH","TEL"],
+        { id: "interconnects", label: "High-Speed Interconnects", badge: null, tickers: ["APH","TEL","ALAB"],
           materials: ["High-Speed Copper","Differential Pair PCB","Signal Integrity"] },
       ],
     },
@@ -193,12 +191,12 @@ const CAPEX_DATA = {
       id: "neoclouds", label: "Neoclouds & Data Centers", value: "~$120B", capex: 120,
       color: "#c084fc", borderColor: "#a855f7",
       subsectors: [
-        { id: "reit", label: "Hyperscale REITs", badge: null, tickers: ["EQIX","DLR","AMT","COR"],
+        { id: "reit", label: "Hyperscale REITs", badge: null, tickers: ["EQIX","DLR","AMT","IRM"],
           materials: ["Structural Steel","Concrete","Copper Busbar","Fiber"] },
         { id: "neocloud", label: "GPU Cloud Operators", badge: "RAPID GROWTH", badgeColor: "#34d399",
           tickers: ["CIFR","IREN","CORZ","APLD","CRWV","NBIS"],
           materials: ["Power Infrastructure","Cooling Systems","High-density Racks"] },
-        { id: "servers", label: "AI Server Infrastructure", badge: null, tickers: ["SMCI","VRT"],
+        { id: "servers", label: "AI Server Infrastructure", badge: null, tickers: ["SMCI","DELL"],
           materials: ["Copper Heat Pipes","PCB","Aluminum Extrusions"] },
         { id: "mep", label: "Mechanical, Electrical & Plumbing", badge: null, tickers: ["FIX","EME","MTZ"],
           materials: ["Electrical Conduit","HVAC Systems","Industrial Piping"] },
@@ -217,7 +215,7 @@ const CAPEX_DATA = {
         { id: "ups", label: "Power Management & UPS", badge: null, tickers: ["ETN","VRT","PLPC","ENS"],
           materials: ["Silicon Carbide SiC","Electrolytic Capacitors","Copper Winding"] },
         { id: "cooling", label: "Liquid & Immersion Cooling", badge: "EMERGING", badgeColor: "#60a5fa",
-          tickers: ["VRT","SMCI","TDC"], materials: ["Dielectric Fluid","Copper Cold Plates","Deionized Water"] },
+          tickers: ["NVT","MOD"], materials: ["Dielectric Fluid","Copper Cold Plates","Deionized Water"] },
       ],
     },
     {
@@ -232,7 +230,7 @@ const CAPEX_DATA = {
             { name: "Sapphire Substrate", constraint: "Moderate availability", color: "#60a5fa" },
           ] },
         { id: "neuro", label: "Neuromorphic & Edge AI", badge: "EARLY STAGE", badgeColor: "#c084fc",
-          tickers: ["GTLB","OSS"], materials: ["Phase-Change Materials","Memristive Oxides","Hafnium Oxide"] },
+          tickers: ["ARM","OSS"], materials: ["Phase-Change Materials","Memristive Oxides","Hafnium Oxide"] },
         { id: "space", label: "Space", badge: "EARLY STAGE", badgeColor: "#c084fc",
           tickers: ["RKLB","ASTS"], materials: ["Phase-Change Materials","Memristive Oxides","Hafnium Oxide"] },
         { id: "saas", label: "SaaS", badge: null, tickers: ["PLTR","SNOW","NOW"],
@@ -1246,7 +1244,8 @@ function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline, isAd
               { id: "near52WLow", label: "within 25% of 52W low", icon: <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(251,191,36,0.25)", border: "1px solid #f59e0b", boxShadow: "0 0 6px #f59e0b88", flexShrink: 0 }} /> },
               { id: "near52WHigh", label: "within 10% of 52W high", icon: <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(52,211,153,0.25)", border: "1px solid #34d399", boxShadow: "0 0 6px #34d39988", flexShrink: 0 }} /> },
               { id: "ath", label: "All Time High (ATH)", icon: <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(52,211,153,0.35)", border: "2.5px solid #34d399", boxShadow: "0 0 8px #34d399cc", flexShrink: 0 }} /> },
-              { id: "earnings", label: "Earnings in 3 Days", icon: <span style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 10, height: 10, borderRadius: 2, background: "rgba(192,132,252,0.25)", border: "1px solid #c084fc", color: "#c084fc", fontSize: 7, fontWeight: 800, flexShrink: 0 }}>E</span> }
+              { id: "earnings", label: "Earnings in 3 Days", icon: <span style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 10, height: 10, borderRadius: 2, background: "rgba(192,132,252,0.25)", border: "1px solid #c084fc", color: "#c084fc", fontSize: 7, fontWeight: 800, flexShrink: 0 }}>E</span> },
+              { id: "starred", label: "Wizzle's Holdings", icon: <span style={{ display: "inline-block", color: "#facc15", fontSize: 11, lineHeight: 1, textShadow: "0 0 6px #facc1588", flexShrink: 0 }}>★</span> }
             ].map(f => (
               <button
                 key={f.id}
@@ -1282,11 +1281,13 @@ function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline, isAd
           const near52WH = !near52W && !athInfo ? getNear52WHighInfo(entry) : null;
           const earningsDate = entry?.earningsDate;
           const isUpcomingEarnings = earningsDate && (earningsDate * 1000 - Date.now() <= 3 * 86400000) && (earningsDate * 1000 - Date.now() >= -86400000);
+          const isStarred = shortList.includes(ticker);
 
           if (activeFilter === "near52WLow") return !!near52W;
           if (activeFilter === "near52WHigh") return !!near52WH;
           if (activeFilter === "ath") return !!athInfo;
           if (activeFilter === "earnings") return !!isUpcomingEarnings;
+          if (activeFilter === "starred") return isStarred;
           return true;
         });
 
@@ -1664,11 +1665,13 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
       const near52WH = !near52W && !athInfo ? getNear52WHighInfo(entry) : null;
       const earningsDate = entry?.earningsDate;
       const isUpcomingEarnings = earningsDate && (earningsDate * 1000 - Date.now() <= 3 * 86400000) && (earningsDate * 1000 - Date.now() >= -86400000);
+      const isStarred = shortList.includes(item.ticker);
 
       if (activeFilter === "near52WLow") return !!near52W;
       if (activeFilter === "near52WHigh") return !!near52WH;
       if (activeFilter === "ath") return !!athInfo;
       if (activeFilter === "earnings") return !!isUpcomingEarnings;
+      if (activeFilter === "starred") return isStarred;
       return true;
     });
   }
