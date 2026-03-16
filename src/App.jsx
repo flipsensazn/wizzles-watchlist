@@ -1136,14 +1136,12 @@ function FearGreedGauge() {
   const [cnnData, setCnnData] = useState(null);
 
   useEffect(() => {
-    // Fetch from your new Cloudflare function proxy
     fetch("/cnn-fear-greed")
       .then(res => res.json())
       .then(data => {
         if (!data.error) {
           setCnnData({
              score: data.score,
-             // Map CNN's string to your desired UI text
              label: data.label.replace("_", " ").toUpperCase(), 
           });
         }
@@ -1154,10 +1152,10 @@ function FearGreedGauge() {
   if (!cnnData) {
     return (
       <div style={{
-        width: 210, padding: "10px 14px",
+        width: 260, padding: "14px 16px",
         background: "rgba(0,0,0,0.25)", border: "1px solid rgba(255,255,255,0.07)",
-        borderRadius: 10, display: "flex", alignItems: "center",
-        justifyContent: "center", fontSize: 11, color: "#334155", minHeight: 120,
+        borderRadius: 12, display: "flex", alignItems: "center",
+        justifyContent: "center", fontSize: 11, color: "#334155", minHeight: 74,
       }}>
         Loading CNN Index…
       </div>
@@ -1166,7 +1164,7 @@ function FearGreedGauge() {
 
   const { score, label } = cnnData;
 
-  // Determine the color based on the CNN score
+  // Determine the color based on the CNN score thresholds
   let color, emoji;
   if (score <= 24)      { color = "#ef4444"; emoji = "😱"; } // Extreme Fear
   else if (score <= 44) { color = "#f97316"; emoji = "😰"; } // Fear
@@ -1174,112 +1172,67 @@ function FearGreedGauge() {
   else if (score <= 75) { color = "#86efac"; emoji = "😄"; } // Greed
   else                  { color = "#22c55e"; emoji = "🤑"; } // Extreme Greed
 
-  // ── SVG semi-circle gauge ──
-  const W = 210, H = 118;
-  const cx = W / 2, cy = H - 6;
-  const RO = 80, RI = 55;
-
-  const STOPS = [
-    { t: 0,    hex: "#ef4444" },
-    { t: 0.25, hex: "#f97316" },
-    { t: 0.5,  hex: "#facc15" },
-    { t: 0.75, hex: "#86efac" },
-    { t: 1,    hex: "#22c55e" },
-  ];
-  
-  function arcColor(t) {
-    for (let i = 0; i < STOPS.length - 1; i++) {
-      if (t >= STOPS[i].t && t <= STOPS[i+1].t) {
-        const local = (t - STOPS[i].t) / (STOPS[i+1].t - STOPS[i].t);
-        return lerpHex(STOPS[i].hex, STOPS[i+1].hex, local);
-      }
-    }
-    return STOPS[STOPS.length-1].hex;
-  }
-
-  const SLICES = 60;
-  const arcPaths = [];
-  for (let i = 0; i < SLICES; i++) {
-    const t1 = i / SLICES, t2 = (i+1) / SLICES;
-    const a1 = Math.PI - t1 * Math.PI; 
-    const a2 = Math.PI - t2 * Math.PI;
-    const x1o = cx + RO*Math.cos(a1), y1o = cy - RO*Math.sin(a1);
-    const x2o = cx + RO*Math.cos(a2), y2o = cy - RO*Math.sin(a2);
-    const x1i = cx + RI*Math.cos(a1), y1i = cy - RI*Math.sin(a1);
-    const x2i = cx + RI*Math.cos(a2), y2i = cy - RI*Math.sin(a2);
-    arcPaths.push({
-      d: `M${x1o},${y1o} A${RO},${RO} 0 0,1 ${x2o},${y2o} L${x2i},${y2i} A${RI},${RI} 0 0,0 ${x1i},${y1i} Z`,
-      fill: arcColor((t1+t2)/2),
-    });
-  }
-
-  const fillT    = score / 100;
-  const fillAng  = Math.PI - fillT * Math.PI;
-  const dimLarge = fillT < 0.5 ? 1 : 0;
-  const dX1 = cx + RO*Math.cos(fillAng), dY1 = cy - RO*Math.sin(fillAng);
-  const dX2 = cx + RO, dY2 = cy;
-  const dXI1 = cx + RI*Math.cos(fillAng), dYI1 = cy - RI*Math.sin(fillAng);
-  const dXI2 = cx + RI, dYI2 = cy;
-  const dimPath = `M${dX1},${dY1} A${RO},${RO} 0 ${dimLarge},1 ${dX2},${dY2} L${dXI2},${dYI2} A${RI},${RI} 0 ${dimLarge},0 ${dXI1},${dYI1} Z`;
-
-  const needleAng = Math.PI - fillT * Math.PI;
-  const nLen = RO - 7;
-  const nx = cx + nLen*Math.cos(needleAng), ny = cy - nLen*Math.sin(needleAng);
-
   return (
     <div style={{
-      padding: "10px 14px 8px",
+      padding: "12px 16px",
       background: "rgba(0,0,0,0.28)",
       border: "1px solid rgba(255,255,255,0.07)",
-      borderRadius: 10,
+      borderRadius: 12,
       flexShrink: 0,
-      minWidth: 210,
+      width: 260, // Wider
+      display: "flex",
+      flexDirection: "column",
+      gap: 10
     }}>
-      <div style={{ fontSize: 9, fontWeight: 700, color: "#475569", letterSpacing: "0.15em", textTransform: "uppercase", textAlign: "center", marginBottom: 2 }}>
-        CNN Fear &amp; Greed Index
+      {/* ── Header Row ── */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+        <div style={{ fontSize: 9, fontWeight: 700, color: "#475569", letterSpacing: "0.15em", textTransform: "uppercase" }}>
+          CNN Fear & Greed
+        </div>
+        <div style={{ fontSize: 18, fontWeight: 800, color: color, lineHeight: 1, textShadow: `0 0 10px ${color}55` }}>
+          {score}
+        </div>
       </div>
 
-      <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} style={{ display: "block", overflow: "visible" }}>
-        {arcPaths.map((s, i) => <path key={i} d={s.d} fill={s.fill} opacity={0.88} />)}
-        {score < 100 && <path d={dimPath} fill="rgba(8,8,10,0.60)" />}
+      {/* ── Gradient Bar Meter ── */}
+      <div style={{ position: "relative", height: 8, borderRadius: 4, background: "linear-gradient(to right, #ef4444, #f97316, #facc15, #86efac, #22c55e)" }}>
+        
+        {/* Tick marks (0, 25, 50, 75, 100) */}
+        {[0, 25, 50, 75, 100].map(v => (
+          <div key={v} style={{
+            position: "absolute",
+            left: `${v}%`,
+            top: -2,
+            bottom: -2,
+            width: 1,
+            background: "rgba(0,0,0,0.4)",
+            zIndex: 1
+          }} />
+        ))}
 
-        {[0, 25, 50, 75, 100].map(v => {
-          const a = Math.PI - (v/100)*Math.PI;
-          return (
-            <line key={v}
-              x1={cx + (RO+3)*Math.cos(a)} y1={cy - (RO+3)*Math.sin(a)}
-              x2={cx + (RO+9)*Math.cos(a)} y2={cy - (RO+9)*Math.sin(a)}
-              stroke="rgba(255,255,255,0.2)" strokeWidth="1.5"
-            />
-          );
-        })}
+        {/* Glowing Indicator Needle */}
+        <div style={{
+          position: "absolute",
+          left: `${score}%`,
+          top: "50%",
+          transform: "translate(-50%, -50%)",
+          width: 4,
+          height: 16,
+          background: "#fff",
+          borderRadius: 2,
+          boxShadow: `0 0 8px ${color}, 0 0 4px #fff`,
+          zIndex: 2,
+          transition: "left 1s cubic-bezier(0.4, 0, 0.2, 1)"
+        }} />
+      </div>
 
-        {[{v:0,lbl:"Fear"},{v:100,lbl:"Greed"}].map(({v,lbl}) => {
-          const a = Math.PI - (v/100)*Math.PI;
-          const tx = cx + (RO+20)*Math.cos(a), ty = cy - (RO+20)*Math.sin(a);
-          return (
-            <text key={v} x={tx} y={ty} fontSize="8" fill="rgba(255,255,255,0.28)"
-              textAnchor="middle" dominantBaseline="middle">{lbl}</text>
-          );
-        })}
-
-        <line x1={cx} y1={cy} x2={nx} y2={ny}
-          stroke={color} strokeWidth="2.5" strokeLinecap="round"
-          style={{ filter: `drop-shadow(0 0 3px ${color})` }}
-        />
-        <circle cx={cx} cy={cy} r={5} fill={color}
-          style={{ filter: `drop-shadow(0 0 6px ${color}aa)` }}
-        />
-
-        <text x={cx} y={cy - RI/2 - 2} textAnchor="middle"
-          fontSize="28" fontWeight="800" fill={color}
-          style={{ filter: `drop-shadow(0 0 10px ${color}55)` }}>
-          {score}
-        </text>
-      </svg>
-
-      <div style={{ textAlign: "center", fontSize: 13, fontWeight: 800, color, letterSpacing: "0.03em", marginTop: -4, lineHeight: 1.3 }}>
-        {emoji} {label}
+      {/* ── Footer Labels ── */}
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: 9, color: "#64748b", fontWeight: 700, letterSpacing: "0.05em" }}>FEAR</span>
+        <span style={{ fontSize: 10, color: color, fontWeight: 800, letterSpacing: "0.05em" }}>
+          {emoji} {label}
+        </span>
+        <span style={{ fontSize: 9, color: "#64748b", fontWeight: 700, letterSpacing: "0.05em" }}>GREED</span>
       </div>
     </div>
   );
