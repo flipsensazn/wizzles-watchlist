@@ -46,7 +46,7 @@ function getChangeForTimeline(entry, timeline) {
     case "6M":  return entry.change6M;
     case "YTD": return entry.changeYTD;
     case "1Y":  return entry.change1Y;
-    default:    return entry.change; // Fallback to 1D
+    default:    return entry.change;
   }
 }
 
@@ -526,7 +526,6 @@ function TopBar({ marketData }) {
     return () => window.removeEventListener("resize", onResize);
   }, []);
 
-  // Desktop-only scale calculation
   useEffect(() => {
     if (isMobile) return;
     const measure = () => {
@@ -550,7 +549,6 @@ function TopBar({ marketData }) {
     return p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: true });
   }
 
-  // ── MOBILE LAYOUT ────────────────────────────────────────
   if (isMobile) {
     return (
       <div ref={barRef} style={{
@@ -617,7 +615,6 @@ function TopBar({ marketData }) {
     );
   }
 
-  // ── DESKTOP LAYOUT ───────────────────────────────────────
   return (
     <div ref={barRef} style={{
       position: "fixed", top: 0, left: 0, right: 0, zIndex: 1000,
@@ -908,66 +905,6 @@ function BloombergChart({ data, timestamps, color }) {
   );
 }
 
-function MarketStrip({ data, tickers, labels, colors }) {
-  function formatPrice(p, ticker) {
-    if (p === null || p === undefined) return "—";
-    if (ticker === "BTC-USD" || ticker === "ETH-USD") return p.toLocaleString("en-US", { maximumFractionDigits: 0, useGrouping: false });
-    if (ticker === "XRP-USD") return p.toFixed(4);
-    return p.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2, useGrouping: false });
-  }
-  
-  return (
-    <div className="market-strip" style={{ display: "flex", flexDirection: "column", gap: 6, justifyContent: "flex-start", padding: "0 10px" }}>
-      {tickers.map((ticker, i) => {
-        const entry = data[ticker] || {};
-        const price = entry.price;
-        const changePct = entry.change;
-        const pos = (changePct ?? 0) >= 0;
-        
-        const changeColor = changePct === undefined || changePct === null ? "#475569" : pos ? "#10b981" : "#ef4444";
-
-        let absChange = "—";
-        if (price != null && changePct != null) {
-           const prevPrice = price / (1 + (changePct / 100));
-           const diff = price - prevPrice;
-           absChange = (diff >= 0 ? "+" : "") + diff.toFixed(2);
-        }
-        
-        return (
-          <div key={ticker} style={{
-            display: "flex", flexDirection: "column",
-            padding: "6px 10px", borderRadius: 2, width: 160, flexShrink: 0, boxSizing: "border-box",
-            background: "linear-gradient(to bottom, #262626, #0a0a0a)", 
-            border: "1px solid #171717",
-            boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 2px 4px rgba(0,0,0,0.5)",
-            fontFamily: "'Roboto Condensed', sans-serif"
-          }}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 2 }}>
-              <span style={{ fontSize: 13, fontWeight: 800, color: colors[i] || "#fbbf24", letterSpacing: "0.02em" }}>
-                {labels[i]}
-              </span>
-              <span style={{ fontSize: 13, fontWeight: 700, color: changeColor }}>
-                {absChange}
-              </span>
-            </div>
-            
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline" }}>
-              <span style={{ fontSize: 14, fontWeight: 700, color: "#f8fafc" }}>
-                {formatPrice(price, ticker)}
-              </span>
-              <span style={{ fontSize: 12, fontWeight: 700, color: changeColor }}>
-                {changePct != null ? `${pos ? "+" : ""}${changePct.toFixed(2)}%` : "—"}
-              </span>
-            </div>
-
-            <BloombergChart data={entry.chartData} timestamps={entry.chartTimestamps} color={changeColor} />
-          </div>
-        );
-      })}
-    </div>
-  );
-}
-
 // ── TICKER CHIP ───────────────────────────────────────────
 const TickerChip = memo(function TickerChip({ symbol, changeData, onRemove, onTickerClick }) {
   const [hovered, setHovered] = useState(false);
@@ -1122,6 +1059,107 @@ function TrackPane({ track, prices, isAdmin, onAddTicker, onRemoveTicker, onTick
   );
 }
 
+// ── FEAR & GREED GAUGE ────────────────────────────────────
+function FearGreedGauge() {
+  const [cnnData, setCnnData] = useState(null);
+
+  useEffect(() => {
+    fetch("/cnn-fear-greed")
+      .then(res => res.json())
+      .then(data => {
+        if (!data.error) {
+          setCnnData({
+             score: data.score,
+             label: data.label.replace("_", " ").toUpperCase(), 
+          });
+        }
+      })
+      .catch(console.error);
+  }, []);
+
+  if (!cnnData) {
+    return (
+      <div style={{
+        width: 260, padding: "14px 16px",
+        background: "#262626",
+        border: "1px solid rgba(255,255,255,0.07)",
+        borderRadius: 12, display: "flex", alignItems: "center",
+        justifyContent: "center", fontSize: 11, color: "#334155", minHeight: 74,
+      }}>
+        Loading CNN Index…
+      </div>
+    );
+  }
+
+  const { score, label } = cnnData;
+
+  let color, emoji;
+  if (score <= 24)      { color = "#ef4444"; emoji = "😱"; }
+  else if (score <= 44) { color = "#f97316"; emoji = "😰"; }
+  else if (score <= 55) { color = "#facc15"; emoji = "😐"; }
+  else if (score <= 75) { color = "#86efac"; emoji = "😄"; }
+  else                  { color = "#22c55e"; emoji = "🤑"; }
+
+  return (
+    <div style={{
+      padding: "12px 16px",
+      background: "#262626",
+      border: "1px solid rgba(255,255,255,0.07)",
+      borderRadius: 12,
+      flexShrink: 0,
+      width: 260,
+      display: "flex",
+      flexDirection: "column",
+      gap: 10
+    }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
+        <div style={{ fontSize: 9, fontWeight: 700, color: "#475569", letterSpacing: "0.15em", textTransform: "uppercase" }}>
+          CNN Fear & Greed
+        </div>
+        <div style={{ fontSize: 18, fontWeight: 800, color: color, lineHeight: 1, textShadow: `0 0 10px ${color}55` }}>
+          {score}
+        </div>
+      </div>
+
+      <div style={{ position: "relative", height: 8, borderRadius: 4, background: "linear-gradient(to right, #ef4444, #f97316, #facc15, #86efac, #22c55e)" }}>
+        {[0, 25, 50, 75, 100].map(v => (
+          <div key={v} style={{
+            position: "absolute",
+            left: `${v}%`,
+            top: -2,
+            bottom: -2,
+            width: 1,
+            background: "rgba(0,0,0,0.4)",
+            zIndex: 1
+          }} />
+        ))}
+
+        <div style={{
+          position: "absolute",
+          left: `${score}%`,
+          top: "50%",
+          transform: "translate(-50%, -50%)",
+          width: 4,
+          height: 16,
+          background: "#fff",
+          borderRadius: 2,
+          boxShadow: `0 0 8px ${color}, 0 0 4px #fff`,
+          zIndex: 2,
+          transition: "left 1s cubic-bezier(0.4, 0, 0.2, 1)"
+        }} />
+      </div>
+
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+        <span style={{ fontSize: 9, color: "#64748b", fontWeight: 700, letterSpacing: "0.05em" }}>FEAR</span>
+        <span style={{ fontSize: 10, color: color, fontWeight: 800, letterSpacing: "0.05em" }}>
+          {emoji} {label}
+        </span>
+        <span style={{ fontSize: 9, color: "#64748b", fontWeight: 700, letterSpacing: "0.05em" }}>GREED</span>
+      </div>
+    </div>
+  );
+}
+
 // ── HEAT MAP ──────────────────────────────────────────────
 function getNear52WLowInfo(priceEntry) {
   if (!priceEntry) return null;
@@ -1181,8 +1219,9 @@ function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline }) {
 
   return (
     <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: isMobile ? "12px 8px" : 20, height: "100%", overflowY: "auto", overflowX: "hidden", boxSizing: "border-box", width: "100%" }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
-        <div>
+      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", margin: 0 }}>Portfolio Heat Map</h3>
             <div style={{ display: "flex", background: "rgba(255,255,255,0.05)", borderRadius: 6, padding: 2 }}>
@@ -1199,20 +1238,20 @@ function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline }) {
               ))}
             </div>
           </div>
-          <p style={{ fontSize: 11, color: "#475569", marginTop: 6 }}>All tracked tickers · color = {timeline} performance</p>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 12, fontSize: 10, color: "#64748b" }}>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(251,191,36,0.25)", border: "1px solid #f59e0b", boxShadow: "0 0 6px #f59e0b88" }} />
-            <span>within 25% of 52W low</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(52,211,153,0.25)", border: "1px solid #34d399", boxShadow: "0 0 6px #34d39988" }} />
-            <span>within 10% of 52W high</span>
-          </div>
-          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-            <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(52,211,153,0.35)", border: "2.5px solid #34d399", boxShadow: "0 0 8px #34d399cc" }} />
-            <span>All Time High (ATH)</span>
+
+          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", fontSize: 10, color: "#64748b" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(251,191,36,0.25)", border: "1px solid #f59e0b", boxShadow: "0 0 6px #f59e0b88", flexShrink: 0 }} />
+              <span>within 25% of 52W low</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(52,211,153,0.25)", border: "1px solid #34d399", boxShadow: "0 0 6px #34d39988", flexShrink: 0 }} />
+              <span>within 10% of 52W high</span>
+            </div>
+            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(52,211,153,0.35)", border: "2.5px solid #34d399", boxShadow: "0 0 8px #34d399cc", flexShrink: 0 }} />
+              <span>All Time High (ATH)</span>
+            </div>
           </div>
         </div>
       </div>
@@ -2147,25 +2186,12 @@ const GLOBAL_STYLES = `
 // ── ROOT APP ──────────────────────────────────────────────
 export default function App() {
   
-  const [isLightMode, setIsLightMode] = useState(() => {
-    return localStorage.getItem("theme") === "light";
-  });
   const [isMobileApp, setIsMobileApp] = useState(() => window.innerWidth < 768);
   useEffect(() => {
     const fn = () => setIsMobileApp(window.innerWidth < 768);
     window.addEventListener("resize", fn);
     return () => window.removeEventListener("resize", fn);
   }, []);
-
-  useEffect(() => {
-    if (isLightMode) {
-      document.documentElement.classList.add("light-mode");
-      localStorage.setItem("theme", "light");
-    } else {
-      document.documentElement.classList.remove("light-mode");
-      localStorage.setItem("theme", "dark");
-    }
-  }, [isLightMode]);
   
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminPassword, setAdminPassword] = useState("");
@@ -2202,8 +2228,6 @@ export default function App() {
         });
         return merged;
       });
-      // Deep-merge: initial strip fetch has no historical fields; protect any
-      // richer data already stored from a prior full refresh().
       setPrices(prev => {
         const HIST_KEYS = ["change5D","change1M","change6M","changeYTD","change1Y",
                            "week52Low","week52High","earningsDate","chartData","chartTimestamps"];
@@ -2286,8 +2310,6 @@ export default function App() {
 
     const allData = await fetchAllPrices(allTickers);
 
-    // Deep-merge: preserve historical fields (change5D etc.) if new data is partial
-    // (e.g. Finnhub fallback only has price/change/session).
     const HIST_KEYS = ["change5D","change1M","change6M","changeYTD","change1Y",
                        "week52Low","week52High","earningsDate","chartData","chartTimestamps"];
     setPrices(prev => {
@@ -2465,11 +2487,9 @@ export default function App() {
   }, [capexData, capexIntel]);
 
   const liveTotal = useMemo(() => {
-    // If we successfully fetched live intel and it contains our new derived total, use it!
     if (capexIntelStatus === "success" && capexIntel?.totalCapexDerived) {
       return capexIntel.totalCapexDerived;
     }
-    // Otherwise, fallback to manually summing the tracks
     return liveCapexData.tracks.reduce((s, t) => s + (t.capex || 0), 0);
   }, [liveCapexData, capexIntel, capexIntelStatus]);
 
@@ -2488,24 +2508,7 @@ export default function App() {
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", marginTop: "var(--topbar-h, 72px)", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <div style={{ fontSize: 10, color: "#2d3a52", letterSpacing: "0.35em", textTransform: "uppercase", marginBottom: 3 }}>HOW ~$600B+ IN HYPERSCALER CAPEX FLOWS THROUGH AI INFRASTRUCTURE TRACKS</div>
             <div style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", letterSpacing: "-0.01em" }}>AI Capex Flow Intelligence</div>
-          </div>
-
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 8 }}>
-            <button 
-              onClick={() => setIsLightMode(!isLightMode)} 
-              style={{ 
-                background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", 
-                color: "#e2e8f0", borderRadius: 6, padding: "3px 8px", cursor: "pointer", 
-                fontSize: 10, fontWeight: 600, fontFamily: "inherit", display: "flex", 
-                alignItems: "center", gap: 4, transition: "background .2s" 
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
-              onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
-            >
-              {isLightMode ? "🌙 Dark Mode" : "☀️ Light Mode"}
-            </button>
           </div>
 
           <div className="header-controls" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
@@ -2548,6 +2551,12 @@ export default function App() {
               <span style={{ fontSize: 13 }}>✉</span> Wizzle's Watchlist ↗
             </a>
           </div>
+
+          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}>
+            <FearGreedGauge />
+        
+          </div>
+
         </div>
 
         <div className="main-content" style={{ maxWidth: 1480, margin: "0 auto", padding: "32px 20px", display: "flex", flexDirection: "column", gap: 28, overflowX: "hidden", boxSizing: "border-box", width: "100%" }}>
