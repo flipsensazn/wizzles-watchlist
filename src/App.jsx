@@ -2154,43 +2154,64 @@ function AdminModal({ onClose, onSuccess }) {
   );
 }
 
-// ── X / NEWS FEED COMPONENT (Reliable replacement) ────────
-const XFeed = memo(function XFeed({ newsFeed = [] }) {
-  if (!newsFeed.length) {
-    return (
-      <div style={{
-        height: 250, display: "flex", alignItems: "center",
-        justifyContent: "center", color: "#334155", fontSize: 11,
-        background: "rgba(18,18,18,0.5)", borderRadius: 4,
-      }}>
-        Loading feed…
-      </div>
-    );
+// ── X / TWITTER FEED COMPONENT ────────────────────────────
+const XFeed = memo(function XFeed() {
+  const [tweets, setTweets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    fetch("/xfeed")
+      .then(res => res.json())
+      .then(data => {
+        if (data.tweets) {
+          setTweets(data.tweets);
+        } else {
+          setError(data.error || "Failed to load feed");
+        }
+        setLoading(false);
+      })
+      .catch(err => {
+        setError("Network error fetching feed");
+        setLoading(false);
+      });
+  }, []);
+
+  if (loading) {
+    return <div style={{ padding: 16, color: "#475569", fontSize: 11, textAlign: "center" }}>Loading posts...</div>;
+  }
+
+  if (error) {
+    return <div style={{ padding: 16, color: "#f87171", fontSize: 11, textAlign: "center" }}>⚠ {error}</div>;
+  }
+
+  if (tweets.length === 0) {
+    return <div style={{ padding: 16, color: "#475569", fontSize: 11, textAlign: "center" }}>No recent posts found.</div>;
   }
 
   return (
-    <div style={{
-      height: 250, overflowY: "auto", borderRadius: 4,
-      background: "rgba(18,18,18,0.5)", display: "flex",
-      flexDirection: "column", gap: 1,
-    }}>
-      {newsFeed.map((item, i) => (
-        <a key={i} href={item.link} target="_blank" rel="noopener noreferrer"
-          style={{
-            display: "block", padding: "8px 10px", textDecoration: "none",
-            borderBottom: "1px solid rgba(255,255,255,0.04)",
-            transition: "background .15s",
+    <div style={{ display: "flex", flexDirection: "column" }}>
+      {tweets.map((tweet, i) => (
+        <a 
+          key={i} 
+          href={tweet.link} 
+          target="_blank" 
+          rel="noopener noreferrer" 
+          style={{ 
+            padding: "12px 14px", 
+            borderBottom: i < tweets.length - 1 ? "1px solid rgba(255,255,255,0.05)" : "none", 
+            textDecoration: "none",
+            display: "block",
+            transition: "background 0.15s"
           }}
-          onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
-          onMouseLeave={e => e.currentTarget.style.background = ""}
+          onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.03)"}
+          onMouseLeave={e => e.currentTarget.style.background = "transparent"}
         >
-          <div style={{ fontSize: 11, fontWeight: 600, color: "#e2e8f0",
-            lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 2,
-            WebkitBoxOrient: "vertical", overflow: "hidden" }}>
-            {item.title}
+          <div style={{ fontSize: 12, color: "#e2e8f0", lineHeight: 1.45, fontWeight: 500, marginBottom: 6 }}>
+            {tweet.title}
           </div>
-          <div style={{ fontSize: 9, color: "#475569", marginTop: 3 }}>
-            {item.publisher} · {item.publishedAt || ""}
+          <div style={{ fontSize: 9, color: "#64748b", display: "flex", justifyContent: "flex-end" }}>
+            {tweet.pubDate ? new Date(tweet.pubDate).toLocaleDateString() : "Recent"}
           </div>
         </a>
       ))}
