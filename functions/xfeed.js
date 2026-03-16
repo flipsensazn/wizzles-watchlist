@@ -18,7 +18,8 @@ export async function onRequest(context) {
   }
 
   try {
-    // The official Twitter syndication API (used by their own embeds)
+    // We use Twitter's own internal Syndication API (the one their widgets use)
+    // This bypasses Nitter and doesn't require an API key.
     const url = "https://syndication.twitter.com/srv/timeline-profile/screen-name/wallstengine";
     
     const res = await fetch(url, {
@@ -28,42 +29,44 @@ export async function onRequest(context) {
     });
 
     if (!res.ok) {
-      return new Response(JSON.stringify({ error: "Failed to fetch from Twitter Syndication" }), { status: 502, headers });
+      return new Response(JSON.stringify({ error: "Failed to fetch from X/Twitter." }), { status: 502, headers });
     }
 
     const html = await res.text();
     
-    // The JSON data is embedded inside the HTML in a __NEXT_DATA__ script tag
+    // The timeline data is injected into the HTML as a massive JSON object
     const match = html.match(/<script id="__NEXT_DATA__" type="application\/json">([\s\S]*?)<\/script>/);
-    
     if (!match || !match[1]) {
-      return new Response(JSON.stringify({ error: "Could not parse Twitter data" }), { status: 500, headers });
+      return new Response(JSON.stringify({ error: "Could not locate feed data." }), { status: 500, headers });
     }
 
     const data = JSON.parse(match[1]);
-    const timeline = data?.props?.pageProps?.timeline?.entries || [];
-
     const tweets = [];
     
-    for (const entry of timeline) {
-      // Filter for actual tweets (ignore cursors, generic items)
-      if (entry.type === "TimelineTimelineItem" && entry.content?.tweet) {
-        const tweetContent = entry.content.tweet;
-        const text = tweetContent.text || "";
-        const id = tweetContent.id_str;
-        const date = tweetContent.created_at; // "Wed Oct 10 20:19:24 +0000 2018"
-        
-        if (text && id) {
-          tweets.push({
-            title: text.length > 100 ? text.substring(0, 100) + "..." : text,
-            link: \`https://twitter.com/wallstengine/status/\${id}\`,
-            pubDate: date
-          });
-        }
+    // Recursively search the JSON tree for tweet objects to protect against X changing their data structure
+    function findTweets(obj) {
+      if (!obj || typeof obj !== 'object') return;
+      
+      // If an object has these three fields, it's a tweet
+      if (obj.id_str && obj.text && obj.created_at && !obj.retweeted_status_id_str) {
+        tweets.push({
+          title: obj.text,
+          link: `https://x.com/wallstengine/status/${obj.id_str}`,
+          pubDate: obj.created_at
+        });
+      }
+      
+      for (const key in obj) {
+        findTweets(obj[key]);
       }
     }
 
-    return new Response(JSON.stringify({ tweets: tweets.slice(0, 10) }), { status: 200, headers });
+    findTweets(data);
+
+    // Deduplicate by link and take the most recent 10
+    const uniqueTweets = Array.from(new Map(tweets.map(t => [t.link, t])).values());
+
+    return new Response(JSON.stringify({ tweets: uniqueTweets.slice(0, 10) }), { status: 200, headers });
 
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message }), { status: 500, headers });
