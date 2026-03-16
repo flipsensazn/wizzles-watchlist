@@ -1080,11 +1080,13 @@ function FearGreedGauge() {
   if (!cnnData) {
     return (
       <div style={{
-        width: 260, padding: "14px 16px",
+        width: 260, 
+        padding: "8px 12px", // Reduced padding
         background: "#262626",
         border: "1px solid rgba(255,255,255,0.07)",
         borderRadius: 12, display: "flex", alignItems: "center",
-        justifyContent: "center", fontSize: 11, color: "#334155", minHeight: 74,
+        justifyContent: "center", fontSize: 11, color: "#334155", 
+        minHeight: 56, // Reduced minHeight
       }}>
         Loading CNN Index…
       </div>
@@ -1102,7 +1104,7 @@ function FearGreedGauge() {
 
   return (
     <div style={{
-      padding: "12px 16px",
+      padding: "8px 12px", // Reduced padding from 12px 16px
       background: "#262626",
       border: "1px solid rgba(255,255,255,0.07)",
       borderRadius: 12,
@@ -1110,7 +1112,7 @@ function FearGreedGauge() {
       width: 260,
       display: "flex",
       flexDirection: "column",
-      gap: 10
+      gap: 6 // Reduced gap between rows from 10 to 6
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
         <div style={{ fontSize: 9, fontWeight: 700, color: "#475569", letterSpacing: "0.15em", textTransform: "uppercase" }}>
@@ -1121,7 +1123,7 @@ function FearGreedGauge() {
         </div>
       </div>
 
-      <div style={{ position: "relative", height: 8, borderRadius: 4, background: "linear-gradient(to right, #ef4444, #f97316, #facc15, #86efac, #22c55e)" }}>
+      <div style={{ position: "relative", height: 6, borderRadius: 3, background: "linear-gradient(to right, #ef4444, #f97316, #facc15, #86efac, #22c55e)" }}>
         {[0, 25, 50, 75, 100].map(v => (
           <div key={v} style={{
             position: "absolute",
@@ -1139,8 +1141,8 @@ function FearGreedGauge() {
           left: `${score}%`,
           top: "50%",
           transform: "translate(-50%, -50%)",
-          width: 4,
-          height: 16,
+          width: 3, // Thinner needle
+          height: 12, // Shorter needle (was 16)
           background: "#fff",
           borderRadius: 2,
           boxShadow: `0 0 8px ${color}, 0 0 4px #fff`,
