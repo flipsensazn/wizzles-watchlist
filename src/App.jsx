@@ -1195,9 +1195,10 @@ function getATHInfo(priceEntry) {
   return null;
 }
 
-function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline }) {
+function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline, isAdmin, shortList = [], onSaveShortlist }) {
   const isMobile = useMobile();
   const [tooltip, setTooltip] = useState(null);
+  const [activeFilter, setActiveFilter] = useState(null);
 
   const trackCells = useMemo(() =>
     capexData.tracks.map(track => ({
@@ -1241,23 +1242,57 @@ function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline }) {
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 14, flexWrap: "wrap", fontSize: 10, color: "#64748b" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(251,191,36,0.25)", border: "1px solid #f59e0b", boxShadow: "0 0 6px #f59e0b88", flexShrink: 0 }} />
-              <span>within 25% of 52W low</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(52,211,153,0.25)", border: "1px solid #34d399", boxShadow: "0 0 6px #34d39988", flexShrink: 0 }} />
-              <span>within 10% of 52W high</span>
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-              <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(52,211,153,0.35)", border: "2.5px solid #34d399", boxShadow: "0 0 8px #34d399cc", flexShrink: 0 }} />
-              <span>All Time High (ATH)</span>
-            </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 10, color: "#64748b" }}>
+            {[
+              { id: "near52WLow", label: "within 25% of 52W low", icon: <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(251,191,36,0.25)", border: "1px solid #f59e0b", boxShadow: "0 0 6px #f59e0b88", flexShrink: 0 }} /> },
+              { id: "near52WHigh", label: "within 10% of 52W high", icon: <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(52,211,153,0.25)", border: "1px solid #34d399", boxShadow: "0 0 6px #34d39988", flexShrink: 0 }} /> },
+              { id: "ath", label: "All Time High (ATH)", icon: <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(52,211,153,0.35)", border: "2.5px solid #34d399", boxShadow: "0 0 8px #34d399cc", flexShrink: 0 }} /> },
+              { id: "earnings", label: "Earnings in 3 Days", icon: <span style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 10, height: 10, borderRadius: 2, background: "rgba(192,132,252,0.25)", border: "1px solid #c084fc", color: "#c084fc", fontSize: 7, fontWeight: 800, flexShrink: 0 }}>E</span> }
+            ].map(f => (
+              <button
+                key={f.id}
+                onClick={() => setActiveFilter(prev => prev === f.id ? null : f.id)}
+                style={{
+                  display: "flex", alignItems: "center", gap: 5,
+                  background: activeFilter === f.id ? "rgba(255,255,255,0.1)" : "transparent",
+                  border: "1px solid",
+                  borderColor: activeFilter === f.id ? "rgba(255,255,255,0.2)" : "transparent",
+                  padding: "4px 8px",
+                  borderRadius: 6,
+                  color: activeFilter === f.id ? "#e2e8f0" : "#64748b",
+                  cursor: "pointer",
+                  transition: "all 0.15s",
+                  outline: "none",
+                  fontFamily: "inherit",
+                  fontSize: 10,
+                }}
+              >
+                {f.icon}
+                <span>{f.label}</span>
+              </button>
+            ))}
           </div>
         </div>
       </div>
       {trackCells.map(({ track, cells }) => {
+        const filteredCells = cells.filter(ticker => {
+          if (!activeFilter) return true;
+          const entry = prices[ticker];
+          const near52W = getNear52WLowInfo(entry);
+          const athInfo = !near52W ? getATHInfo(entry) : null;
+          const near52WH = !near52W && !athInfo ? getNear52WHighInfo(entry) : null;
+          const earningsDate = entry?.earningsDate;
+          const isUpcomingEarnings = earningsDate && (earningsDate * 1000 - Date.now() <= 3 * 86400000) && (earningsDate * 1000 - Date.now() >= -86400000);
+
+          if (activeFilter === "near52WLow") return !!near52W;
+          if (activeFilter === "near52WHigh") return !!near52WH;
+          if (activeFilter === "ath") return !!athInfo;
+          if (activeFilter === "earnings") return !!isUpcomingEarnings;
+          return true;
+        });
+
+        if (filteredCells.length === 0) return null;
+
         return (
           <div key={track.id} style={{ marginBottom: 14 }}>
             <div style={{ fontSize: 10, color: track.color, letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 7, fontWeight: 600, display: "flex", alignItems: "center", gap: 8 }}>
@@ -1266,7 +1301,7 @@ function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline }) {
               <div style={{ flex: 1, height: 1, background: `linear-gradient(90deg,${track.color}44,transparent)` }} />
             </div>
             <div style={{ display: "flex", flexWrap: "wrap", gap: isMobile ? 4 : 6, minHeight: 40 }}>
-              {cells.map(ticker => {
+              {filteredCells.map(ticker => {
                 const entry = prices[ticker];
                 const change = getChangeForTimeline(entry, timeline);
                 const currentPrice = entry?.price;
@@ -1280,6 +1315,9 @@ function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline }) {
                 
                 const earningsDate = entry?.earningsDate;
                 const isUpcomingEarnings = earningsDate && (earningsDate * 1000 - Date.now() <= 3 * 86400000) && (earningsDate * 1000 - Date.now() >= -86400000);
+
+                const isStarred = shortList.includes(ticker);
+                const showStar = isStarred || isAdmin;
 
                 return (
                   <div key={ticker}
@@ -1354,6 +1392,29 @@ function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline }) {
                       </div>
                     ) : (
                       <div style={{ fontSize: 10, fontWeight: 600, color: "rgba(255,255,255,0.4)", marginTop: 2 }}>—</div>
+                    )}
+                    {showStar && (
+                      <div
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if (isAdmin) {
+                            if (isStarred) {
+                              onSaveShortlist(shortList.filter(t => t !== ticker));
+                            } else {
+                              onSaveShortlist([...shortList, ticker]);
+                            }
+                          }
+                        }}
+                        style={{
+                          position: "absolute", bottom: 4, left: 5,
+                          fontSize: 10, lineHeight: 1,
+                          color: isStarred ? "#facc15" : "rgba(255,255,255,0.3)",
+                          cursor: isAdmin ? "pointer" : "default",
+                          zIndex: 2,
+                        }}
+                      >
+                        {isStarred ? "★" : "☆"}
+                      </div>
                     )}
                   </div>
                 );
@@ -2645,12 +2706,12 @@ export default function App() {
             
             {bottomTab === "all" ? (
               <div className="bottom-grid-all">
-                <div className="span-2 panel-wrapper"><div className="panel-inner"><HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} timeline={timeline} setTimeline={setTimeline} /></div></div>
+                <div className="span-2 panel-wrapper"><div className="panel-inner"><HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} timeline={timeline} setTimeline={setTimeline} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} /></div></div>
                 <div className="span-1 panel-wrapper"><div className="panel-inner"><Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} timeline={timeline} /></div></div>
                 <div className="span-1 panel-wrapper"><div className="panel-inner"><DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} capexIntelStatus={capexIntelStatus} capexIntelError={capexIntelError} timeline={timeline} /></div></div>
                 <div className="span-2 panel-wrapper"><div className="panel-inner"><MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} /></div></div>
               </div>
-            ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} timeline={timeline} setTimeline={setTimeline} />
+            ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} timeline={timeline} setTimeline={setTimeline} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} />
               : bottomTab === "donut" ? <DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} capexIntelStatus={capexIntelStatus} capexIntelError={capexIntelError} timeline={timeline} />
               : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} timeline={timeline} />
               : <MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} />
