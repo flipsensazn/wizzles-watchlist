@@ -2280,7 +2280,8 @@ export default function App() {
   const [capexIntelStatus, setCapexIntelStatus] = useState("idle");
   const [capexIntelError, setCapexIntelError] = useState(null);
   const [newsFeed, setNewsFeed] = useState([]);
-  
+  const [xPosts, setXPosts] = useState([]);
+
   const [activeTrack, setActiveTrack] = useState(null);
   const [prices, setPrices] = useState({});
   const pricesRef = useRef({});
@@ -2351,6 +2352,10 @@ export default function App() {
       .then(res => res.json())
       .then(data => { if (data.news) setNewsFeed(data.news); })
       .catch(e => console.log("News fetch failed"));
+    fetch("/x-feed")
+      .then(res => res.json())
+      .then(data => { if (data.posts) setXPosts(data.posts); })
+      .catch(e => console.log("X feed fetch failed"));
 
     setCapexIntelStatus("loading");
     const intelController = new AbortController();
@@ -2743,7 +2748,7 @@ export default function App() {
                 </div>
                 {/* Changed height to 250 */}
                 <div style={{ height: 250, background: "linear-gradient(to bottom, #1c1917, #0a0a0a)", border: "1px solid #27272a", borderRadius: 4, overflow: "hidden", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)" }}>
-                  <XFeed newsFeed={newsFeed} />
+                  <XFeed newsFeed={xPosts} />
                 </div>
               </div>
             </div>
