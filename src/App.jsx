@@ -2186,25 +2186,12 @@ const GLOBAL_STYLES = `
 // ── ROOT APP ──────────────────────────────────────────────
 export default function App() {
   
-  const [isLightMode, setIsLightMode] = useState(() => {
-    return localStorage.getItem("theme") === "light";
-  });
   const [isMobileApp, setIsMobileApp] = useState(() => window.innerWidth < 768);
   useEffect(() => {
     const fn = () => setIsMobileApp(window.innerWidth < 768);
     window.addEventListener("resize", fn);
     return () => window.removeEventListener("resize", fn);
   }, []);
-
-  useEffect(() => {
-    if (isLightMode) {
-      document.documentElement.classList.add("light-mode");
-      localStorage.setItem("theme", "light");
-    } else {
-      document.documentElement.classList.remove("light-mode");
-      localStorage.setItem("theme", "dark");
-    }
-  }, [isLightMode]);
   
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminPassword, setAdminPassword] = useState("");
@@ -2521,7 +2508,6 @@ export default function App() {
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", marginTop: "var(--topbar-h, 72px)", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
           <div>
-            <div style={{ fontSize: 10, color: "#2d3a52", letterSpacing: "0.35em", textTransform: "uppercase", marginBottom: 3 }}>HOW ~$600B+ IN HYPERSCALER CAPEX FLOWS THROUGH AI INFRASTRUCTURE TRACKS</div>
             <div style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", letterSpacing: "-0.01em" }}>AI Capex Flow Intelligence</div>
           </div>
 
@@ -2568,19 +2554,7 @@ export default function App() {
 
           <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}>
             <FearGreedGauge />
-            <button 
-              onClick={() => setIsLightMode(!isLightMode)} 
-              style={{ 
-                background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", 
-                color: "#e2e8f0", borderRadius: 6, padding: "3px 8px", cursor: "pointer", 
-                fontSize: 10, fontWeight: 600, fontFamily: "inherit", display: "flex", 
-                alignItems: "center", gap: 4, transition: "background .2s" 
-              }}
-              onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.1)"}
-              onMouseLeave={e => e.currentTarget.style.background = "rgba(255,255,255,0.05)"}
-            >
-              {isLightMode ? "🌙 Dark Mode" : "☀️ Light Mode"}
-            </button>
+        
           </div>
 
         </div>
