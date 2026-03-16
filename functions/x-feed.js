@@ -11,7 +11,7 @@ export async function onRequest(context) {
   const headers = {
     "Access-Control-Allow-Origin": corsOrigin,
     "Content-Type": "application/json",
-    "Cache-Control": "public, max-age=300, s-maxage=300",  // 5-min cache
+    "Cache-Control": "public, max-age=300, s-maxage=300",
   };
 
   if (request.method === "OPTIONS") {
@@ -49,13 +49,14 @@ export async function onRequest(context) {
         const body = match[1];
 
         // Strip CDATA wrappers from title
-        const rawTitle = (body.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/) ||
-                          body.match(/<title>([\s\S]*?)<\/title>/) || [])[1] || "";
+        const rawTitle =
+          (body.match(/<title><!\[CDATA\[([\s\S]*?)\]\]><\/title>/) ||
+            body.match(/<title>([\s\S]*?)<\/title>/) || [])[1] || "";
 
         const link    = (body.match(/<link>(.*?)<\/link>/) || [])[1] || "";
         const pubDate = (body.match(/<pubDate>(.*?)<\/pubDate>/) || [])[1] || "";
 
-        // Clean up the title — remove @wallstengine prefix if Nitter adds it
+        // Clean up title — remove reply prefix if Nitter adds it
         const title = rawTitle.replace(/^R to @\S+:\s*/i, "").trim();
 
         if (title && link) {
@@ -74,9 +75,9 @@ export async function onRequest(context) {
     }
   }
 
-  // All instances failed
+  // All instances failed — return empty gracefully
   return new Response(
     JSON.stringify({ posts: [], error: "All Nitter instances unavailable" }),
-    { status: 200, headers }   // Return 200 so frontend handles gracefully
+    { status: 200, headers }
   );
 }
