@@ -56,6 +56,7 @@ export async function onRequest(context) {
     "Access-Control-Allow-Origin": corsOrigin,
     "Content-Type": "application/json",
     "Vary": "Origin",
+    "Cache-Control": "public, max-age=300, s-maxage=300"
   };
 
   if (request.method === "OPTIONS") {
