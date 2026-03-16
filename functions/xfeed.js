@@ -48,12 +48,13 @@ export async function onRequest(context) {
       if (!obj || typeof obj !== 'object') return;
       
       // If an object has these three fields, it's a tweet
-      if (obj.id_str && obj.text && obj.created_at && !obj.retweeted_status_id_str) {
+      if (obj.id_str && obj.text && obj.created_at) {
         tweets.push({
           title: obj.text,
           link: `https://x.com/wallstengine/status/${obj.id_str}`,
           pubDate: obj.created_at
         });
+        return; // Stop digging here so we don't accidentally grab a quote-tweet's internal data instead of the main tweet
       }
       
       for (const key in obj) {
