@@ -554,14 +554,6 @@ function TopBar({ marketData }) {
           borderTop: "1px solid rgba(255,255,255,.04)",
         }}>
           <MarketClockCompact />
-          <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 4, borderLeft: "1px solid rgba(255,255,255,0.1)", paddingLeft: 10 }}>
-            <span style={{ 
-              width: 5, height: 5, borderRadius: "50%", background: "#34d399", 
-              display: "inline-block", boxShadow: "0 0 6px #34d399",
-            }} />
-            <span style={{ fontSize: 9, fontWeight: 700, color: "#34d399", letterSpacing: "0.05em", fontFamily: "'DM Mono', monospace" }}>
-            </span>
-          </div>
         </div>
       </div>
     );
@@ -626,16 +618,8 @@ function TopBar({ marketData }) {
         })}
       </div>
       <div ref={clockRef} style={{ flexShrink: 0, marginLeft: 14, display: "flex", alignItems: "center", gap: 16 }}>
-        <MarketClock />
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ 
-            width: 6, height: 6, borderRadius: "50%", background: "#34d399", 
-            display: "inline-block", boxShadow: "0 0 8px #34d399",
-          }} />
-          <span style={{ fontSize: 11, fontWeight: 700, color: "#34d399", letterSpacing: "0.05em", fontFamily: "'DM Mono', monospace" }}>
-          </span>
-        </div>
-      </div>
+  <MarketClock />
+</div>
     </div>
   );
 }
