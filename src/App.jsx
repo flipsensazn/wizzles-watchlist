@@ -554,6 +554,15 @@ function TopBar({ marketData }) {
           borderTop: "1px solid rgba(255,255,255,.04)",
         }}>
           <MarketClockCompact />
+          <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 4, borderLeft: "1px solid rgba(255,255,255,0.1)", paddingLeft: 10 }}>
+            <span style={{ 
+              width: 5, height: 5, borderRadius: "50%", background: "#34d399", 
+              display: "inline-block", boxShadow: "0 0 6px #34d399",
+              animation: "pulseDot 2s infinite" 
+            }} />
+            <span style={{ fontSize: 9, fontWeight: 700, color: "#34d399", letterSpacing: "0.05em", fontFamily: "'DM Mono', monospace" }}>
+            </span>
+          </div>
         </div>
       </div>
     );
@@ -617,8 +626,17 @@ function TopBar({ marketData }) {
           );
         })}
       </div>
-      <div ref={clockRef} style={{ flexShrink: 0, marginLeft: 14 }}>
+      <div ref={clockRef} style={{ flexShrink: 0, marginLeft: 14, display: "flex", alignItems: "center", gap: 16 }}>
         <MarketClock />
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ 
+            width: 6, height: 6, borderRadius: "50%", background: "#34d399", 
+            display: "inline-block", boxShadow: "0 0 8px #34d399",
+            animation: "pulseDot 2s infinite" 
+          }} />
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#34d399", letterSpacing: "0.05em", fontFamily: "'DM Mono', monospace" }}>
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -2336,6 +2354,28 @@ export default function App() {
   const [activeFilter, setActiveFilter] = useState(null);
   const [popup, setPopup] = useState(null); 
 
+  // --- PRESENCE POLLING STATE ---
+  const [onlineCount, setOnlineCount] = useState(1);
+  const sessionId = useRef(crypto.randomUUID());
+
+  useEffect(() => {
+    const pingPresence = async () => {
+      if (document.hidden) return; 
+      try {
+        const res = await fetch(`/presence?session=${sessionId.current}`);
+        const data = await res.json();
+        if (data.count) setOnlineCount(data.count);
+      } catch (e) {
+        console.warn("Presence ping failed");
+      }
+    };
+
+    pingPresence();
+    const id = setInterval(pingPresence, 30000);
+    return () => clearInterval(id);
+  }, []);
+  // ------------------------------
+
   // ── PRIMARY DATA FETCH ──
   useEffect(() => {
     fetch("/scanner")
@@ -2655,7 +2695,21 @@ export default function App() {
           
           {/* LEFT SIDE: Title & Controls Stacked */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", letterSpacing: "-0.01em" }}>AI Capex Flow Intelligence</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+  <div style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", letterSpacing: "-0.01em" }}>
+    AI Capex Flow Intelligence
+  </div>
+  <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.25)", padding: "3px 8px", borderRadius: 6 }}>
+    <span style={{ 
+      width: 6, height: 6, borderRadius: "50%", background: "#34d399", 
+      display: "inline-block", boxShadow: "0 0 8px #34d399",
+      animation: "pulseDot 2s infinite" 
+    }} />
+    <span style={{ fontSize: 10, fontWeight: 700, color: "#34d399", letterSpacing: "0.05em", fontFamily: "'DM Mono', monospace" }}>
+      {onlineCount} ONLINE
+    </span>
+  </div>
+</div>
 
             <div className="header-controls" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
               {!isAdmin ? (
