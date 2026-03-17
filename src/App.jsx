@@ -455,7 +455,7 @@ const TOP_BAR_TICKERS = [
   { ticker: "XRP-USD", label: "XRP",     color: "#34d399" },
 ];
 
-function TopBar({ marketData, onlineCount }) {
+function TopBar({ marketData }) {
   const barRef   = useRef(null);
   const clockRef = useRef(null);
   const [scale, setScale]     = useState(1);
@@ -561,7 +561,6 @@ function TopBar({ marketData, onlineCount }) {
               animation: "pulseDot 2s infinite" 
             }} />
             <span style={{ fontSize: 9, fontWeight: 700, color: "#34d399", letterSpacing: "0.05em", fontFamily: "'DM Mono', monospace" }}>
-              {onlineCount} ONLINE
             </span>
           </div>
         </div>
@@ -636,7 +635,6 @@ function TopBar({ marketData, onlineCount }) {
             animation: "pulseDot 2s infinite" 
           }} />
           <span style={{ fontSize: 11, fontWeight: 700, color: "#34d399", letterSpacing: "0.05em", fontFamily: "'DM Mono', monospace" }}>
-            {onlineCount} ONLINE
           </span>
         </div>
       </div>
@@ -2691,13 +2689,27 @@ export default function App() {
       <style>{GLOBAL_STYLES}</style>
       <div style={{ position: "relative", zIndex: 1, minHeight: "100vh", color: "#fff" }}>
         
-        <TopBar marketData={marketData} onlineCount={onlineCount} />
+        <TopBar marketData={marketData} />
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", marginTop: "var(--topbar-h, 72px)", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
           
           {/* LEFT SIDE: Title & Controls Stacked */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <div style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", letterSpacing: "-0.01em" }}>AI Capex Flow Intelligence</div>
+            <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
+  <div style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", letterSpacing: "-0.01em" }}>
+    AI Capex Flow Intelligence
+  </div>
+  <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.25)", padding: "3px 8px", borderRadius: 6 }}>
+    <span style={{ 
+      width: 6, height: 6, borderRadius: "50%", background: "#34d399", 
+      display: "inline-block", boxShadow: "0 0 8px #34d399",
+      animation: "pulseDot 2s infinite" 
+    }} />
+    <span style={{ fontSize: 10, fontWeight: 700, color: "#34d399", letterSpacing: "0.05em", fontFamily: "'DM Mono', monospace" }}>
+      {onlineCount} ONLINE
+    </span>
+  </div>
+</div>
 
             <div className="header-controls" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
               {!isAdmin ? (
