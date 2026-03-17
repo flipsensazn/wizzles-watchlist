@@ -558,7 +558,6 @@ function TopBar({ marketData }) {
             <span style={{ 
               width: 5, height: 5, borderRadius: "50%", background: "#34d399", 
               display: "inline-block", boxShadow: "0 0 6px #34d399",
-              animation: "pulseDot 2s infinite" 
             }} />
             <span style={{ fontSize: 9, fontWeight: 700, color: "#34d399", letterSpacing: "0.05em", fontFamily: "'DM Mono', monospace" }}>
             </span>
