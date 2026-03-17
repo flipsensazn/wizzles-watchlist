@@ -455,7 +455,7 @@ const TOP_BAR_TICKERS = [
   { ticker: "XRP-USD", label: "XRP",     color: "#34d399" },
 ];
 
-function TopBar({ marketData }) {
+function TopBar({ marketData, onlineCount }) {
   const barRef   = useRef(null);
   const clockRef = useRef(null);
   const [scale, setScale]     = useState(1);
@@ -554,6 +554,16 @@ function TopBar({ marketData }) {
           borderTop: "1px solid rgba(255,255,255,.04)",
         }}>
           <MarketClockCompact />
+          <div style={{ display: "flex", alignItems: "center", gap: 4, marginLeft: 4, borderLeft: "1px solid rgba(255,255,255,0.1)", paddingLeft: 10 }}>
+            <span style={{ 
+              width: 5, height: 5, borderRadius: "50%", background: "#34d399", 
+              display: "inline-block", boxShadow: "0 0 6px #34d399",
+              animation: "pulseDot 2s infinite" 
+            }} />
+            <span style={{ fontSize: 9, fontWeight: 700, color: "#34d399", letterSpacing: "0.05em", fontFamily: "'DM Mono', monospace" }}>
+              {onlineCount} ONLINE
+            </span>
+          </div>
         </div>
       </div>
     );
@@ -617,8 +627,18 @@ function TopBar({ marketData }) {
           );
         })}
       </div>
-      <div ref={clockRef} style={{ flexShrink: 0, marginLeft: 14 }}>
+      <div ref={clockRef} style={{ flexShrink: 0, marginLeft: 14, display: "flex", alignItems: "center", gap: 16 }}>
         <MarketClock />
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ 
+            width: 6, height: 6, borderRadius: "50%", background: "#34d399", 
+            display: "inline-block", boxShadow: "0 0 8px #34d399",
+            animation: "pulseDot 2s infinite" 
+          }} />
+          <span style={{ fontSize: 11, fontWeight: 700, color: "#34d399", letterSpacing: "0.05em", fontFamily: "'DM Mono', monospace" }}>
+            {onlineCount} ONLINE
+          </span>
+        </div>
       </div>
     </div>
   );
@@ -2336,6 +2356,28 @@ export default function App() {
   const [activeFilter, setActiveFilter] = useState(null);
   const [popup, setPopup] = useState(null); 
 
+  // --- PRESENCE POLLING STATE ---
+  const [onlineCount, setOnlineCount] = useState(1);
+  const sessionId = useRef(crypto.randomUUID());
+
+  useEffect(() => {
+    const pingPresence = async () => {
+      if (document.hidden) return; 
+      try {
+        const res = await fetch(`/presence?session=${sessionId.current}`);
+        const data = await res.json();
+        if (data.count) setOnlineCount(data.count);
+      } catch (e) {
+        console.warn("Presence ping failed");
+      }
+    };
+
+    pingPresence();
+    const id = setInterval(pingPresence, 30000);
+    return () => clearInterval(id);
+  }, []);
+  // ------------------------------
+
   // ── PRIMARY DATA FETCH ──
   useEffect(() => {
     fetch("/scanner")
@@ -2649,7 +2691,7 @@ export default function App() {
       <style>{GLOBAL_STYLES}</style>
       <div style={{ position: "relative", zIndex: 1, minHeight: "100vh", color: "#fff" }}>
         
-        <TopBar marketData={marketData} />
+        <TopBar marketData={marketData} onlineCount={onlineCount} />
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", marginTop: "var(--topbar-h, 72px)", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
           
