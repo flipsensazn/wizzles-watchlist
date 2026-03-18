@@ -3017,7 +3017,8 @@ export default function App() {
               </div>
             </div>
           </div>
-     
+       </div>
+      </div>
       {/* TICKER TAPE */}
       <div style={{ 
         position: "fixed", 
