@@ -2352,6 +2352,8 @@ const GLOBAL_STYLES = `
   .span-1 { grid-column: span 1; }
   .panel-wrapper { position: relative; height: 600px; min-height: 600px; }
   .panel-inner { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+  .watchlist-wrapper { position: relative; height: 100%; min-height: 400px; }
+  .watchlist-inner { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; }
   .panel-tall { height: 850px !important; min-height: 850px !important; }
   @media (max-width: 1024px) { .panel-tall { min-height: 700px !important; height: auto !important; } }
   @media (max-width: 767px) { .panel-tall { min-height: 550px !important; } }
@@ -2360,6 +2362,8 @@ const GLOBAL_STYLES = `
     .span-2, .span-1 { grid-column: 1 / -1 !important; }
     .panel-wrapper { min-height: 500px; height: auto; }
     .panel-inner { position: relative; height: 100%; }
+    .watchlist-wrapper { height: 600px; min-height: 600px; }
+    .watchlist-inner { position: relative; }
   }
   @media (max-width: 1100px) {
     .side-panel { display: none !important; }
@@ -2994,14 +2998,16 @@ export default function App() {
           <div>
             <div className="bottom-grid-all">
               
-              {/* 1. Heat Map: Naturally dictates the height of this row */}
-              <div className="span-2" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+              {/* 1. Heat Map dictates the row height naturally */}
+              <div className="span-2" style={{ display: "flex", flexDirection: "column" }}>
                 <HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} timeline={timeline} setTimeline={setTimeline} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} activeFilter={activeFilter} setActiveFilter={setActiveFilter} />
               </div>
               
-              {/* 2. Watchlist: Stretches to match Heat Map's height, scrolling internally if its own list is too long */}
-              <div className="span-1" style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
-                <Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} timeline={timeline} activeFilter={activeFilter} />
+              {/* 2. Watchlist absolute trick matches the row height and scrolls */}
+              <div className="span-1 watchlist-wrapper">
+                <div className="watchlist-inner">
+                  <Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} timeline={timeline} activeFilter={activeFilter} />
+                </div>
               </div>
 
               {/* 3 & 4. Keep fixed heights for the bottom row */}
