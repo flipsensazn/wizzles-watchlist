@@ -205,6 +205,47 @@ function getAllTickers(data = CAPEX_DATA) {
 }
 
 // ── UI COMPONENTS ─────────────────────────────────────────
+
+function EditableLabel({ text, onSave, isAdmin, style, textStyles }) {
+  const [isEditing, setIsEditing] = useState(false);
+  const [val, setVal] = useState(text);
+
+  if (!isEditing) {
+    return (
+      <span
+        onDoubleClick={(e) => {
+          if (isAdmin) {
+            e.stopPropagation();
+            setIsEditing(true);
+          }
+        }}
+        style={{ ...style, ...textStyles, cursor: isAdmin ? "text" : "default" }}
+        title={isAdmin ? "Double-click to edit" : undefined}
+      >
+        {text}
+      </span>
+    );
+  }
+  return (
+    <input
+      autoFocus
+      value={val}
+      onChange={e => setVal(e.target.value)}
+      onBlur={() => {
+        setIsEditing(false);
+        if (val.trim() && val !== text) onSave(val.trim());
+        else setVal(text);
+      }}
+      onKeyDown={e => {
+        if (e.key === "Enter") e.currentTarget.blur();
+        if (e.key === "Escape") { setVal(text); setIsEditing(false); }
+      }}
+      style={{ ...style, ...textStyles, background: "rgba(0,0,0,0.3)", border: "1px dashed #64748b", outline: "none", padding: "0 4px", borderRadius: 4 }}
+      onClick={e => e.stopPropagation()}
+    />
+  );
+}
+
 const Badge = memo(function Badge({ text, color }) {
   return (
     <span style={{
@@ -887,7 +928,7 @@ const TickerChip = memo(function TickerChip({ symbol, changeData, onRemove, onTi
 });
 
 // ── SUBSECTOR CARD ────────────────────────────────────────
-function SubsectorCard({ sub, prices, isAdmin, onAddTicker, onRemoveTicker, onTickerClick }) {
+function SubsectorCard({ sub, prices, isAdmin, onAddTicker, onRemoveTicker, onTickerClick, onRemoveSubsector, onRenameSubsector }) {
   const [open, setOpen] = useState(false);
   const [addingTicker, setAddingTicker] = useState(false);
   const [newTicker, setNewTicker] = useState("");
@@ -904,8 +945,23 @@ function SubsectorCard({ sub, prices, isAdmin, onAddTicker, onRemoveTicker, onTi
       background: isBottleneck ? "rgba(239,68,68,0.06)" : "rgba(255,255,255,0.03)", padding: 14, display: "flex", flexDirection: "column", gap: 10,
     }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-        <span style={{ fontSize: 12, fontWeight: 600, color: "#cbd5e1", lineHeight: 1.4 }}>{sub.label}</span>
-        {sub.badge && <Badge text={sub.badge} color={sub.badgeColor} />}
+        <EditableLabel 
+          text={sub.label} 
+          isAdmin={isAdmin} 
+          onSave={onRenameSubsector} 
+          style={{ flex: 1 }}
+          textStyles={{ fontSize: 12, fontWeight: 600, color: "#cbd5e1", lineHeight: 1.4 }}
+        />
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          {sub.badge && <Badge text={sub.badge} color={sub.badgeColor} />}
+          {isAdmin && (
+            <button
+              onClick={(e) => { e.stopPropagation(); onRemoveSubsector(); }}
+              title="Remove Sub-sector"
+              style={{ background: "none", border: "none", color: "#ef4444", fontSize: 14, cursor: "pointer", padding: "0 2px", lineHeight: 1, fontFamily: "inherit" }}
+            >×</button>
+          )}
+        </div>
       </div>
       <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
         {sub.tickers.map(t => (
@@ -952,7 +1008,7 @@ function SubsectorCard({ sub, prices, isAdmin, onAddTicker, onRemoveTicker, onTi
 }
 
 // ── TRACK CARD ────────────────────────────────────────────
-const TrackCard = memo(function TrackCard({ track, isActive, onClick }) {
+const TrackCard = memo(function TrackCard({ track, isActive, onClick, isAdmin, onRenameSector }) {
   return (
     <div onClick={onClick} style={{
       position: "relative", borderRadius: 14, padding: "14px 12px", minHeight: 120, cursor: "pointer", userSelect: "none",
@@ -962,7 +1018,9 @@ const TrackCard = memo(function TrackCard({ track, isActive, onClick }) {
       {isActive && (
         <div style={{ position: "absolute", top: -11, left: "50%", transform: "translateX(-50%)", background: `linear-gradient(90deg, ${track.borderColor}, ${track.color})`, color: "#000", fontSize: 9, fontWeight: 800, padding: "2px 10px", borderRadius: 20, letterSpacing: "0.2em", whiteSpace: "nowrap" }}>YOUR FOCUS</div>
       )}
-      <div style={{ fontSize: 12, fontWeight: 700, color: isActive ? track.color : "#e2e8f0", lineHeight: 1.3 }}>{track.label}</div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: isActive ? track.color : "#e2e8f0", lineHeight: 1.3 }}>
+        <EditableLabel text={track.label} isAdmin={isAdmin} onSave={onRenameSector} />
+      </div>
       <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
         <div style={{ fontSize: 11, color: isActive ? track.color : "#94a3b8", fontWeight: track.isLiveIntel ? 700 : 400 }}>{track.value}</div>
         {track.isLiveIntel && (
@@ -977,7 +1035,7 @@ const TrackCard = memo(function TrackCard({ track, isActive, onClick }) {
 });
 
 // ── TRACK PANE ────────────────────────────────────────────
-function TrackPane({ track, prices, isAdmin, onAddTicker, onRemoveTicker, onTickerClick }) {
+function TrackPane({ track, prices, isAdmin, onAddTicker, onRemoveTicker, onTickerClick, onAddSubsector, onRemoveSubsector, onRenameSubsector }) {
   return (
     <div style={{
       borderRadius: 18, border: `1px solid ${track.borderColor}44`, background: "rgba(24,24,24,0.92)", padding: 22, marginTop: 8, animation: "fadeSlideIn .25s ease-out",
@@ -991,13 +1049,31 @@ function TrackPane({ track, prices, isAdmin, onAddTicker, onRemoveTicker, onTick
           {track.subsectors.length} sub-sectors · {track.subsectors.flatMap(s => s.tickers).length} tickers
         </span>
       </div>
-      <div className="subsector-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(track.subsectors.length, 4)}, minmax(0,1fr))`, gap: 12 }}>
+      <div className="subsector-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(track.subsectors.length + (isAdmin ? 1 : 0), 4)}, minmax(0,1fr))`, gap: 12 }}>
         {track.subsectors.map(sub => (
           <SubsectorCard key={sub.id} sub={sub} prices={prices} isAdmin={isAdmin}
             onAddTicker={(ticker) => onAddTicker(track.id, sub.id, ticker)}
             onRemoveTicker={(ticker) => onRemoveTicker(track.id, sub.id, ticker)}
-            onTickerClick={onTickerClick} />
+            onTickerClick={onTickerClick}
+            onRemoveSubsector={() => onRemoveSubsector(track.id, sub.id)}
+            onRenameSubsector={(newName) => onRenameSubsector(track.id, sub.id, newName)}
+          />
         ))}
+        
+        {isAdmin && (
+          <div
+            onClick={() => onAddSubsector(track.id)}
+            style={{
+              borderRadius: 12, border: "1px dashed rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.02)",
+              display: "flex", alignItems: "center", justifyContent: "center", minHeight: 120,
+              cursor: "pointer", color: "#64748b", fontSize: 12, fontWeight: 600, transition: "all .15s"
+            }}
+            onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.3)"; e.currentTarget.style.color = "#94a3b8"; }}
+            onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)"; e.currentTarget.style.color = "#64748b"; }}
+          >
+            + Add Sub-Sector
+          </div>
+        )}
       </div>
     </div>
   );
@@ -2630,6 +2706,44 @@ export default function App() {
     saveGlobalCapex(newData);
   }
 
+  function addSubsector(trackId) {
+    const newId = `sub-${Date.now()}`;
+    const newSub = { id: newId, label: "New Sub-Sector", badge: null, tickers: [], materials: [] };
+    const newData = {
+      ...capexData,
+      tracks: capexData.tracks.map(t => t.id === trackId ? { ...t, subsectors: [...t.subsectors, newSub] } : t)
+    };
+    saveGlobalCapex(newData);
+  }
+
+  function removeSubsector(trackId, subId) {
+    if (!window.confirm("Are you sure you want to remove this sub-sector?")) return;
+    const newData = {
+      ...capexData,
+      tracks: capexData.tracks.map(t => t.id === trackId ? { ...t, subsectors: t.subsectors.filter(s => s.id !== subId) } : t)
+    };
+    saveGlobalCapex(newData);
+  }
+
+  function renameSubsector(trackId, subId, newName) {
+    const newData = {
+      ...capexData,
+      tracks: capexData.tracks.map(t => t.id === trackId ? {
+        ...t,
+        subsectors: t.subsectors.map(s => s.id === subId ? { ...s, label: newName } : s)
+      } : t)
+    };
+    saveGlobalCapex(newData);
+  }
+
+  function renameSector(trackId, newName) {
+    const newData = {
+      ...capexData,
+      tracks: capexData.tracks.map(t => t.id === trackId ? { ...t, label: newName } : t)
+    };
+    saveGlobalCapex(newData);
+  }
+
   const allTickerCount = useMemo(() => getAllTickers(capexData).length, [capexData]);
   
   const liveCapexData = useMemo(() => {
@@ -2854,13 +2968,25 @@ export default function App() {
           <div className="track-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(0,1fr))", gap: 10, paddingTop: 8 }}>
             {liveCapexData.tracks.map(track => (
               <div key={track.id} style={{ paddingTop: activeTrack === track.id ? 14 : 0 }}>
-                <TrackCard track={track} isActive={activeTrack === track.id} onClick={() => setActiveTrack(p => p === track.id ? null : track.id)} />
+                <TrackCard 
+                  track={track} 
+                  isActive={activeTrack === track.id} 
+                  onClick={() => setActiveTrack(p => p === track.id ? null : track.id)} 
+                  isAdmin={isAdmin}
+                  onRenameSector={(newName) => renameSector(track.id, newName)}
+                />
               </div>
             ))}
           </div>
 
           {activeData && (
-            <TrackPane track={activeData} prices={prices} isAdmin={isAdmin} onAddTicker={addTickerToSubsector} onRemoveTicker={removeTickerFromSubsector} onTickerClick={openPopup} />
+            <TrackPane 
+              track={activeData} prices={prices} isAdmin={isAdmin} 
+              onAddTicker={addTickerToSubsector} onRemoveTicker={removeTickerFromSubsector} onTickerClick={openPopup} 
+              onAddSubsector={addSubsector}
+              onRemoveSubsector={removeSubsector}
+              onRenameSubsector={renameSubsector}
+            />
           )}
 
           <div>
