@@ -2410,7 +2410,6 @@ export default function App() {
   const [marketData, setMarketData] = useState({});
   const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [bottomTab, setBottomTab] = useState("all");
   const [timeline, setTimeline] = useState("1D");
   const [activeFilter, setActiveFilter] = useState(null);
   const [popup, setPopup] = useState(null); 
@@ -2993,45 +2992,28 @@ export default function App() {
           )}
 
           <div>
-            <div style={{ display: "flex", gap: 4, marginBottom: 18, borderBottom: "1px solid rgba(255,255,255,.04)", paddingBottom: 4, flexWrap: "wrap" }}>
-              {[{ id: "all", label: "⬛ All Panels" }, { id: "heatmap", label: "📊 Heat Map" }, { id: "donut", label: "🥧 Allocation" }, { id: "watchlist", label: "👁 Watchlist" }, { id: "multibagger", label: "🚀 Multibagger" }].map(tab => (
-                <button key={tab.id} onClick={() => setBottomTab(tab.id)} style={{ background: bottomTab === tab.id ? "rgba(255,255,255,.06)" : "transparent", border: `1px solid ${bottomTab === tab.id ? "rgba(255,255,255,.1)" : "transparent"}`, color: bottomTab === tab.id ? "#e2e8f0" : "#334155", borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "inherit", transition: "all .2s" }}>{tab.label}</button>
-              ))}
-            </div>
-            
-            {bottomTab === "all" ? (
-              <div className="bottom-grid-all">
-                {/* Add 'panel-tall' to the HeatMap wrapper */}
-                <div className="span-2 panel-wrapper panel-tall">
-                  <div className="panel-inner">
-                    <HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} timeline={timeline} setTimeline={setTimeline} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} activeFilter={activeFilter} setActiveFilter={setActiveFilter} />
-                  </div>
-                </div>
-
-                {/* Add 'panel-tall' to the Watchlist wrapper */}
-                <div className="span-1 panel-wrapper panel-tall">
-                  <div className="panel-inner">
-                    <Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} timeline={timeline} activeFilter={activeFilter} />
-                  </div>
-                </div>
-
-                {/* Leave DonutChart and Multibagger as standard height */}
-                <div className="span-1 panel-wrapper">
-                  <div className="panel-inner">
-                    <DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} capexIntelStatus={capexIntelStatus} capexIntelError={capexIntelError} timeline={timeline} />
-                  </div>
-                </div>
-                <div className="span-2 panel-wrapper">
-                  <div className="panel-inner">
-                    <MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} />
-                  </div>
+            <div className="bottom-grid-all">
+              <div className="span-2 panel-wrapper panel-tall">
+                <div className="panel-inner">
+                  <HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} timeline={timeline} setTimeline={setTimeline} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} activeFilter={activeFilter} setActiveFilter={setActiveFilter} />
                 </div>
               </div>
-            ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} timeline={timeline} setTimeline={setTimeline} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} activeFilter={activeFilter} setActiveFilter={setActiveFilter} />
-              : bottomTab === "donut" ? <DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} capexIntelStatus={capexIntelStatus} capexIntelError={capexIntelError} timeline={timeline} />
-              : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} timeline={timeline} activeFilter={activeFilter} />
-              : <MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} />
-            }
+              <div className="span-1 panel-wrapper panel-tall">
+                <div className="panel-inner">
+                  <Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} timeline={timeline} activeFilter={activeFilter} />
+                </div>
+              </div>
+              <div className="span-1 panel-wrapper">
+                <div className="panel-inner">
+                  <DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} capexIntelStatus={capexIntelStatus} capexIntelError={capexIntelError} timeline={timeline} />
+                </div>
+              </div>
+              <div className="span-2 panel-wrapper">
+                <div className="panel-inner">
+                  <MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} />
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
