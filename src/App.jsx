@@ -1240,7 +1240,7 @@ function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline, isAd
   }
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: isMobile ? "12px 8px" : 20, height: "100%", overflowY: "auto", overflowX: "hidden", boxSizing: "border-box", width: "100%" }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: isMobile ? "12px 8px" : 20, height: "100%", overflowX: "hidden", boxSizing: "border-box", width: "100%" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -2352,6 +2352,8 @@ const GLOBAL_STYLES = `
   .span-1 { grid-column: span 1; }
   .panel-wrapper { position: relative; height: 600px; min-height: 600px; }
   .panel-inner { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
+  .watchlist-wrapper { position: relative; height: 100%; min-height: 400px; }
+  .watchlist-inner { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; }
   .panel-tall { height: 850px !important; min-height: 850px !important; }
   @media (max-width: 1024px) { .panel-tall { min-height: 700px !important; height: auto !important; } }
   @media (max-width: 767px) { .panel-tall { min-height: 550px !important; } }
@@ -2360,6 +2362,8 @@ const GLOBAL_STYLES = `
     .span-2, .span-1 { grid-column: 1 / -1 !important; }
     .panel-wrapper { min-height: 500px; height: auto; }
     .panel-inner { position: relative; height: 100%; }
+    .watchlist-wrapper { height: 600px; min-height: 600px; }
+    .watchlist-inner { position: relative; }
   }
   @media (max-width: 1100px) {
     .side-panel { display: none !important; }
@@ -2410,7 +2414,6 @@ export default function App() {
   const [marketData, setMarketData] = useState({});
   const [lastUpdated, setLastUpdated] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [bottomTab, setBottomTab] = useState("all");
   const [timeline, setTimeline] = useState("1D");
   const [activeFilter, setActiveFilter] = useState(null);
   const [popup, setPopup] = useState(null); 
@@ -2993,49 +2996,35 @@ export default function App() {
           )}
 
           <div>
-            <div style={{ display: "flex", gap: 4, marginBottom: 18, borderBottom: "1px solid rgba(255,255,255,.04)", paddingBottom: 4, flexWrap: "wrap" }}>
-              {[{ id: "all", label: "⬛ All Panels" }, { id: "heatmap", label: "📊 Heat Map" }, { id: "donut", label: "🥧 Allocation" }, { id: "watchlist", label: "👁 Watchlist" }, { id: "multibagger", label: "🚀 Multibagger" }].map(tab => (
-                <button key={tab.id} onClick={() => setBottomTab(tab.id)} style={{ background: bottomTab === tab.id ? "rgba(255,255,255,.06)" : "transparent", border: `1px solid ${bottomTab === tab.id ? "rgba(255,255,255,.1)" : "transparent"}`, color: bottomTab === tab.id ? "#e2e8f0" : "#334155", borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "inherit", transition: "all .2s" }}>{tab.label}</button>
-              ))}
-            </div>
-            
-            {bottomTab === "all" ? (
-              <div className="bottom-grid-all">
-                {/* Add 'panel-tall' to the HeatMap wrapper */}
-                <div className="span-2 panel-wrapper panel-tall">
-                  <div className="panel-inner">
-                    <HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} timeline={timeline} setTimeline={setTimeline} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} activeFilter={activeFilter} setActiveFilter={setActiveFilter} />
-                  </div>
-                </div>
-
-                {/* Add 'panel-tall' to the Watchlist wrapper */}
-                <div className="span-1 panel-wrapper panel-tall">
-                  <div className="panel-inner">
-                    <Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} timeline={timeline} activeFilter={activeFilter} />
-                  </div>
-                </div>
-
-                {/* Leave DonutChart and Multibagger as standard height */}
-                <div className="span-1 panel-wrapper">
-                  <div className="panel-inner">
-                    <DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} capexIntelStatus={capexIntelStatus} capexIntelError={capexIntelError} timeline={timeline} />
-                  </div>
-                </div>
-                <div className="span-2 panel-wrapper">
-                  <div className="panel-inner">
-                    <MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} />
-                  </div>
+            <div className="bottom-grid-all">
+              
+              {/* 1. Heat Map dictates the row height naturally */}
+              <div className="span-2" style={{ display: "flex", flexDirection: "column" }}>
+                <HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} timeline={timeline} setTimeline={setTimeline} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} activeFilter={activeFilter} setActiveFilter={setActiveFilter} />
+              </div>
+              
+              {/* 2. Watchlist absolute trick matches the row height and scrolls */}
+              <div className="span-1 watchlist-wrapper">
+                <div className="watchlist-inner">
+                  <Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} timeline={timeline} activeFilter={activeFilter} />
                 </div>
               </div>
-            ) : bottomTab === "heatmap" ? <HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} timeline={timeline} setTimeline={setTimeline} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} activeFilter={activeFilter} setActiveFilter={setActiveFilter} />
-              : bottomTab === "donut" ? <DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} capexIntelStatus={capexIntelStatus} capexIntelError={capexIntelError} timeline={timeline} />
-              : bottomTab === "watchlist" ? <Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} timeline={timeline} activeFilter={activeFilter} />
-              : <MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} />
-            }
+
+              {/* 3 & 4. Keep fixed heights for the bottom row */}
+              <div className="span-1 panel-wrapper">
+                <div className="panel-inner">
+                  <DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} capexIntelStatus={capexIntelStatus} capexIntelError={capexIntelError} timeline={timeline} />
+                </div>
+              </div>
+              <div className="span-2 panel-wrapper">
+                <div className="panel-inner">
+                  <MultibaggerPanel prices={prices} scannerPool={scannerPool} isAdmin={isAdmin} onSaveScanner={saveGlobalScanner} onTickerClick={openPopup} />
+                </div>
+              </div>
+            </div>
           </div>
-        </div>
+       </div>
       </div>
-     
       {/* TICKER TAPE */}
       <div style={{ 
         position: "fixed", 
