@@ -1240,7 +1240,7 @@ function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline, isAd
   }
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: isMobile ? "12px 8px" : 20, height: "100%", overflowY: "auto", overflowX: "hidden", boxSizing: "border-box", width: "100%" }}>
+    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: isMobile ? "12px 8px" : 20, height: "100%", overflowX: "hidden", boxSizing: "border-box", width: "100%" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -2993,16 +2993,18 @@ export default function App() {
 
           <div>
             <div className="bottom-grid-all">
-              <div className="span-2 panel-wrapper panel-tall">
-                <div className="panel-inner">
-                  <HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} timeline={timeline} setTimeline={setTimeline} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} activeFilter={activeFilter} setActiveFilter={setActiveFilter} />
-                </div>
+              
+              {/* 1. Heat Map: Naturally dictates the height of this row */}
+              <div className="span-2" style={{ display: "flex", flexDirection: "column", height: "100%" }}>
+                <HeatMap prices={prices} capexData={liveCapexData} onTickerClick={openPopup} timeline={timeline} setTimeline={setTimeline} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} activeFilter={activeFilter} setActiveFilter={setActiveFilter} />
               </div>
-              <div className="span-1 panel-wrapper panel-tall">
-                <div className="panel-inner">
-                  <Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} timeline={timeline} activeFilter={activeFilter} />
-                </div>
+              
+              {/* 2. Watchlist: Stretches to match Heat Map's height, scrolling internally if its own list is too long */}
+              <div className="span-1" style={{ display: "flex", flexDirection: "column", height: "100%", minHeight: 0 }}>
+                <Watchlist prices={prices} capexData={liveCapexData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} timeline={timeline} activeFilter={activeFilter} />
               </div>
+
+              {/* 3 & 4. Keep fixed heights for the bottom row */}
               <div className="span-1 panel-wrapper">
                 <div className="panel-inner">
                   <DonutChart prices={prices} capexData={liveCapexData} capexIntel={capexIntel} capexIntelStatus={capexIntelStatus} capexIntelError={capexIntelError} timeline={timeline} />
@@ -3015,8 +3017,6 @@ export default function App() {
               </div>
             </div>
           </div>
-        </div>
-      </div>
      
       {/* TICKER TAPE */}
       <div style={{ 
