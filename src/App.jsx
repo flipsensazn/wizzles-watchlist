@@ -2345,7 +2345,7 @@ const GLOBAL_STYLES = `
     50% { box-shadow: 0 0 24px rgba(52,211,153,0.9), 0 0 40px rgba(52,211,153,0.35), inset 0 0 20px rgba(52,211,153,0.18); border-color: #34d399; }
   }
   @keyframes pulseDot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(.7); } }
-  .ticker-tape { animation: scroll-left 130s linear infinite; white-space: nowrap; display: inline-flex; gap: 24px; }
+  .ticker-tape { animation: scroll-left 200s linear infinite; white-space: nowrap; display: inline-flex; gap: 24px; }
   .pulse { animation: pulseDot 2s infinite; }
   .bottom-grid-all { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
   .span-2 { grid-column: span 2; }
@@ -2858,7 +2858,7 @@ export default function App() {
 
         </div>
 
-        <div className="main-content" style={{ maxWidth: 1480, margin: "0 auto", padding: "32px 20px", display: "flex", flexDirection: "column", gap: 28, overflowX: "hidden", boxSizing: "border-box", width: "100%" }}>
+        <div className="main-content" style={{ maxWidth: 1480, margin: "0 auto", padding: "32px 20px 64px", display: "flex", flexDirection: "column", gap: 28, overflowX: "hidden", boxSizing: "border-box", width: "100%" }}>
           
           <div className="top-node-layout" style={{ display: "flex", alignItems: "stretch", justifyContent: "center", gap: 20, width: "100%" }}>
             
@@ -3035,8 +3035,20 @@ export default function App() {
           </div>
         </div>
       </div>
+     
       {/* TICKER TAPE */}
-      <div style={{ position: "sticky", bottom: 0, zIndex: 50, height: 34, overflow: "hidden", borderTop: "1px solid rgba(255,255,255,.04)", background: "rgba(18,18,18,0.95)", padding: "6px 0" }}>
+      <div style={{ 
+        position: "fixed", 
+        bottom: 0, 
+        left: 0,          
+        right: 0,         
+        zIndex: 50, 
+        height: 34, 
+        overflow: "hidden", 
+        borderTop: "1px solid rgba(255,255,255,.04)", 
+        background: "rgba(18,18,18,0.95)", 
+        padding: "6px 0" 
+      }}>
         {tickerEntries.length > 0 && (
           <div className="ticker-tape">
             {[...tickerEntries, ...tickerEntries].map(([sym, val], i) => {
