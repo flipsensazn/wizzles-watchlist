@@ -2360,10 +2360,10 @@ const GLOBAL_STYLES = `
   @media (max-width: 1024px) {
     .bottom-grid-all { grid-template-columns: 1fr !important; }
     .span-2, .span-1 { grid-column: 1 / -1 !important; }
-    .panel-wrapper { min-height: 500px; height: auto; }
-    .panel-inner { position: relative; height: 100%; }
-    .watchlist-wrapper { height: 600px; min-height: 600px; }
-    .watchlist-inner { position: relative; }
+    .panel-wrapper { position: relative; height: auto !important; min-height: unset !important; }
+    .panel-inner { position: relative !important; height: auto !important; min-height: 500px; }
+    .watchlist-wrapper { position: relative !important; height: auto !important; min-height: 600px; }
+    .watchlist-inner { position: relative !important; height: auto !important; }
   }
   @media (max-width: 1100px) {
     .side-panel { display: none !important; }
