@@ -2233,6 +2233,7 @@ function AdminModal({ onClose, onSuccess }) {
 // ── BLOOMBERG FEED COMPONENT ────────────────────────────
 const BloombergFeed = memo(function BloombergFeed() {
   const [news, setNews] = useState([]);
+  const [feedMode, setFeedMode] = useState("today");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
@@ -2243,6 +2244,7 @@ const BloombergFeed = memo(function BloombergFeed() {
         .then(data => {
           if (data.news) {
             setNews(data.news);
+            setFeedMode(data.mode || "today");
             setError(null);
           } else {
             setError(data.error || "Failed to load feed");
@@ -2278,11 +2280,14 @@ const BloombergFeed = memo(function BloombergFeed() {
   }
 
   if (news.length === 0) {
-    return <div style={{ padding: 16, color: "#475569", fontSize: 11, textAlign: "center" }}>No news for today yet.</div>;
+    return <div style={{ padding: 16, color: "#475569", fontSize: 11, textAlign: "center" }}>No recent Bloomberg headlines available yet.</div>;
   }
 
   return (
     <div style={{ display: "flex", flexDirection: "column" }}>
+      <div style={{ padding: "10px 14px 0", color: "#64748b", fontSize: 10, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+        {feedMode === "today" ? "Today in New York market time" : "Latest available headlines"}
+      </div>
       {news.map((item, i) => {
         const timeStr = new Date(item.timestamp).toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" });
         return (

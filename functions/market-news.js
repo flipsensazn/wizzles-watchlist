@@ -1,12 +1,17 @@
 // functions/market-news.js
 
 export async function onRequest(context) {
-  const { request } = context;
+  const { request, env } = context;
+
+  const ALLOWED_ORIGIN = env.ALLOWED_ORIGIN || "";
+  const origin = request.headers.get("Origin") || "";
+  const corsOrigin = origin === ALLOWED_ORIGIN ? ALLOWED_ORIGIN : "";
 
   const headers = {
-    "Access-Control-Allow-Origin": "*",
+    "Access-Control-Allow-Origin": corsOrigin,
     "Content-Type": "application/json",
     "Cache-Control": "public, max-age=60", // <-- Updated to 60 seconds (1 minute)
+    "Vary": "Origin",
   };
 
   if (request.method === "OPTIONS") {
@@ -65,7 +70,8 @@ export async function onRequest(context) {
       }
     }
 
-    // Filter to ONLY show posts from the current calendar day (using NY Market Time)
+    // Prefer today's items in NY market time, but fall back to the most recent
+    // headlines so the panel does not go blank across weekends and holidays.
     const formatter = new Intl.DateTimeFormat("en-US", { 
       timeZone: "America/New_York", 
       year: "numeric", month: "2-digit", day: "2-digit" 
@@ -77,15 +83,20 @@ export async function onRequest(context) {
        return itemDateStr === todayStr; // Keep only if it matches today's date
     });
 
-    // Sort chronologically by newest first
-    todaysItems.sort((a, b) => b.timestamp - a.timestamp);
+    const recentItems = (todaysItems.length > 0 ? todaysItems : allItems)
+      .filter(item => Number.isFinite(item.timestamp))
+      .sort((a, b) => b.timestamp - a.timestamp)
+      .slice(0, 25);
 
     // Deduplicate by URL (in case an article overlaps feeds)
     const uniqueMap = new Map();
-    todaysItems.forEach(t => uniqueMap.set(t.link, t));
+    recentItems.forEach(t => uniqueMap.set(t.link, t));
     const uniqueItems = Array.from(uniqueMap.values());
 
-    return new Response(JSON.stringify({ news: uniqueItems }), { status: 200, headers });
+    return new Response(JSON.stringify({
+      news: uniqueItems,
+      mode: todaysItems.length > 0 ? "today" : "recent",
+    }), { status: 200, headers });
 
   } catch (err) {
     return new Response(JSON.stringify({ error: err.message }), { status: 500, headers });
