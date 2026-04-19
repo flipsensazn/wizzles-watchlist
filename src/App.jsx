@@ -4,6 +4,8 @@ import BloombergFeed from "./components/BloombergFeed";
 import FearGreedGauge from "./components/FearGreedGauge";
 import StatusBanner from "./components/StatusBanner";
 import TopBar from "./components/TopBar";
+import TrackCard from "./components/capex-map/TrackCard";
+import TrackPane from "./components/capex-map/TrackPane";
 import { useAdminActions } from "./hooks/useAdminActions";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { usePresence } from "./hooks/usePresence";
@@ -495,194 +497,6 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
 }
 
 // ── TICKER CHIP ───────────────────────────────────────────
-const TickerChip = memo(function TickerChip({ symbol, changeData, onRemove, onTickerClick }) {
-  const [hovered, setHovered] = useState(false);
-  const change = changeData?.change ?? changeData;
-  const session = changeData?.session;
-  const pos = (change ?? 0) >= 0;
-  const changeColor = change === undefined ? "#475569" : pos ? "#34d399" : "#f87171";
-  const sessionLabel = session === "POST" || session === "CLOSED" ? "AH" : session === "PRE" ? "PM" : null;
-
-  return (
-    <div
-      onMouseEnter={() => setHovered(true)} onMouseLeave={() => setHovered(false)}
-      onClick={e => { e.stopPropagation(); onTickerClick?.(symbol, e.currentTarget.getBoundingClientRect()); }}
-      style={{
-        display: "flex", alignItems: "center", gap: 6, padding: "5px 10px",
-        background: hovered ? "rgba(255,255,255,0.09)" : "rgba(255,255,255,0.05)",
-        border: `1px solid ${hovered ? "rgba(255,255,255,0.22)" : "rgba(255,255,255,0.10)"}`,
-        borderRadius: 8, cursor: "pointer", transition: "background .15s, border-color .15s", position: "relative",
-      }}>
-      <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{symbol}</span>
-      {change !== undefined ? <span style={{ fontSize: 11, fontWeight: 600, color: changeColor }}>{pos ? "+" : ""}{change}%</span> : <span style={{ fontSize: 11, color: "#475569" }}>…</span>}
-      {sessionLabel && <span style={{ fontSize: 8, fontWeight: 700, color: "#64748b", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 2, padding: "1px 3px", letterSpacing: "0.05em" }}>{sessionLabel}</span>}
-      {hovered && onRemove && (
-        <button
-          onClick={e => { e.stopPropagation(); onRemove(); }}
-          style={{
-            position: "absolute", top: -6, right: -6, width: 16, height: 16,
-            borderRadius: "50%", background: "#ef4444", border: "none",
-            color: "#fff", fontSize: 10, fontWeight: 700, cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            lineHeight: 1, padding: 0, fontFamily: "inherit",
-          }}>×</button>
-      )}
-    </div>
-  );
-});
-
-// ── SUBSECTOR CARD ────────────────────────────────────────
-function SubsectorCard({ sub, prices, isAdmin, onAddTicker, onRemoveTicker, onTickerClick, onRemoveSubsector, onRenameSubsector }) {
-  const [open, setOpen] = useState(false);
-  const [addingTicker, setAddingTicker] = useState(false);
-  const [newTicker, setNewTicker] = useState("");
-  const isBottleneck = sub.badge === "EXTREME BOTTLENECK" || sub.badge === "GRID BOTTLENECK";
-  const isHot = sub.badge === "HIGH DEMAND" || sub.badge === "RAPID GROWTH";
-
-  function handleAdd() {
-    if (newTicker.trim()) { onAddTicker(newTicker.trim()); setNewTicker(""); setAddingTicker(false); }
-  }
-
-  return (
-    <div style={{
-      borderRadius: 12, border: `1px solid ${isBottleneck ? "rgba(239,68,68,.35)" : isHot ? "rgba(245,158,11,.25)" : "rgba(255,255,255,0.07)"}`,
-      background: isBottleneck ? "rgba(239,68,68,0.06)" : "rgba(255,255,255,0.03)", padding: 14, display: "flex", flexDirection: "column", gap: 10,
-    }}>
-      <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8, flexWrap: "wrap" }}>
-        <EditableLabel 
-          text={sub.label} 
-          isAdmin={isAdmin} 
-          onSave={onRenameSubsector} 
-          style={{ flex: 1 }}
-          textStyles={{ fontSize: 12, fontWeight: 600, color: "#cbd5e1", lineHeight: 1.4 }}
-        />
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          {sub.badge && <Badge text={sub.badge} color={sub.badgeColor} />}
-          {isAdmin && (
-            <button
-              onClick={(e) => { e.stopPropagation(); onRemoveSubsector(); }}
-              title="Remove Sub-sector"
-              style={{ background: "none", border: "none", color: "#ef4444", fontSize: 14, cursor: "pointer", padding: "0 2px", lineHeight: 1, fontFamily: "inherit" }}
-            >×</button>
-          )}
-        </div>
-      </div>
-      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-        {sub.tickers.map(t => (
-          <TickerChip key={t} symbol={t} changeData={prices[t]} 
-            onRemove={isAdmin ? () => onRemoveTicker(t) : undefined} 
-            onTickerClick={onTickerClick} />
-        ))}
-      </div>
-      {sub.materials?.length > 0 && (
-        <div>
-          <button onClick={() => setOpen(v => !v)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, padding: 0, fontFamily: "inherit" }}>
-            <span style={{ display: "inline-block", transition: "transform .2s", transform: open ? "rotate(90deg)" : "rotate(0deg)" }}>▶</span> Raw Materials ({sub.materials.length})
-          </button>
-          {open && (
-            <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
-              {sub.materials.map((m, i) => typeof m === "string"
-                ? <span key={i} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#94a3b8" }}>{m}</span>
-                : <span key={i} title={m.constraint} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 4, background: m.color + "15", border: `1px solid ${m.color}55`, color: m.color, fontWeight: 600 }}>⚠ {m.name}</span>
-              )}
-            </div>
-          )}
-        </div>
-      )}
-      
-      <div style={{ marginTop: 2 }}>
-        {isAdmin && (
-          !addingTicker ? (
-            <button onClick={() => setAddingTicker(true)} style={{
-              background: "none", border: "1px dashed rgba(255,255,255,0.1)", borderRadius: 6, color: "#334155", fontSize: 11, padding: "4px 10px", cursor: "pointer", width: "100%", fontFamily: "inherit", transition: "all .15s",
-            }} onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.25)"; e.currentTarget.style.color = "#64748b"; }} onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)"; e.currentTarget.style.color = "#334155"; }}>
-              + add ticker
-            </button>
-          ) : (
-            <div style={{ display: "flex", gap: 6 }}>
-              <input autoFocus value={newTicker} onChange={e => setNewTicker(e.target.value.toUpperCase())} onKeyDown={e => { if (e.key === "Enter") handleAdd(); if (e.key === "Escape") { setAddingTicker(false); setNewTicker(""); } }} placeholder="e.g. NVDA" style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, padding: "5px 8px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit", outline: "none" }} />
-              <button onClick={handleAdd} style={{ background: "rgba(96,165,250,0.15)", border: "1px solid rgba(96,165,250,0.3)", color: "#60a5fa", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>✓</button>
-              <button onClick={() => { setAddingTicker(false); setNewTicker(""); }} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>✕</button>
-            </div>
-          )
-        )}
-      </div>
-    </div>
-  );
-}
-
-// ── TRACK CARD ────────────────────────────────────────────
-const TrackCard = memo(function TrackCard({ track, isActive, onClick, isAdmin, onRenameSector }) {
-  return (
-    <div onClick={onClick} style={{
-      position: "relative", borderRadius: 14, padding: "14px 12px", minHeight: 120, cursor: "pointer", userSelect: "none",
-      background: isActive ? `linear-gradient(135deg,${track.borderColor}28 0%,rgba(18,18,18,.95) 100%)` : "rgba(255,255,255,0.03)",
-      border: `1px solid ${isActive ? track.borderColor : "rgba(255,255,255,0.09)"}`, display: "flex", flexDirection: "column", gap: 8, transition: "all .2s",
-    }} onMouseEnter={e => { if (!isActive) { e.currentTarget.style.background = "rgba(255,255,255,0.06)"; e.currentTarget.style.borderColor = `${track.color}44`; } }} onMouseLeave={e => { if (!isActive) { e.currentTarget.style.background = "rgba(255,255,255,0.03)"; e.currentTarget.style.borderColor = "rgba(255,255,255,0.09)"; } }}>
-      {isActive && (
-        <div style={{ position: "absolute", top: -11, left: "50%", transform: "translateX(-50%)", background: `linear-gradient(90deg, ${track.borderColor}, ${track.color})`, color: "#000", fontSize: 9, fontWeight: 800, padding: "2px 10px", borderRadius: 20, letterSpacing: "0.2em", whiteSpace: "nowrap" }}>YOUR FOCUS</div>
-      )}
-      <div style={{ fontSize: 12, fontWeight: 700, color: isActive ? track.color : "#e2e8f0", lineHeight: 1.3 }}>
-        <EditableLabel text={track.label} isAdmin={isAdmin} onSave={onRenameSector} />
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-        <div style={{ fontSize: 11, color: isActive ? track.color : "#94a3b8", fontWeight: track.isLiveIntel ? 700 : 400 }}>{track.value}</div>
-        {track.isLiveIntel && (
-          <span title="Updated by live intel" style={{ width: 5, height: 5, borderRadius: "50%", background: "#34d399", display: "inline-block", boxShadow: "0 0 5px #34d399", flexShrink: 0 }} />
-        )}
-      </div>
-      <div style={{ fontSize: 10, color: "#475569" }}>{track.subsectors.flatMap(s => s.tickers).length} tickers</div>
-      <div style={{ height: 2, borderRadius: 2, background: `linear-gradient(90deg,${track.borderColor},${track.color},transparent)`, opacity: isActive ? 1 : 0.3, marginTop: "auto" }} />
-      <div style={{ fontSize: 10, color: isActive ? track.color : "#334155", textAlign: "center" }}>{isActive ? "▲ collapse" : "▼ expand"}</div>
-    </div>
-  );
-});
-
-// ── TRACK PANE ────────────────────────────────────────────
-function TrackPane({ track, prices, isAdmin, onAddTicker, onRemoveTicker, onTickerClick, onAddSubsector, onRemoveSubsector, onRenameSubsector }) {
-  return (
-    <div style={{
-      borderRadius: 18, border: `1px solid ${track.borderColor}44`, background: "rgba(24,24,24,0.92)", padding: 22, marginTop: 8, animation: "fadeSlideIn .25s ease-out",
-    }}>
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8 }}>
-        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-          <div style={{ width: 10, height: 10, borderRadius: "50%", background: track.color, boxShadow: `0 0 8px ${track.color}` }} />
-          <h3 style={{ fontSize: 15, fontWeight: 700, color: track.color }}>{track.label}</h3>
-        </div>
-        <span style={{ fontSize: 11, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase" }}>
-          {track.subsectors.length} sub-sectors · {track.subsectors.flatMap(s => s.tickers).length} tickers
-        </span>
-      </div>
-      <div className="subsector-grid" style={{ display: "grid", gridTemplateColumns: `repeat(${Math.min(track.subsectors.length + (isAdmin ? 1 : 0), 4)}, minmax(0,1fr))`, gap: 12 }}>
-        {track.subsectors.map(sub => (
-          <SubsectorCard key={sub.id} sub={sub} prices={prices} isAdmin={isAdmin}
-            onAddTicker={(ticker) => onAddTicker(track.id, sub.id, ticker)}
-            onRemoveTicker={(ticker) => onRemoveTicker(track.id, sub.id, ticker)}
-            onTickerClick={onTickerClick}
-            onRemoveSubsector={() => onRemoveSubsector(track.id, sub.id)}
-            onRenameSubsector={(newName) => onRenameSubsector(track.id, sub.id, newName)}
-          />
-        ))}
-        
-        {isAdmin && (
-          <div
-            onClick={() => onAddSubsector(track.id)}
-            style={{
-              borderRadius: 12, border: "1px dashed rgba(255,255,255,0.15)", background: "rgba(255,255,255,0.02)",
-              display: "flex", alignItems: "center", justifyContent: "center", minHeight: 120,
-              cursor: "pointer", color: "#64748b", fontSize: 12, fontWeight: 600, transition: "all .15s"
-            }}
-            onMouseEnter={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.3)"; e.currentTarget.style.color = "#94a3b8"; }}
-            onMouseLeave={e => { e.currentTarget.style.borderColor = "rgba(255,255,255,0.15)"; e.currentTarget.style.color = "#64748b"; }}
-          >
-            + Add Sub-Sector
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
 // ── HEAT MAP ──────────────────────────────────────────────
 function getNear52WLowInfo(priceEntry) {
   if (!priceEntry) return null;
@@ -2093,6 +1907,7 @@ export default function App() {
                   onClick={() => setActiveTrack(p => p === track.id ? null : track.id)} 
                   isAdmin={isAdmin}
                   onRenameSector={(newName) => renameSector(track.id, newName)}
+                  EditableLabel={EditableLabel}
                 />
               </div>
             ))}
@@ -2105,6 +1920,8 @@ export default function App() {
               onAddSubsector={addSubsector}
               onRemoveSubsector={removeSubsector}
               onRenameSubsector={renameSubsector}
+              EditableLabel={EditableLabel}
+              Badge={Badge}
             />
           )}
 
