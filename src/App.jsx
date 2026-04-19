@@ -256,6 +256,48 @@ const Badge = memo(function Badge({ text, color }) {
   );
 });
 
+const StatusBanner = memo(function StatusBanner({ notice, onDismiss }) {
+  if (!notice?.message) return null;
+
+  const palette = notice.type === "error"
+    ? { fg: "#fecaca", bg: "rgba(127,29,29,0.4)", border: "rgba(248,113,113,0.35)" }
+    : { fg: "#bbf7d0", bg: "rgba(20,83,45,0.35)", border: "rgba(52,211,153,0.3)" };
+
+  return (
+    <div style={{
+      display: "flex",
+      alignItems: "center",
+      justifyContent: "space-between",
+      gap: 12,
+      margin: "12px 16px 0",
+      padding: "10px 14px",
+      borderRadius: 10,
+      background: palette.bg,
+      border: `1px solid ${palette.border}`,
+      color: palette.fg,
+      fontSize: 12,
+      lineHeight: 1.45,
+    }}>
+      <span>{notice.message}</span>
+      <button
+        onClick={onDismiss}
+        style={{
+          background: "transparent",
+          border: "none",
+          color: palette.fg,
+          cursor: "pointer",
+          fontSize: 16,
+          lineHeight: 1,
+          padding: 0,
+        }}
+        aria-label="Dismiss message"
+      >
+        ×
+      </button>
+    </div>
+  );
+});
+
 function MiniChart({ data, dates, color, ticker }) {
   if (!data || data.length < 2) return null;
   const min = data.reduce((a, b) => Math.min(a, b), Infinity);
@@ -1876,6 +1918,7 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
   const [newTicker, setNewTicker]       = useState("");
   const [showImport, setShowImport]     = useState(false);
   const [importText, setImportText]     = useState("");
+  const [importError, setImportError]   = useState("");
   const [sectorFilter, setSectorFilter] = useState("");
   const [lastUpdated, setLastUpdated]   = useState(null);
 
@@ -1922,8 +1965,14 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
     const words = importText.toUpperCase().match(/\b[A-Z]{1,5}\b/g) || [];
     const ignoreList = ["INC","CORP","CO","LTD","PLC","LLC","USD","EUR","CAD","M","B","K","TRUE","FALSE"];
     const found = [...new Set(words)].filter(w => !ignoreList.includes(w));
-    if (found.length > 0) { onSaveScanner(found); setShowImport(false); setImportText(""); }
-    else { alert("No valid tickers found."); }
+    if (found.length > 0) {
+      onSaveScanner(found);
+      setShowImport(false);
+      setImportText("");
+      setImportError("");
+    } else {
+      setImportError("No valid tickers found in that import.");
+    }
   };
 
   const removeTicker = (ticker) => { onSaveScanner(scannerPool.filter(t => t !== ticker)); };
@@ -1994,6 +2043,11 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
             <button onClick={handleImport}
               style={{ background: "#60a5fa", color: "#000", border: "none", borderRadius: 8, padding: "8px 16px", fontWeight: 700, cursor: "pointer", fontSize: 12 }}>Update Global</button>
           </div>
+          {importError && (
+            <div style={{ marginTop: 8, fontSize: 11, color: "#fca5a5" }}>
+              {importError}
+            </div>
+          )}
         </div>
       )}
 
@@ -2401,6 +2455,7 @@ export default function App() {
   const [isAdmin, setIsAdmin] = useState(false);
   const [adminPassword, setAdminPassword] = useState("");
   const [showAdminModal, setShowAdminModal] = useState(false);
+  const [appNotice, setAppNotice] = useState(null);
 
   const [scannerPool, setScannerPool] = useState(DEFAULT_MULTIBAGGER);
   const [shortList, setShortList] = useState([]);
@@ -2427,6 +2482,16 @@ export default function App() {
   const [onlineCount, setOnlineCount] = useState(1);
   const sessionId = useRef(crypto.randomUUID());
 
+  const showNotice = useCallback((message, type = "error") => {
+    setAppNotice({ message, type });
+  }, []);
+
+  useEffect(() => {
+    if (!appNotice) return;
+    const id = setTimeout(() => setAppNotice(null), 5000);
+    return () => clearTimeout(id);
+  }, [appNotice]);
+
   useEffect(() => {
     const pingPresence = async () => {
       if (document.hidden) return; 
@@ -2434,9 +2499,7 @@ export default function App() {
         const res = await fetch(`/presence?session=${sessionId.current}`);
         const data = await res.json();
         if (data.count) setOnlineCount(data.count);
-      } catch (e) {
-        console.warn("Presence ping failed");
-      }
+      } catch (e) {}
     };
 
     pingPresence();
@@ -2450,12 +2513,12 @@ export default function App() {
     fetch("/scanner")
       .then(res => res.json())
       .then(data => { if (data.tickers) { setScannerPool(data.tickers); scannerPoolRef.current = data.tickers; } })
-      .catch(e => console.log("Scanner fetch failed"));
+      .catch(() => {});
 
     fetch("/capex")
       .then(res => res.json())
       .then(data => { if (data.capexData && (data.capexData.version ?? 0) >= CAPEX_DATA.version) { setCapexData(data.capexData); capexDataRef.current = data.capexData; } })
-      .catch(e => console.log("Capex fetch failed"));
+      .catch(() => {});
     
     setCapexIntelStatus("loading");
     const intelController = new AbortController();
@@ -2484,7 +2547,7 @@ export default function App() {
     fetch("/shortlist")
       .then(res => res.json())
       .then(data => { if (Array.isArray(data.tickers)) { setShortList(data.tickers); shortListRef.current = data.tickers; } })
-      .catch(e => console.log("Shortlist fetch failed"));
+      .catch(() => {});
   }, []);
 
   // ── SEPARATE: Auto-updating Sector News Feed ──
@@ -2495,7 +2558,7 @@ export default function App() {
         .then(data => { 
           if (data.news) setNewsFeed(data.news); 
         })
-        .catch(e => console.log("News fetch failed"));
+        .catch(() => {});
     };
 
     // 1. Fetch immediately on load
@@ -2621,9 +2684,7 @@ export default function App() {
           });
           return merged;
         });
-      } catch (err) {
-        console.warn("[strip] fast-refresh error:", err);
-      }
+      } catch (err) {}
     };
     const id = setInterval(fastRefresh, 5000);
     return () => clearInterval(id);
@@ -2638,13 +2699,17 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tickers: newList, password: adminPassword })
       });
-      if (res.ok) { setScannerPool(newList); refresh(); } 
+      if (res.ok) {
+        setScannerPool(newList);
+        showNotice("Scanner pool updated.", "success");
+        refresh();
+      } 
       else {
         const json = await res.json();
-        alert(json.error || "Update failed.");
+        showNotice(json.error || "Scanner update failed.");
         if (res.status === 401) { setIsAdmin(false); setAdminPassword(""); }
       }
-    } catch (e) { alert("Network error."); }
+    } catch (e) { showNotice("Network error while updating the scanner."); }
   };
 
   const saveGlobalShortlist = async (newList) => {
@@ -2654,13 +2719,18 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ tickers: newList, password: adminPassword })
       });
-      if (res.ok) { setShortList(newList); shortListRef.current = newList; refresh(); }
+      if (res.ok) {
+        setShortList(newList);
+        shortListRef.current = newList;
+        showNotice("Shortlist updated.", "success");
+        refresh();
+      }
       else {
         const json = await res.json();
-        alert(json.error || "Shortlist update failed.");
+        showNotice(json.error || "Shortlist update failed.");
         if (res.status === 401) { setIsAdmin(false); setAdminPassword(""); }
       }
-    } catch (e) { alert("Network error."); }
+    } catch (e) { showNotice("Network error while updating the shortlist."); }
   };
 
   const saveGlobalCapex = async (newData) => {
@@ -2670,13 +2740,17 @@ export default function App() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ capexData: newData, password: adminPassword })
       });
-      if (res.ok) { setCapexData(newData); refresh(); } 
+      if (res.ok) {
+        setCapexData(newData);
+        showNotice("Capex map updated.", "success");
+        refresh();
+      } 
       else {
         const json = await res.json();
-        alert(json.error || "Update failed.");
+        showNotice(json.error || "Capex update failed.");
         if (res.status === 401) { setIsAdmin(false); setAdminPassword(""); }
       }
-    } catch (e) { alert("Network error."); }
+    } catch (e) { showNotice("Network error while updating capex data."); }
   };
 
   function addTickerToSubsector(trackId, subsectorId, ticker) {
@@ -2797,6 +2871,7 @@ export default function App() {
       <div style={{ position: "relative", zIndex: 1, minHeight: "100vh", color: "#fff" }}>
         
         <TopBar marketData={marketData} />
+        <StatusBanner notice={appNotice} onDismiss={() => setAppNotice(null)} />
 
         <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", marginTop: "var(--topbar-h, 72px)", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
           
@@ -3063,7 +3138,11 @@ export default function App() {
       {showAdminModal && (
         <AdminModal
           onClose={() => setShowAdminModal(false)}
-          onSuccess={(pwd) => { setAdminPassword(pwd); setIsAdmin(true); }}
+          onSuccess={(pwd) => {
+            setAdminPassword(pwd);
+            setIsAdmin(true);
+            showNotice("Editing unlocked.", "success");
+          }}
         />
       )}
     </MobileCtx.Provider>
