@@ -449,6 +449,42 @@ def score(df):
 def load_to_db(df):
     print(f"Loading {len(df)} rows into Neon PostgreSQL...")
 
+    bootstrap_sql = """
+        CREATE TABLE IF NOT EXISTS ranked_candidates (
+            as_of_date DATE NOT NULL,
+            ticker TEXT NOT NULL,
+            company_name TEXT,
+            sector TEXT,
+            industry TEXT,
+            market_cap DOUBLE PRECISION,
+            price DOUBLE PRECISION,
+            avg_dollar_vol_20d DOUBLE PRECISION,
+            cfo_ttm DOUBLE PRECISION,
+            capex_ttm DOUBLE PRECISION,
+            fcf_ttm DOUBLE PRECISION,
+            net_income_ttm DOUBLE PRECISION,
+            total_assets_latest DOUBLE PRECISION,
+            book_equity_latest DOUBLE PRECISION,
+            fcf_yield DOUBLE PRECISION,
+            book_to_market DOUBLE PRECISION,
+            roa DOUBLE PRECISION,
+            asset_growth_yoy DOUBLE PRECISION,
+            fcf_rank_pct DOUBLE PRECISION,
+            bm_rank_pct DOUBLE PRECISION,
+            roa_rank_pct DOUBLE PRECISION,
+            asset_growth_rank_pct DOUBLE PRECISION,
+            composite_score DOUBLE PRECISION,
+            rank_overall INTEGER,
+            quality_penalty INTEGER DEFAULT 0,
+            revenue_growth DOUBLE PRECISION,
+            pct_above_52w_low DOUBLE PRECISION,
+            week52_low DOUBLE PRECISION,
+            week52_high DOUBLE PRECISION,
+            total_debt DOUBLE PRECISION,
+            PRIMARY KEY (as_of_date, ticker)
+        );
+    """
+
     migration_sql = """
         ALTER TABLE ranked_candidates
             ADD COLUMN IF NOT EXISTS quality_penalty     INTEGER DEFAULT 0,
@@ -516,9 +552,10 @@ def load_to_db(df):
     try:
         conn = psycopg2.connect(DATABASE_URL)
         cur  = conn.cursor()
+        cur.execute(bootstrap_sql)
         cur.execute(migration_sql)
         conn.commit()
-        print("Schema migration complete.")
+        print("Schema bootstrap + migration complete.")
         psycopg2.extras.execute_values(cur, insert_sql, records, page_size=500)
         conn.commit()
         print("Database load successful.")

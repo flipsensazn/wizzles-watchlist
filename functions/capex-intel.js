@@ -137,6 +137,68 @@ async function callGemini(promptText, apiKey, temperature, maxTokens, timeoutMs 
   }
 }
 
+function validateAllocations(allocations, totalCapex) {
+  if (!Array.isArray(allocations)) {
+    throw new Error("Expected allocations to be a JSON array");
+  }
+
+  const validIds = new Set(SECTORS.map(s => s.id));
+  const seenIds = new Set();
+  const cleaned = [];
+
+  for (const allocation of allocations) {
+    if (!allocation || typeof allocation !== "object") continue;
+    if (!validIds.has(allocation.id)) continue;
+    if (seenIds.has(allocation.id)) {
+      throw new Error(`Duplicate sector returned: ${allocation.id}`);
+    }
+
+    const capex = Number(allocation.capex);
+    if (!Number.isFinite(capex) || capex < 0) {
+      throw new Error(`Invalid capex for sector: ${allocation.id}`);
+    }
+
+    seenIds.add(allocation.id);
+    cleaned.push({
+      ...allocation,
+      capex,
+      value: allocation.value || `~$${capex}B`,
+    });
+  }
+
+  if (cleaned.length !== SECTORS.length) {
+    throw new Error(`Expected ${SECTORS.length} sectors, received ${cleaned.length}`);
+  }
+
+  const missingIds = SECTORS
+    .map(sector => sector.id)
+    .filter(id => !seenIds.has(id));
+
+  if (missingIds.length > 0) {
+    throw new Error(`Missing sectors: ${missingIds.join(", ")}`);
+  }
+
+  const totalAllocated = cleaned.reduce((sum, allocation) => sum + allocation.capex, 0);
+  const delta = Math.abs(totalAllocated - totalCapex);
+  if (delta > 1) {
+    throw new Error(`Sector capex total ${totalAllocated} does not reconcile to ${totalCapex}`);
+  }
+
+  if (delta > 0) {
+    const largestIndex = cleaned.reduce(
+      (bestIdx, allocation, idx, arr) => allocation.capex > arr[bestIdx].capex ? idx : bestIdx,
+      0
+    );
+    cleaned[largestIndex] = {
+      ...cleaned[largestIndex],
+      capex: cleaned[largestIndex].capex + (totalCapex - totalAllocated),
+      value: `~$${cleaned[largestIndex].capex + (totalCapex - totalAllocated)}B`,
+    };
+  }
+
+  return cleaned;
+}
+
 export async function onRequest(context) {
   const { request, env } = context;
 
@@ -213,17 +275,13 @@ export async function onRequest(context) {
       let allocations;
       try {
         allocations = await callGemini(buildPrompt2(totalCapex), geminiKey, 0.2, 1500);
-        if (!Array.isArray(allocations)) throw new Error("Expected a JSON array");
+        allocations = validateAllocations(allocations, totalCapex);
       } catch (prompt2Err) {
         return new Response(
           JSON.stringify({ error: "Failed to gather allocations", detail: prompt2Err.message }),
           { status: 502, headers }
         );
       }
-
-      // Validate sectors
-      const validIds = new Set(SECTORS.map(s => s.id));
-      allocations = allocations.filter(a => a.id && validIds.has(a.id) && typeof a.capex === "number");
 
       const result = {
         totalCapexDerived: totalCapex, // Returning this so you can inspect what the model decided

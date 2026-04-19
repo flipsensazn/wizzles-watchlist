@@ -6,13 +6,29 @@ export async function onRequest(context) {
   // Handle CORS for your app
   const ALLOWED_ORIGIN = env.ALLOWED_ORIGIN || "";
   const origin = request.headers.get("Origin") || "";
-  const corsOrigin = origin === ALLOWED_ORIGIN ? ALLOWED_ORIGIN : "*";
+  const corsOrigin = origin === ALLOWED_ORIGIN ? ALLOWED_ORIGIN : "";
 
   const headers = {
     "Access-Control-Allow-Origin": corsOrigin,
     "Content-Type": "application/json",
-    "Cache-Control": "public, max-age=300, s-maxage=900"
+    "Cache-Control": "public, max-age=300, s-maxage=900",
+    "Vary": "Origin",
   };
+
+  if (request.method === "OPTIONS") {
+    return new Response(null, {
+      status: 204,
+      headers: {
+        ...headers,
+        "Access-Control-Allow-Methods": "GET, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    });
+  }
+
+  if (request.method !== "GET") {
+    return new Response("Method Not Allowed", { status: 405, headers });
+  }
 
   try {
     // CNN's internal, undocumented data endpoint
