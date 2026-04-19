@@ -1,4 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo, useMemo, createContext, useContext } from "react";
+import { useDashboardData } from "./hooks/useDashboardData";
+import { usePresence } from "./hooks/usePresence";
 
 // ── MOBILE CONTEXT ──────────────────────────────────────
 const MobileCtx = createContext(false);
@@ -2457,30 +2459,42 @@ export default function App() {
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [appNotice, setAppNotice] = useState(null);
 
-  const [scannerPool, setScannerPool] = useState(DEFAULT_MULTIBAGGER);
-  const [shortList, setShortList] = useState([]);
-  const [capexData, setCapexData] = useState(CAPEX_DATA);
-  const [capexIntel, setCapexIntel] = useState(null);
-  const [capexIntelStatus, setCapexIntelStatus] = useState("idle");
-  const [capexIntelError, setCapexIntelError] = useState(null);
-  const [newsFeed, setNewsFeed] = useState([]);
-
   const [activeTrack, setActiveTrack] = useState(null);
-  const [prices, setPrices] = useState({});
-  const pricesRef = useRef({});
-  const capexDataRef   = useRef(capexData);
-  const scannerPoolRef = useRef(scannerPool);
-  const shortListRef   = useRef([]);
-  const [marketData, setMarketData] = useState({});
-  const [lastUpdated, setLastUpdated] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
   const [timeline, setTimeline] = useState("1D");
   const [activeFilter, setActiveFilter] = useState(null);
   const [popup, setPopup] = useState(null); 
 
-  // --- PRESENCE POLLING STATE ---
-  const [onlineCount, setOnlineCount] = useState(1);
-  const sessionId = useRef(crypto.randomUUID());
+  const {
+    scannerPool,
+    setScannerPool,
+    shortList,
+    setShortList,
+    capexData,
+    setCapexData,
+    capexIntel,
+    capexIntelStatus,
+    capexIntelError,
+    newsFeed,
+    prices,
+    pricesRef,
+    marketData,
+    lastUpdated,
+    refreshing,
+    refresh,
+    capexDataRef,
+    scannerPoolRef,
+    shortListRef,
+  } = useDashboardData({
+    defaultScannerPool: DEFAULT_MULTIBAGGER,
+    defaultCapexData: CAPEX_DATA,
+    indexTickers: INDEX_TICKERS,
+    cryptoTickers: CRYPTO_TICKERS,
+    hyperscalerTickers: HYPERSCALER_TICKERS,
+    fetchAllPrices,
+    getAllTickers,
+  });
+
+  const { onlineCount } = usePresence();
 
   const showNotice = useCallback((message, type = "error") => {
     setAppNotice({ message, type });
@@ -2492,202 +2506,9 @@ export default function App() {
     return () => clearTimeout(id);
   }, [appNotice]);
 
-  useEffect(() => {
-    const pingPresence = async () => {
-      if (document.hidden) return; 
-      try {
-        const res = await fetch(`/presence?session=${sessionId.current}`);
-        const data = await res.json();
-        if (data.count) setOnlineCount(data.count);
-      } catch (e) {}
-    };
-
-    pingPresence();
-    const id = setInterval(pingPresence, 30000);
-    return () => clearInterval(id);
-  }, []);
-  // ------------------------------
-
-  // ── PRIMARY DATA FETCH ──
-  useEffect(() => {
-    fetch("/scanner")
-      .then(res => res.json())
-      .then(data => { if (data.tickers) { setScannerPool(data.tickers); scannerPoolRef.current = data.tickers; } })
-      .catch(() => {});
-
-    fetch("/capex")
-      .then(res => res.json())
-      .then(data => { if (data.capexData && (data.capexData.version ?? 0) >= CAPEX_DATA.version) { setCapexData(data.capexData); capexDataRef.current = data.capexData; } })
-      .catch(() => {});
-    
-    setCapexIntelStatus("loading");
-    const intelController = new AbortController();
-    const intelTimeout = setTimeout(() => intelController.abort(), 20000);
-    fetch("/capex-intel", { signal: intelController.signal })
-      .then(res => res.json())
-      .then(data => {
-        clearTimeout(intelTimeout);
-        if (data.error) {
-          setCapexIntelStatus("error");
-          setCapexIntelError(data.detail ? `${data.error} — ${data.detail}` : data.error);
-        } else if (data.allocations?.length) {
-          setCapexIntel(data);
-          setCapexIntelStatus("success");
-        } else {
-          setCapexIntelStatus("error");
-          setCapexIntelError("No allocations returned from API.");
-        }
-      })
-      .catch(e => {
-        clearTimeout(intelTimeout);
-        setCapexIntelStatus("error");
-        setCapexIntelError(e.name === "AbortError" ? "Request timed out — Gemini took too long" : (e.message || "Network error"));
-      });
-
-    fetch("/shortlist")
-      .then(res => res.json())
-      .then(data => { if (Array.isArray(data.tickers)) { setShortList(data.tickers); shortListRef.current = data.tickers; } })
-      .catch(() => {});
-  }, []);
-
-  // ── SEPARATE: Auto-updating Sector News Feed ──
-  useEffect(() => {
-    const fetchSectorNews = () => {
-      fetch("/news")
-        .then(res => res.json())
-        .then(data => { 
-          if (data.news) setNewsFeed(data.news); 
-        })
-        .catch(() => {});
-    };
-
-    // 1. Fetch immediately on load
-    fetchSectorNews();
-
-    // 2. Automatically check for updates every 1 minute (60,000 ms)
-    const newsInterval = setInterval(() => {
-      // Only fetch if the user is actually looking at the tab
-      if (!document.hidden) {
-        fetchSectorNews();
-      }
-    }, 60000); 
-
-    return () => clearInterval(newsInterval);
-  }, []);
-
-  useEffect(() => {
-    const marketTickers = [...INDEX_TICKERS, ...CRYPTO_TICKERS, ...HYPERSCALER_TICKERS];
-    fetchAllPrices(marketTickers).then(data => {
-      setMarketData(prev => {
-        const merged = { ...prev };
-        marketTickers.forEach(ticker => {
-          const val = data[ticker];
-          if (val != null) merged[ticker] = val;
-        });
-        return merged;
-      });
-      setPrices(prev => {
-        const HIST_KEYS = ["change5D","change1M","change6M","changeYTD","change1Y",
-                           "week52Low","week52High","earningsDate","chartData","chartTimestamps"];
-        const next = { ...prev };
-        for (const [ticker, newVal] of Object.entries(data)) {
-          if (!newVal || typeof newVal !== "object") { next[ticker] = newVal; continue; }
-          const prevVal = prev[ticker];
-          if (prevVal && typeof prevVal === "object") {
-            const merged = { ...prevVal, ...newVal };
-            for (const k of HIST_KEYS) {
-              if ((newVal[k] === undefined || newVal[k] === null) && prevVal[k] != null) {
-                merged[k] = prevVal[k];
-              }
-            }
-            next[ticker] = merged;
-          } else {
-            next[ticker] = newVal;
-          }
-        }
-        pricesRef.current = next;
-        return next;
-      });
-    });
-  }, []);
-
-  useEffect(() => { capexDataRef.current   = capexData;   }, [capexData]);
-  useEffect(() => { scannerPoolRef.current = scannerPool; }, [scannerPool]);
-  useEffect(() => { shortListRef.current   = shortList;   }, [shortList]);
-
   const openPopup = useCallback((ticker, rect) => {
     const change = pricesRef.current[ticker]?.change ?? pricesRef.current[ticker];
     setPopup(prev => (prev?.ticker === ticker ? null : { ticker, change, rect }));
-  }, []);
-
-  const refresh = useCallback(async () => {
-    setRefreshing(true);
-    const marketTickers = [...INDEX_TICKERS, ...CRYPTO_TICKERS, ...HYPERSCALER_TICKERS];
-    const allTickers = [...new Set([...getAllTickers(capexDataRef.current), ...scannerPoolRef.current, ...shortListRef.current, ...marketTickers])];
-
-    const allData = await fetchAllPrices(allTickers);
-
-    const HIST_KEYS = ["change5D","change1M","change6M","changeYTD","change1Y",
-                       "week52Low","week52High","earningsDate","chartData","chartTimestamps"];
-    setPrices(prev => {
-      const next = { ...prev };
-      for (const [ticker, newVal] of Object.entries(allData)) {
-        if (!newVal || typeof newVal !== "object") { next[ticker] = newVal; continue; }
-        const prevVal = prev[ticker];
-        if (prevVal && typeof prevVal === "object") {
-          const merged = { ...prevVal, ...newVal };
-          for (const k of HIST_KEYS) {
-            if ((newVal[k] === undefined || newVal[k] === null) && prevVal[k] != null) {
-              merged[k] = prevVal[k];
-            }
-          }
-          next[ticker] = merged;
-        } else {
-          next[ticker] = newVal;
-        }
-      }
-      pricesRef.current = next;
-      return next;
-    });
-    setMarketData(prev => {
-      const merged = { ...prev };
-      marketTickers.forEach(ticker => {
-        const val = allData[ticker];
-        if (val != null && typeof val === "object" && val.price != null) merged[ticker] = val;
-        else if (val != null) merged[ticker] = val;
-      });
-      return merged;
-    });
-    setLastUpdated(new Date().toLocaleTimeString());
-    setRefreshing(false);
-  }, []);
-
-  useEffect(() => {
-    refresh();
-    const id = setInterval(() => { if (!document.hidden) refresh(); }, 30000); 
-    return () => clearInterval(id);
-  }, [refresh]);
-
-  useEffect(() => {
-    const fastRefresh = async () => {
-      if (document.hidden) return;
-      try {
-        const stripTickers = [...INDEX_TICKERS, ...CRYPTO_TICKERS];
-        const data = await fetchAllPrices(stripTickers);
-        setMarketData(prev => {
-          const merged = { ...prev };
-          stripTickers.forEach(ticker => {
-            const val = data[ticker];
-            if (val != null) {
-              merged[ticker] = { ...prev[ticker], ...val };
-            }
-          });
-          return merged;
-        });
-      } catch (err) {}
-    };
-    const id = setInterval(fastRefresh, 5000);
-    return () => clearInterval(id);
   }, []);
 
   const handleUnlock = () => setShowAdminModal(true);
