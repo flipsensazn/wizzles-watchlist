@@ -45,7 +45,7 @@ export async function onRequest(context) {
         return new Response(JSON.stringify({ error: "Incorrect Admin Password" }), { status: 401, headers });
       }
 
-      if (env.SHARED_DATA && body.tickers) {
+      if (env.SHARED_DATA && Array.isArray(body.tickers)) {
         await env.SHARED_DATA.put("shortlist", JSON.stringify(body.tickers));
         return new Response(JSON.stringify({ success: true, tickers: body.tickers }), { status: 200, headers });
       }

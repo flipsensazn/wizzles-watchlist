@@ -58,7 +58,14 @@ export async function onRequest(context) {
         return new Response(JSON.stringify({ error: "Incorrect Admin Password" }), { status: 401, headers });
       }
 
-      if (env.SHARED_DATA && body.tickers) {
+      if (body.verifyOnly) {
+        if (!env.SHARED_DATA) {
+          return new Response(JSON.stringify({ error: "Cloudflare KV not bound correctly." }), { status: 500, headers });
+        }
+        return new Response(JSON.stringify({ success: true }), { status: 200, headers });
+      }
+
+      if (env.SHARED_DATA && Array.isArray(body.tickers)) {
         await env.SHARED_DATA.put("scannerPool", JSON.stringify(body.tickers));
         return new Response(JSON.stringify({ success: true, tickers: body.tickers }), { status: 200, headers });
       }

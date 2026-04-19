@@ -40,10 +40,8 @@ const headers = {
   }
 
   try {
-    // Extract credentials from the DATABASE_URL
+    // Convert the connection string into the Neon HTTP SQL endpoint.
     const url      = new URL(DATABASE_URL.replace("postgresql://", "https://").replace("postgres://", "https://"));
-    const username = url.username;
-    const password = url.password;
     const host     = url.hostname;
 
    // Fetch full unfiltered dataset
@@ -89,8 +87,9 @@ const headers = {
 
     if (!dbRes.ok) {
       const errText = await dbRes.text();
+      console.error("scanner-ranked DB query failed", { status: dbRes.status, detail: errText });
       return new Response(
-        JSON.stringify({ success: false, message: `DB query failed: ${errText}` }),
+        JSON.stringify({ success: false, message: "Scanner data is temporarily unavailable." }),
         { status: 500, headers }
       );
     }
@@ -104,8 +103,9 @@ const headers = {
     );
 
   } catch (err) {
+    console.error("scanner-ranked unexpected error", err);
     return new Response(
-      JSON.stringify({ success: false, message: err.message }),
+      JSON.stringify({ success: false, message: "Scanner data is temporarily unavailable." }),
       { status: 500, headers }
     );
   }
