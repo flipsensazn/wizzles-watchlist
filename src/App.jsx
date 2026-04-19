@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef, memo, useMemo, createContext, useContext } from "react";
+import { useAdminActions } from "./hooks/useAdminActions";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { usePresence } from "./hooks/usePresence";
 
@@ -2176,7 +2177,7 @@ function MultibaggerPanel({ prices, scannerPool, isAdmin, onSaveScanner, onTicke
 }
 
 // ── ADMIN LOGIN MODAL ─────────────────────────────────────
-function AdminModal({ onClose, onSuccess }) {
+function AdminModal({ onClose, onSubmit }) {
   const [pwd, setPwd] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
@@ -2197,23 +2198,13 @@ function AdminModal({ onClose, onSuccess }) {
     if (!pwd.trim()) return;
     setLoading(true);
     setError("");
-    try {
-      const res = await fetch("/scanner", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ password: pwd, tickers: null }),
-      });
-      if (res.status === 401) {
-        setError("Incorrect password.");
-        setLoading(false);
-        return;
-      }
-      onSuccess(pwd);
+    const result = await onSubmit(pwd);
+    if (result?.ok) {
       onClose();
-    } catch {
-      setError("Network error. Try again.");
-      setLoading(false);
+      return;
     }
+    setError(result?.error || "Verification failed.");
+    setLoading(false);
   }
 
   return (
@@ -2500,6 +2491,23 @@ export default function App() {
     setAppNotice({ message, type });
   }, []);
 
+  const {
+    verifyAdminPassword,
+    saveGlobalScanner,
+    saveGlobalShortlist,
+    saveGlobalCapex,
+  } = useAdminActions({
+    adminPassword,
+    setAdminPassword,
+    setIsAdmin,
+    setScannerPool,
+    setShortList,
+    setCapexData,
+    shortListRef,
+    showNotice,
+    refresh,
+  });
+
   useEffect(() => {
     if (!appNotice) return;
     const id = setTimeout(() => setAppNotice(null), 5000);
@@ -2512,67 +2520,6 @@ export default function App() {
   }, []);
 
   const handleUnlock = () => setShowAdminModal(true);
-
-  const saveGlobalScanner = async (newList) => {
-    try {
-      const res = await fetch("/scanner", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tickers: newList, password: adminPassword })
-      });
-      if (res.ok) {
-        setScannerPool(newList);
-        showNotice("Scanner pool updated.", "success");
-        refresh();
-      } 
-      else {
-        const json = await res.json();
-        showNotice(json.error || "Scanner update failed.");
-        if (res.status === 401) { setIsAdmin(false); setAdminPassword(""); }
-      }
-    } catch (e) { showNotice("Network error while updating the scanner."); }
-  };
-
-  const saveGlobalShortlist = async (newList) => {
-    try {
-      const res = await fetch("/shortlist", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ tickers: newList, password: adminPassword })
-      });
-      if (res.ok) {
-        setShortList(newList);
-        shortListRef.current = newList;
-        showNotice("Shortlist updated.", "success");
-        refresh();
-      }
-      else {
-        const json = await res.json();
-        showNotice(json.error || "Shortlist update failed.");
-        if (res.status === 401) { setIsAdmin(false); setAdminPassword(""); }
-      }
-    } catch (e) { showNotice("Network error while updating the shortlist."); }
-  };
-
-  const saveGlobalCapex = async (newData) => {
-    try {
-      const res = await fetch("/capex", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ capexData: newData, password: adminPassword })
-      });
-      if (res.ok) {
-        setCapexData(newData);
-        showNotice("Capex map updated.", "success");
-        refresh();
-      } 
-      else {
-        const json = await res.json();
-        showNotice(json.error || "Capex update failed.");
-        if (res.status === 401) { setIsAdmin(false); setAdminPassword(""); }
-      }
-    } catch (e) { showNotice("Network error while updating capex data."); }
-  };
 
   function addTickerToSubsector(trackId, subsectorId, ticker) {
     const sym = ticker.trim().toUpperCase();
@@ -2959,11 +2906,7 @@ export default function App() {
       {showAdminModal && (
         <AdminModal
           onClose={() => setShowAdminModal(false)}
-          onSuccess={(pwd) => {
-            setAdminPassword(pwd);
-            setIsAdmin(true);
-            showNotice("Editing unlocked.", "success");
-          }}
+          onSubmit={verifyAdminPassword}
         />
       )}
     </MobileCtx.Provider>
