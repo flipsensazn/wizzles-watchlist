@@ -23,10 +23,13 @@ async function callGemini(apiKey, systemPrompt, userContent, maxTokens = 900, ti
     },
   });
 
-  // Retry up to 3 times on 503 (overloaded) with exponential backoff
+  // Retry up to 6 times with true exponential backoff: 2s, 4s, 8s, 16s, 32s
   let lastError;
-  for (let attempt = 0; attempt < 3; attempt++) {
-    if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 2000));
+  for (let attempt = 0; attempt < 6; attempt++) {
+    if (attempt > 0) {
+      const delay = Math.min(2000 * Math.pow(2, attempt - 1), 32000);
+      await new Promise(r => setTimeout(r, delay));
+    }
 
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -44,8 +47,7 @@ async function callGemini(apiKey, systemPrompt, userContent, maxTokens = 900, ti
 
     if (res.status === 429 || res.status === 503 || res.status === 529) {
       lastError = new Error(`Gemini ${res.status}: rate limited / overloaded (attempt ${attempt + 1})`);
-      await new Promise(r => setTimeout(r, attempt * 3000 + 2000));
-      continue;
+      continue; // delay handled at top of loop
     }
 
     if (!res.ok) {
@@ -332,9 +334,9 @@ Analyze ${ticker} based on the above data points and your training knowledge of 
   try {
     // ── Run 3 agents with staggered starts to avoid 429s ──
     const fundamentals = await callGemini(apiKey, FUNDAMENTALS_SYSTEM, contextBlock, 900);
-    await new Promise(r => setTimeout(r, 1500));
+    await new Promise(r => setTimeout(r, 3000));
     const technical = await callGemini(apiKey, TECHNICAL_SYSTEM, contextBlock, 800);
-    await new Promise(r => setTimeout(r, 1500));
+    await new Promise(r => setTimeout(r, 3000));
     const macro = await callGemini(apiKey, MACRO_SYSTEM, contextBlock, 800);
 
     // ── Synthesize ────────────────────────────────────────
