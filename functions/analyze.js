@@ -5,40 +5,59 @@
 // then synthesizes into a markdown report with a BUY/HOLD/SELL score and
 // 3-year price projection.  Results cached in KV for 24 hours.
 
-const CACHE_KEY_PREFIX = "analysis_v2_";
+const CACHE_KEY_PREFIX = "analysis_v3_";
 const CACHE_TTL_SEC    = 24 * 60 * 60;
-const MODEL            = "gemini-2.0-flash";
+const MODEL            = "gemini-2.5-flash";
 
 // ── GEMINI HELPER ─────────────────────────────────────────────────────────────
-async function callGemini(apiKey, systemPrompt, userContent, maxTokens = 900) {
+async function callGemini(apiKey, systemPrompt, userContent, maxTokens = 900, timeoutMs = 25000) {
   const prompt = `${systemPrompt}\n\n${userContent}`;
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens },
-      }),
-    }
-  );
+  let res;
+  try {
+    res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`,
+      {
+        method: "POST",
+        signal: controller.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens },
+        }),
+      }
+    );
+  } finally {
+    clearTimeout(timer);
+  }
 
   if (!res.ok) {
     const body = await res.text();
-    throw new Error(`Gemini ${res.status}: ${body.slice(0, 200)}`);
+    throw new Error(`Gemini ${res.status}: ${body.slice(0, 300)}`);
   }
 
   const data    = await res.json();
   const rawText = data?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") ?? "";
-  const clean   = rawText
+
+  // Strip markdown fences and extract the first JSON object or array
+  const stripped = rawText
     .replace(/^```json\s*/i, "")
     .replace(/^```\s*/i, "")
     .replace(/```\s*$/i, "")
     .trim();
 
-  return JSON.parse(clean);
+  // Find the outermost { } or [ ] in case the model added prose before/after
+  const jsonStart = stripped.search(/[{\[]/);
+  if (jsonStart === -1) throw new Error(`No JSON found in Gemini response: ${stripped.slice(0, 200)}`);
+  const jsonStr = stripped.slice(jsonStart);
+
+  try {
+    return JSON.parse(jsonStr);
+  } catch (e) {
+    throw new Error(`JSON parse failed: ${e.message} — raw: ${jsonStr.slice(0, 200)}`);
+  }
 }
 
 // ── AGENT SYSTEM PROMPTS ──────────────────────────────────────────────────────
@@ -171,20 +190,28 @@ ${JSON.stringify(technical, null, 2)}
 MACRO JSON:
 ${JSON.stringify(macro, null, 2)}`;
 
-  const res = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${geminiKey}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        contents: [{ parts: [{ text: synthPrompt }] }],
-        generationConfig: { temperature: 0.3, maxOutputTokens: 1400 },
-      }),
-    }
-  );
+  const synthController = new AbortController();
+  const synthTimer = setTimeout(() => synthController.abort(), 25000);
+  let synthRes;
+  try {
+    synthRes = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${geminiKey}`,
+      {
+        method: "POST",
+        signal: synthController.signal,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: synthPrompt }] }],
+          generationConfig: { temperature: 0.3, maxOutputTokens: 1400 },
+        }),
+      }
+    );
+  } finally {
+    clearTimeout(synthTimer);
+  }
 
-  if (!res.ok) throw new Error(`Synthesis API error ${res.status}`);
-  const data = await res.json();
+  if (!synthRes.ok) throw new Error(`Synthesis API error ${synthRes.status}`);
+  const data = await synthRes.json();
   const report = data?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") ?? "";
 
   return { report, weightedScore, verdict, projection };

@@ -447,7 +447,9 @@ function CompanyPopup({ ticker, change, anchorRect, onClose, onOpenAnalysis }) {
             </button>
           )}
           {analysisError && (
-            <span style={{ fontSize: 9, color: "#f87171" }} title={analysisError}>⚠ Failed</span>
+            <span style={{ fontSize: 9, color: "#f87171", maxWidth: 160, whiteSpace: "normal", lineHeight: 1.3, textAlign: "right" }}>
+              ⚠ {analysisError.length > 80 ? analysisError.slice(0, 80) + "…" : analysisError}
+            </span>
           )}
           <button onClick={onClose} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "#64748b", width: 24, height: 24, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit" }}>×</button>
         </div>
