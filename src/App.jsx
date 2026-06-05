@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef, memo, useMemo, createContext, useContext } from "react";
 import AdminModal from "./components/AdminModal";
+import AnalysisDrawer from "./components/AnalysisDrawer";
 import BloombergFeed from "./components/BloombergFeed";
 import FearGreedGauge from "./components/FearGreedGauge";
 import StatusBanner from "./components/StatusBanner";
@@ -313,12 +314,43 @@ function MiniChart({ data, dates, color, ticker }) {
 }
 
 // ── COMPANY POPUP ─────────────────────────────────────────
-function CompanyPopup({ ticker, change, anchorRect, onClose }) {
+function CompanyPopup({ ticker, change, anchorRect, onClose, onOpenAnalysis }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [analysisLoading, setAnalysisLoading] = useState(false);
+  const [analysisError, setAnalysisError] = useState(null);
   const popupRef = useRef(null);
   const pos = (change ?? 0) >= 0;
   const changeColor = change === undefined ? "#475569" : pos ? "#34d399" : "#f87171";
+
+  const runAnalysis = async () => {
+    if (analysisLoading) return;
+    setAnalysisLoading(true);
+    setAnalysisError(null);
+    try {
+      const res = await fetch("/analyze", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          ticker,
+          currentPrice: data?.rawPrice ?? null,
+          peRatio:      data?.peRatio  ?? null,
+          marketCap:    data?.marketCap ?? null,
+          week52Low:    data?.raw52Low  ?? null,
+          week52High:   data?.raw52High ?? null,
+          sector:       data?.sector   ?? null,
+          industry:     data?.industry ?? null,
+        }),
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || "Analysis failed");
+      onOpenAnalysis(json);
+    } catch (err) {
+      setAnalysisError(err.message);
+    } finally {
+      setAnalysisLoading(false);
+    }
+  };
 
   useEffect(() => {
     setLoading(true);
@@ -383,7 +415,7 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
           {data?.name && data.name !== ticker && <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.4 }}>{data.name}</div>}
         </div>
         
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
           {data?.earningsDate && (
             <div style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(192,132,252,0.12)", border: "1px solid rgba(192,132,252,0.3)", padding: "4px 8px", borderRadius: 6 }}>
               <span style={{ fontSize: 9, fontWeight: 800, color: "#c084fc", letterSpacing: "0.05em" }}>EARNINGS:</span>
@@ -391,6 +423,31 @@ function CompanyPopup({ ticker, change, anchorRect, onClose }) {
                 {new Date(data.earningsDate * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}
               </span>
             </div>
+          )}
+          {!loading && data && (
+            <button
+              onClick={runAnalysis}
+              disabled={analysisLoading}
+              title="Run 3-agent AI analysis (Fundamentals · Technical · Macro)"
+              style={{
+                display: "flex", alignItems: "center", gap: 5,
+                background: analysisLoading ? "rgba(96,165,250,0.05)" : "rgba(96,165,250,0.12)",
+                border: "1px solid rgba(96,165,250,0.35)",
+                borderRadius: 6, padding: "4px 10px",
+                color: analysisLoading ? "#475569" : "#60a5fa",
+                cursor: analysisLoading ? "default" : "pointer",
+                fontSize: 9, fontWeight: 800, letterSpacing: "0.08em",
+                textTransform: "uppercase", fontFamily: "inherit",
+                transition: "all .15s",
+              }}
+            >
+              {analysisLoading
+                ? <><span style={{ display: "inline-block", animation: "spin 0.8s linear infinite" }}>⟳</span> Analyzing…</>
+                : "⚡ Run Analysis"}
+            </button>
+          )}
+          {analysisError && (
+            <span style={{ fontSize: 9, color: "#f87171" }} title={analysisError}>⚠ Failed</span>
           )}
           <button onClick={onClose} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "#64748b", width: 24, height: 24, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit" }}>×</button>
         </div>
@@ -1476,6 +1533,7 @@ const GLOBAL_STYLES = `
     50% { box-shadow: 0 0 24px rgba(52,211,153,0.9), 0 0 40px rgba(52,211,153,0.35), inset 0 0 20px rgba(52,211,153,0.18); border-color: #34d399; }
   }
   @keyframes pulseDot { 0%,100% { opacity:1; transform:scale(1); } 50% { opacity:.4; transform:scale(.7); } }
+  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
   .ticker-tape { animation: scroll-left 200s linear infinite; white-space: nowrap; display: inline-flex; gap: 24px; }
   .pulse { animation: pulseDot 2s infinite; }
   .bottom-grid-all { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
@@ -1532,7 +1590,8 @@ export default function App() {
   const [activeTrack, setActiveTrack] = useState(null);
   const [timeline, setTimeline] = useState("1D");
   const [activeFilter, setActiveFilter] = useState(null);
-  const [popup, setPopup] = useState(null); 
+  const [popup, setPopup] = useState(null);
+  const [analysis, setAnalysis] = useState(null); // { ticker, ...analysisResult }
 
   const {
     scannerPool,
@@ -1984,7 +2043,22 @@ export default function App() {
           </div>
         )}
       </div>
-      {popup && <CompanyPopup ticker={popup.ticker} change={popup.change} anchorRect={popup.rect} onClose={() => setPopup(null)} />}
+      {popup && (
+        <CompanyPopup
+          ticker={popup.ticker}
+          change={popup.change}
+          anchorRect={popup.rect}
+          onClose={() => setPopup(null)}
+          onOpenAnalysis={(result) => setAnalysis({ ticker: popup.ticker, ...result })}
+        />
+      )}
+      {analysis && (
+        <AnalysisDrawer
+          ticker={analysis.ticker}
+          analysis={analysis}
+          onClose={() => setAnalysis(null)}
+        />
+      )}
       {showAdminModal && (
         <AdminModal
           onClose={() => setShowAdminModal(false)}
