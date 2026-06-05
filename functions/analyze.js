@@ -234,7 +234,7 @@ ${JSON.stringify(macro, null, 2)}`;
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: synthPrompt }] }],
-          generationConfig: { temperature: 0.3, maxOutputTokens: 1400 },
+          generationConfig: { temperature: 0.3, maxOutputTokens: 3000 },
         }),
       }
     );
@@ -335,11 +335,11 @@ Analyze ${ticker} based on the above data points and your training knowledge of 
 
   try {
     // ── Run 3 agents with staggered starts to avoid 429s ──
-    const fundamentals = await callGemini(apiKey, FUNDAMENTALS_SYSTEM, contextBlock, 900);
+    const fundamentals = await callGemini(apiKey, FUNDAMENTALS_SYSTEM, contextBlock, 2048);
     await new Promise(r => setTimeout(r, 5000));
-    const technical = await callGemini(apiKey, TECHNICAL_SYSTEM, contextBlock, 800);
+    const technical = await callGemini(apiKey, TECHNICAL_SYSTEM, contextBlock, 2048);
     await new Promise(r => setTimeout(r, 5000));
-    const macro = await callGemini(apiKey, MACRO_SYSTEM, contextBlock, 800);
+    const macro = await callGemini(apiKey, MACRO_SYSTEM, contextBlock, 2048);
 
     // ── Synthesize ────────────────────────────────────────
     const { report, weightedScore, verdict, projection } =
