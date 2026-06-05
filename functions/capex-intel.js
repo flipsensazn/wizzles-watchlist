@@ -9,7 +9,7 @@
 
 const CACHE_KEY = "capexIntel";
 const CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours in ms
-const MODEL     = "gemini-2.5-flash";
+const MODEL     = "gemini-2.5-flash-preview-05-20";
 
 const SECTORS = [
   {

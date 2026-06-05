@@ -343,7 +343,7 @@ function CompanyPopup({ ticker, change, anchorRect, onClose, onOpenAnalysis }) {
         }),
       });
       const json = await res.json();
-      if (!res.ok) throw new Error(json.error || "Analysis failed");
+      if (!res.ok) throw new Error(json.detail || json.error || "Analysis failed");
       onOpenAnalysis(json);
     } catch (err) {
       setAnalysisError(err.message);

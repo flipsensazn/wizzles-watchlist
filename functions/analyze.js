@@ -7,7 +7,8 @@
 
 const CACHE_KEY_PREFIX = "analysis_v3_";
 const CACHE_TTL_SEC    = 24 * 60 * 60;
-const MODEL            = "gemini-2.5-flash";
+// Use the stable alias — Google resolves this to the latest 2.5-flash version
+const MODEL            = "gemini-2.5-flash-preview-05-20";
 
 // ── GEMINI HELPER ─────────────────────────────────────────────────────────────
 async function callGemini(apiKey, systemPrompt, userContent, maxTokens = 900, timeoutMs = 25000) {
@@ -337,6 +338,7 @@ Analyze ${ticker} based on the above data points and your training knowledge of 
     return new Response(JSON.stringify({ ...result, fromCache: false }), { status: 200, headers });
 
   } catch (err) {
+    console.error("[analyze] error:", err.message);
     return new Response(
       JSON.stringify({ error: "Analysis failed", detail: err.message }),
       { status: 502, headers }
