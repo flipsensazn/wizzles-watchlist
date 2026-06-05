@@ -42,8 +42,9 @@ async function callGemini(apiKey, systemPrompt, userContent, maxTokens = 900, ti
       clearTimeout(timer);
     }
 
-    if (res.status === 503 || res.status === 529) {
-      lastError = new Error(`Gemini ${res.status}: model overloaded (attempt ${attempt + 1})`);
+    if (res.status === 429 || res.status === 503 || res.status === 529) {
+      lastError = new Error(`Gemini ${res.status}: rate limited / overloaded (attempt ${attempt + 1})`);
+      await new Promise(r => setTimeout(r, attempt * 3000 + 2000));
       continue;
     }
 
@@ -329,12 +330,12 @@ INDUSTRY: ${contextData.industry}
 Analyze ${ticker} based on the above data points and your training knowledge of this company.`;
 
   try {
-    // ── Run 3 agents concurrently ─────────────────────────
-    const [fundamentals, technical, macro] = await Promise.all([
-      callGemini(apiKey, FUNDAMENTALS_SYSTEM, contextBlock, 900),
-      callGemini(apiKey, TECHNICAL_SYSTEM,    contextBlock, 800),
-      callGemini(apiKey, MACRO_SYSTEM,        contextBlock, 800),
-    ]);
+    // ── Run 3 agents with staggered starts to avoid 429s ──
+    const fundamentals = await callGemini(apiKey, FUNDAMENTALS_SYSTEM, contextBlock, 900);
+    await new Promise(r => setTimeout(r, 1500));
+    const technical = await callGemini(apiKey, TECHNICAL_SYSTEM, contextBlock, 800);
+    await new Promise(r => setTimeout(r, 1500));
+    const macro = await callGemini(apiKey, MACRO_SYSTEM, contextBlock, 800);
 
     // ── Synthesize ────────────────────────────────────────
     const { report, weightedScore, verdict, projection } =
