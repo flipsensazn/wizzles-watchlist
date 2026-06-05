@@ -12,52 +12,61 @@ const MODEL            = "gemini-3.5-flash";
 // ── GEMINI HELPER ─────────────────────────────────────────────────────────────
 async function callGemini(apiKey, systemPrompt, userContent, maxTokens = 900, timeoutMs = 25000) {
   const prompt = `${systemPrompt}\n\n${userContent}`;
-  const controller = new AbortController();
-  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`;
+  const body = JSON.stringify({
+    contents: [{ parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens },
+  });
 
-  let res;
-  try {
-    res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`,
-      {
+  // Retry up to 3 times on 503 (overloaded) with exponential backoff
+  let lastError;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) await new Promise(r => setTimeout(r, attempt * 2000));
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), timeoutMs);
+    let res;
+    try {
+      res = await fetch(url, {
         method: "POST",
         signal: controller.signal,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: prompt }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens },
-        }),
-      }
-    );
-  } finally {
-    clearTimeout(timer);
+        body,
+      });
+    } finally {
+      clearTimeout(timer);
+    }
+
+    if (res.status === 503) {
+      lastError = new Error(`Gemini 503: model overloaded (attempt ${attempt + 1})`);
+      continue;
+    }
+
+    if (!res.ok) {
+      const errBody = await res.text();
+      throw new Error(`Gemini ${res.status}: ${errBody.slice(0, 300)}`);
+    }
+
+    const data    = await res.json();
+    const rawText = data?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") ?? "";
+
+    const stripped = rawText
+      .replace(/^```json\s*/i, "")
+      .replace(/^```\s*/i, "")
+      .replace(/```\s*$/i, "")
+      .trim();
+
+    const jsonStart = stripped.search(/[{\[]/);
+    if (jsonStart === -1) throw new Error(`No JSON in response: ${stripped.slice(0, 200)}`);
+
+    try {
+      return JSON.parse(stripped.slice(jsonStart));
+    } catch (e) {
+      throw new Error(`JSON parse failed: ${e.message} — raw: ${stripped.slice(0, 200)}`);
+    }
   }
 
-  if (!res.ok) {
-    const body = await res.text();
-    throw new Error(`Gemini ${res.status}: ${body.slice(0, 300)}`);
-  }
-
-  const data    = await res.json();
-  const rawText = data?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") ?? "";
-
-  // Strip markdown fences and extract the first JSON object or array
-  const stripped = rawText
-    .replace(/^```json\s*/i, "")
-    .replace(/^```\s*/i, "")
-    .replace(/```\s*$/i, "")
-    .trim();
-
-  // Find the outermost { } or [ ] in case the model added prose before/after
-  const jsonStart = stripped.search(/[{\[]/);
-  if (jsonStart === -1) throw new Error(`No JSON found in Gemini response: ${stripped.slice(0, 200)}`);
-  const jsonStr = stripped.slice(jsonStart);
-
-  try {
-    return JSON.parse(jsonStr);
-  } catch (e) {
-    throw new Error(`JSON parse failed: ${e.message} — raw: ${jsonStr.slice(0, 200)}`);
-  }
+  throw lastError;
 }
 
 // ── AGENT SYSTEM PROMPTS ──────────────────────────────────────────────────────
