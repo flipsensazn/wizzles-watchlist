@@ -10,6 +10,32 @@ const CACHE_TTL_SEC    = 24 * 60 * 60;
 const MODEL_AGENT = "gemini-2.5-flash";
 const MODEL_SYNTH = "gemini-2.5-flash";
 
+// ── JSON EXTRACTOR ────────────────────────────────────────────────────────────
+// Finds the first balanced { } or [ ] block in a string, ignoring surrounding
+// text, markdown fences, and thinking-mode tokens that gemini-2.5 can emit.
+function extractJson(text) {
+  const start = text.search(/[{\[]/);
+  if (start === -1) return null;
+  const open = text[start];
+  const close = open === "{" ? "}" : "]";
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (escape) { escape = false; continue; }
+    if (ch === "\\" && inString) { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === open) depth++;
+    else if (ch === close) {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
+}
+
 // ── GEMINI HELPER ─────────────────────────────────────────────────────────────
 async function callGemini(apiKey, systemPrompt, userContent, maxTokens = 900, timeoutMs = 25000) {
   const prompt = `${systemPrompt}\n\n${userContent}`;
@@ -20,6 +46,9 @@ async function callGemini(apiKey, systemPrompt, userContent, maxTokens = 900, ti
       temperature: 0.2,
       maxOutputTokens: maxTokens,
       responseMimeType: "application/json",
+      // Disable thinking mode — we need fast structured JSON, not deep reasoning.
+      // Thinking tokens also leak into the response text and break JSON parsing.
+      thinkingConfig: { thinkingBudget: 0 },
     },
   });
 
@@ -73,19 +102,15 @@ async function callGemini(apiKey, systemPrompt, userContent, maxTokens = 900, ti
     const rawText = data?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") ?? "";
     if (!rawText) throw new Error("Gemini returned empty content");
 
-    const stripped = rawText
-      .replace(/^```json\s*/i, "")
-      .replace(/^```\s*/i, "")
-      .replace(/```\s*$/i, "")
-      .trim();
-
-    const jsonStart = stripped.search(/[{\[]/);
-    if (jsonStart === -1) throw new Error(`No JSON in response: ${stripped.slice(0, 200)}`);
+    // Extract the first balanced JSON object or array.
+    // This handles thinking-mode leakage, markdown fences, and trailing prose.
+    const extracted = extractJson(rawText);
+    if (!extracted) throw new Error(`No valid JSON found in response: ${rawText.slice(0, 200)}`);
 
     try {
-      return JSON.parse(stripped.slice(jsonStart));
+      return JSON.parse(extracted);
     } catch (e) {
-      throw new Error(`JSON parse failed: ${e.message} — raw: ${stripped.slice(0, 200)}`);
+      throw new Error(`JSON parse failed: ${e.message} — raw: ${extracted.slice(0, 200)}`);
     }
   }
 
