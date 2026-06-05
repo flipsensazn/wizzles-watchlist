@@ -7,8 +7,8 @@
 
 const CACHE_KEY_PREFIX = "analysis_v3_";
 const CACHE_TTL_SEC    = 24 * 60 * 60;
-const MODEL_AGENT = "gemini-3.5-flash";
-const MODEL_SYNTH = "gemini-3.5-flash"; // same model — pro-preview has much lower Tier 1 RPM
+const MODEL_AGENT = "gemini-2.0-flash";  // stable, high-availability for the 3 agent calls
+const MODEL_SYNTH = "gemini-3.5-flash";  // latest model for the single synthesis call
 
 // ── GEMINI HELPER ─────────────────────────────────────────────────────────────
 async function callGemini(apiKey, systemPrompt, userContent, maxTokens = 900, timeoutMs = 25000) {
