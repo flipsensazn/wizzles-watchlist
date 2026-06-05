@@ -15,7 +15,11 @@ async function callGemini(apiKey, systemPrompt, userContent, maxTokens = 900, ti
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent?key=${apiKey}`;
   const body = JSON.stringify({
     contents: [{ parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.2, maxOutputTokens: maxTokens },
+    generationConfig: {
+      temperature: 0.2,
+      maxOutputTokens: maxTokens,
+      responseMimeType: "application/json",
+    },
   });
 
   // Retry up to 3 times on 503 (overloaded) with exponential backoff
@@ -37,8 +41,8 @@ async function callGemini(apiKey, systemPrompt, userContent, maxTokens = 900, ti
       clearTimeout(timer);
     }
 
-    if (res.status === 503) {
-      lastError = new Error(`Gemini 503: model overloaded (attempt ${attempt + 1})`);
+    if (res.status === 503 || res.status === 529) {
+      lastError = new Error(`Gemini ${res.status}: model overloaded (attempt ${attempt + 1})`);
       continue;
     }
 
@@ -47,8 +51,21 @@ async function callGemini(apiKey, systemPrompt, userContent, maxTokens = 900, ti
       throw new Error(`Gemini ${res.status}: ${errBody.slice(0, 300)}`);
     }
 
-    const data    = await res.json();
+    const data = await res.json();
+
+    // Gemini sometimes returns 200 with an error field instead of candidates
+    if (data.error) {
+      const msg = data.error.message || JSON.stringify(data.error);
+      if (attempt < 2) { lastError = new Error(`Gemini error: ${msg}`); continue; }
+      throw new Error(`Gemini error: ${msg}`);
+    }
+
+    // Safety block — candidates array is empty
+    const blockReason = data.promptFeedback?.blockReason;
+    if (blockReason) throw new Error(`Gemini blocked: ${blockReason}`);
+
     const rawText = data?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") ?? "";
+    if (!rawText) throw new Error("Gemini returned empty content");
 
     const stripped = rawText
       .replace(/^```json\s*/i, "")
