@@ -7,8 +7,7 @@
 
 const CACHE_KEY_PREFIX = "analysis_v3_";
 const CACHE_TTL_SEC    = 24 * 60 * 60;
-// Use the stable alias — Google resolves this to the latest 2.5-flash version
-const MODEL            = "gemini-2.5-flash-preview-05-20";
+const MODEL            = "gemini-2.0-flash";
 
 // ── GEMINI HELPER ─────────────────────────────────────────────────────────────
 async function callGemini(apiKey, systemPrompt, userContent, maxTokens = 900, timeoutMs = 25000) {
