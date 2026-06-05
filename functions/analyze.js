@@ -7,8 +7,8 @@
 
 const CACHE_KEY_PREFIX = "analysis_v3_";
 const CACHE_TTL_SEC    = 24 * 60 * 60;
-const MODEL_AGENT = "gemini-2.0-flash";  // stable, high-availability for the 3 agent calls
-const MODEL_SYNTH = "gemini-3.5-flash";  // latest model for the single synthesis call
+const MODEL_AGENT = "gemini-3.5-flash";
+const MODEL_SYNTH = "gemini-3.5-flash";
 
 // ── GEMINI HELPER ─────────────────────────────────────────────────────────────
 async function callGemini(apiKey, systemPrompt, userContent, maxTokens = 900, timeoutMs = 25000) {
@@ -336,9 +336,9 @@ Analyze ${ticker} based on the above data points and your training knowledge of 
   try {
     // ── Run 3 agents with staggered starts to avoid 429s ──
     const fundamentals = await callGemini(apiKey, FUNDAMENTALS_SYSTEM, contextBlock, 900);
-    await new Promise(r => setTimeout(r, 3000));
+    await new Promise(r => setTimeout(r, 5000));
     const technical = await callGemini(apiKey, TECHNICAL_SYSTEM, contextBlock, 800);
-    await new Promise(r => setTimeout(r, 3000));
+    await new Promise(r => setTimeout(r, 5000));
     const macro = await callGemini(apiKey, MACRO_SYSTEM, contextBlock, 800);
 
     // ── Synthesize ────────────────────────────────────────
