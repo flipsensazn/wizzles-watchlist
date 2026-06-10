@@ -1346,6 +1346,7 @@ export default function App() {
     capexIntelError,
     newsFeed,
     stressData,
+    gaugesData,
     prices,
     pricesRef,
     marketData,
@@ -1756,6 +1757,7 @@ export default function App() {
             <TrackPane
               track={activeData} prices={prices} isAdmin={isAdmin}
               stressBySub={subsectorStress}
+              gauges={gaugesData}
               onAddTicker={addTickerToSubsector} onRemoveTicker={removeTickerFromSubsector} onTickerClick={openPopup} 
               onAddSubsector={addSubsector}
               onRemoveSubsector={removeSubsector}

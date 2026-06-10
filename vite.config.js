@@ -17,6 +17,7 @@ export default defineConfig({
       '/presence':    'http://localhost:8788',
       '/cnn-fear-greed': 'http://localhost:8788',
       '/stress':      'http://localhost:8788',
+      '/gauges':      'http://localhost:8788',
     },
   },
 })

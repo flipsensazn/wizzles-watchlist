@@ -49,27 +49,106 @@ const StressBadge = memo(function StressBadge({ stress, onClick, open }) {
 
 export default StressBadge;
 
-// Drilldown: per-company scores, direction, and the verbatim transcript
-// quotes the score is based on. Rendered inside SubsectorCard when the
-// badge is toggled open.
-export function StressDetail({ stress, onTickerClick }) {
-  if (!stress?.companies?.length) return null;
+// ── XBRL GAUGES (GET /gauges — SEC companyfacts ETL) ─────
+// Order gap = RPO/backlog YoY growth minus revenue YoY growth, in percentage
+// points. Positive and large = orders outrunning shipping capacity.
+
+export function hasGaugeData(tickers = [], gauges = {}) {
+  return tickers.some(t => gauges[t] && (gauges[t].orderGap != null || gauges[t].inventoryDays != null));
+}
+
+export function gaugeSummary(tickers = [], gauges = {}) {
+  const withGap = tickers.map(t => gauges[t]).filter(g => g && g.orderGap != null);
+  if (!withGap.length) return null;
+  return {
+    avgGap: withGap.reduce((s, g) => s + g.orderGap, 0) / withGap.length,
+    count: withGap.length,
+  };
+}
+
+// "BKLG +154pp" chip — shown when the subsector's average order gap is
+// meaningfully positive (orders outrunning revenue by >10pp).
+export const GaugeChip = memo(function GaugeChip({ tickers, gauges, onClick, open }) {
+  const sum = gaugeSummary(tickers, gauges);
+  if (!sum || sum.avgGap < 10) return null;
+  const color = sum.avgGap >= 50 ? "#ef4444" : "#f59e0b";
+  return (
+    <button
+      onClick={e => { e.stopPropagation(); onClick?.(); }}
+      title={`Backlog growing ${sum.avgGap.toFixed(0)}pp faster than revenue (avg of ${sum.count} compan${sum.count === 1 ? "y" : "ies"}, SEC XBRL) — click for details`}
+      style={{
+        background: color + "22", border: `1px solid ${color}`, color,
+        fontSize: 10, fontWeight: 700, letterSpacing: "0.1em",
+        padding: "2px 7px", borderRadius: 3, whiteSpace: "nowrap",
+        cursor: "pointer", fontFamily: "inherit",
+        boxShadow: open ? `0 0 6px ${color}66` : "none",
+      }}
+    >
+      BKLG +{sum.avgGap.toFixed(0)}pp
+    </button>
+  );
+});
+
+const fmtPct = v => `${v >= 0 ? "+" : ""}${v.toFixed(0)}%`;
+const fmtB = v => v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : `$${(v / 1e6).toFixed(0)}M`;
+
+function GaugeLine({ g }) {
+  if (!g) return null;
+  const hasBacklog = g.rpoYoy != null;
+  const hasInv = g.inventoryDays != null;
+  if (!hasBacklog && !hasInv) return null;
+  const gapColor = g.orderGap > 50 ? "#ef4444" : g.orderGap > 10 ? "#f59e0b" : "#64748b";
+  return (
+    <div style={{ fontSize: 10.5, color: "#7dd3fc", marginTop: 5, display: "flex", gap: 12, flexWrap: "wrap" }}>
+      {hasBacklog && (
+        <span>
+          Backlog {g.rpo != null ? fmtB(g.rpo) + " " : ""}{fmtPct(g.rpoYoy)} YoY
+          {g.revenueYoy != null && <> vs rev {fmtPct(g.revenueYoy)}</>}
+          {g.orderGap != null && <span style={{ color: gapColor, fontWeight: 700 }}> → gap {g.orderGap >= 0 ? "+" : ""}{g.orderGap.toFixed(0)}pp</span>}
+        </span>
+      )}
+      {hasInv && (
+        <span>
+          Inv days {g.inventoryDays.toFixed(0)}
+          {g.inventoryDaysYoy != null && <span style={{ color: g.inventoryDaysYoy > 15 ? "#f59e0b" : "#64748b" }}> ({g.inventoryDaysYoy >= 0 ? "+" : ""}{g.inventoryDaysYoy.toFixed(0)} YoY)</span>}
+        </span>
+      )}
+    </div>
+  );
+}
+
+// Drilldown: one row per company, merging the transcript signal (score,
+// direction, verbatim quotes) with the SEC XBRL gauges. Companies with only
+// one of the two signals still get a row.
+export function StressDetail({ stress, tickers = [], gauges = {}, onTickerClick }) {
+  const byTicker = {};
+  for (const c of stress?.companies ?? []) byTicker[c.ticker] = c;
+  const order = (stress?.companies ?? []).map(c => c.ticker);
+  for (const t of tickers) {
+    if (!byTicker[t] && gauges[t] && (gauges[t].orderGap != null || gauges[t].inventoryDays != null)) {
+      order.push(t);
+    }
+  }
+  if (!order.length) return null;
+
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
-      {stress.companies.map(c => {
-        const color = stressColor(c.score);
-        const dir = DIRECTION_LABELS[c.direction];
+      {order.map(ticker => {
+        const c = byTicker[ticker];
+        const g = gauges[ticker];
+        const color = c ? stressColor(c.score) : "#475569";
+        const dir = c ? DIRECTION_LABELS[c.direction] : null;
         return (
-          <div key={c.ticker} style={{ borderRadius: 8, border: `1px solid ${color}33`, background: "rgba(0,0,0,0.25)", padding: "8px 10px" }}>
+          <div key={ticker} style={{ borderRadius: 8, border: `1px solid ${color}33`, background: "rgba(0,0,0,0.25)", padding: "8px 10px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span
-                onClick={e => onTickerClick?.(c.ticker, e.currentTarget.getBoundingClientRect())}
+                onClick={e => onTickerClick?.(ticker, e.currentTarget.getBoundingClientRect())}
                 style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0", cursor: "pointer" }}
               >
-                {c.ticker}
+                {ticker}
               </span>
-              <span style={{ fontSize: 11, fontWeight: 700, color }}>{c.score.toFixed(0)}</span>
-              {c.delta != null && (
+              {c && <span style={{ fontSize: 11, fontWeight: 700, color }}>{c.score.toFixed(0)}</span>}
+              {c?.delta != null && (
                 <span style={{ fontSize: 10, color: c.delta > 0 ? "#ef4444" : c.delta < 0 ? "#34d399" : "#64748b" }}>
                   {c.delta > 0 ? "+" : ""}{c.delta.toFixed(0)} QoQ
                 </span>
@@ -80,13 +159,14 @@ export function StressDetail({ stress, onTickerClick }) {
                 </span>
               )}
               <span style={{ fontSize: 10, color: "#475569", marginLeft: "auto" }}>
-                {c.fy}Q{c.fq}
+                {c ? `${c.fy}Q${c.fq}` : g?.latestQuarterEnd ? `Q end ${g.latestQuarterEnd}` : ""}
               </span>
             </div>
-            {c.summary && (
+            {c?.summary && (
               <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 5, lineHeight: 1.5 }}>{c.summary}</div>
             )}
-            {c.quotes?.length > 0 && (
+            <GaugeLine g={g} />
+            {c?.quotes?.length > 0 && (
               <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
                 {c.quotes.map((q, i) => (
                   <div key={i} style={{ fontSize: 10.5, color: "#cbd5e1", borderLeft: `2px solid ${color}66`, paddingLeft: 8, lineHeight: 1.5, fontStyle: "italic" }}>
@@ -100,8 +180,9 @@ export function StressDetail({ stress, onTickerClick }) {
         );
       })}
       <div style={{ fontSize: 9.5, color: "#475569", lineHeight: 1.4 }}>
-        Scores derived from supply-stress language in the latest earnings-call transcripts
-        (lexicon scan + AI classification). Quotes are verbatim from the calls.
+        Transcript scores from supply-stress language in the latest earnings calls
+        (lexicon scan + AI classification; quotes verbatim). Backlog/inventory gauges
+        from SEC XBRL filings — order gap is backlog growth minus revenue growth, YoY.
       </div>
     </div>
   );
