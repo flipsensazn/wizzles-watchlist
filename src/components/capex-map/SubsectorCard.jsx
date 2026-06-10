@@ -1,11 +1,12 @@
 import { useState } from "react";
 import TickerChip from "./TickerChip";
-import StressBadge, { StressDetail } from "./StressBadge";
+import StressBadge, { StressDetail, GaugeChip, hasGaugeData } from "./StressBadge";
 
 export default function SubsectorCard({
   sub,
   prices,
   stress,
+  gauges = {},
   isAdmin,
   onAddTicker,
   onRemoveTicker,
@@ -53,6 +54,7 @@ export default function SubsectorCard({
         />
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <StressBadge stress={stress} open={stressOpen} onClick={() => setStressOpen(v => !v)} />
+          <GaugeChip tickers={sub.tickers} gauges={gauges} open={stressOpen} onClick={() => setStressOpen(v => !v)} />
           {sub.badge && <Badge text={sub.badge} color={sub.badgeColor} />}
           {isAdmin && (
             <button
@@ -103,13 +105,13 @@ export default function SubsectorCard({
         </div>
       )}
 
-      {stress && (
+      {(stress || hasGaugeData(sub.tickers, gauges)) && (
         <div>
           <button onClick={() => setStressOpen(v => !v)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, padding: 0, fontFamily: "inherit" }}>
             <span style={{ display: "inline-block", transition: "transform .2s", transform: stressOpen ? "rotate(90deg)" : "rotate(0deg)" }}>▶</span>
-            Transcript Stress Signals ({stress.count})
+            Stress Signals
           </button>
-          {stressOpen && <StressDetail stress={stress} onTickerClick={onTickerClick} />}
+          {stressOpen && <StressDetail stress={stress} tickers={sub.tickers} gauges={gauges} onTickerClick={onTickerClick} />}
         </div>
       )}
 

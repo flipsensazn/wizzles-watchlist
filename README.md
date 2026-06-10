@@ -23,6 +23,19 @@ Configure these Cloudflare environment variables as needed:
 - `GEMINI_API_KEY`
 - `SHARED_DATA` KV binding
 
+## XBRL backlog/inventory gauges
+
+`src/xbrl_gauges.py` (run weekly by `.github/workflows/xbrl-gauges.yml`) pulls
+quarterly fundamentals for every capex-map company from SEC's free
+companyfacts XBRL API — no key, no cost. It computes the gauges where a
+bottleneck shows up in the numbers before the narrative: the **order gap**
+(RPO/backlog YoY growth minus revenue YoY growth — positive means orders are
+outrunning shipping capacity) and **inventory days** trends (rising at buyers
+= hoarding/double-ordering). Results land in the Neon `xbrl_gauges` table,
+are served by `GET /gauges`, and surface as BKLG chips and per-company gauge
+lines in the subsector stress drilldowns. Only needs the `DATABASE_URL`
+secret and the `WATCHLIST_BASE_URL` variable.
+
 ## Transcript NLP stress detection
 
 `src/transcript_stress.py` (run weekly by `.github/workflows/transcript-stress.yml`)
