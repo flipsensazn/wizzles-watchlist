@@ -184,6 +184,29 @@ Schema:
   "summary": <string, 2-3 sentences>
 }`;
 
+// Assembled from the three agents when Gemini's synthesis call is unavailable,
+// so the analysis still returns a usable report instead of a hard error.
+function buildFallbackReport({ ticker, verdict, weightedScore, fundamentals, technical, macro, reason }) {
+  const risks = Array.isArray(fundamentals.key_risks) ? fundamentals.key_risks.slice(0, 5) : [];
+  const riskLines = risks.length
+    ? risks.map(r => `- ${r}`).join("\n")
+    : "- Detailed synthesis was unavailable; see the agent scores above.";
+  return `## Executive Summary
+${ticker} scores ${weightedScore}/100 — a ${verdict} signal — based on the three agent analyses below. (AI synthesis was temporarily unavailable${reason ? ` — ${reason}` : ""}; this summary was auto-assembled from the agents.)
+
+## Fundamental Analysis
+${fundamentals.summary || "No summary returned."}
+
+## Technical Analysis
+${technical.summary || "No summary returned."}
+
+## Macro & Qualitative Factors
+${macro.summary || "No summary returned."}
+
+## Key Risks
+${riskLines}`;
+}
+
 // ── SYNTHESIZER ───────────────────────────────────────────────────────────────
 async function synthesize(geminiKey, ticker, currentPrice, fundamentals, technical, macro) {
   const weightedScore =
@@ -247,29 +270,58 @@ ${JSON.stringify(technical, null, 2)}
 MACRO JSON:
 ${JSON.stringify(macro, null, 2)}`;
 
-  const synthController = new AbortController();
-  const synthTimer = setTimeout(() => synthController.abort(), 25000);
-  let synthRes;
-  try {
-    synthRes = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_SYNTH}:generateContent?key=${geminiKey}`,
-      {
-        method: "POST",
-        signal: synthController.signal,
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          contents: [{ parts: [{ text: synthPrompt }] }],
-          generationConfig: { temperature: 0.3, maxOutputTokens: 3000 },
-        }),
-      }
-    );
-  } finally {
-    clearTimeout(synthTimer);
+  // Gemini's synthesis call occasionally returns 429/503/529 when overloaded —
+  // the same transient statuses the agent calls already retry on. Retry with
+  // backoff; if it still fails, fall back to an agent-assembled report so a
+  // single hiccup doesn't sink the whole analysis with a hard error.
+  let report = "";
+  let reason = null;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    if (attempt > 0) {
+      await new Promise(r => setTimeout(r, 1500 * Math.pow(2, attempt - 1))); // 1.5s, 3s
+    }
+
+    const synthController = new AbortController();
+    const synthTimer = setTimeout(() => synthController.abort(), 25000);
+    let synthRes;
+    try {
+      synthRes = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_SYNTH}:generateContent?key=${geminiKey}`,
+        {
+          method: "POST",
+          signal: synthController.signal,
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            contents: [{ parts: [{ text: synthPrompt }] }],
+            generationConfig: { temperature: 0.3, maxOutputTokens: 3000 },
+          }),
+        }
+      );
+    } catch (e) {
+      reason = e.name === "AbortError" ? "synthesis timed out" : "synthesis network error";
+      continue; // transient — retry
+    } finally {
+      clearTimeout(synthTimer);
+    }
+
+    if (synthRes.status === 429 || synthRes.status === 503 || synthRes.status === 529) {
+      reason = `Gemini ${synthRes.status}`;
+      continue; // overloaded / rate limited — retry
+    }
+    if (!synthRes.ok) {
+      reason = `Gemini ${synthRes.status}`;
+      break; // non-transient — stop and use the fallback
+    }
+
+    const data = await synthRes.json();
+    report = data?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") ?? "";
+    if (report) break;
+    reason = "empty synthesis response";
   }
 
-  if (!synthRes.ok) throw new Error(`Synthesis API error ${synthRes.status}`);
-  const data = await synthRes.json();
-  const report = data?.candidates?.[0]?.content?.parts?.map(p => p.text).join("") ?? "";
+  if (!report) {
+    report = buildFallbackReport({ ticker, verdict, weightedScore, fundamentals, technical, macro, reason });
+  }
 
   return { report, weightedScore, verdict, projection };
 }
