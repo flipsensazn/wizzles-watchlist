@@ -23,6 +23,20 @@ Configure these Cloudflare environment variables as needed:
 - `GEMINI_API_KEY`
 - `SHARED_DATA` KV binding
 
+## Supply-chain dependency graph
+
+`src/components/capex-map/supplyGraphData.js` encodes the supplier → customer
+graph (~56 nodes, ~112 edges): map tickers plus external chokepoints with no
+ticker (China gallium/indium, SK Hynix/Samsung HBM, large power transformers,
+grid interconnection queues). The propagation engine combines live transcript
+stress and XBRL gauges into a per-node bottleneck strength, then radiates it
+downstream with criticality-weighted decay — so an InP substrate constraint at
+AXT automatically flags Lumentum/Coherent as input-risk and traces all the way
+to the hyperscalers. Rendered as an interactive SVG below the capex map: click
+any node to trace its upstream suppliers and downstream blast radius, with an
+auditable "at risk via X (score, input, hops)" breakdown. Pure frontend — the
+graph is hand-curated; edit the data module to refine relationships.
+
 ## XBRL backlog/inventory gauges
 
 `src/xbrl_gauges.py` (run weekly by `.github/workflows/xbrl-gauges.yml`) pulls

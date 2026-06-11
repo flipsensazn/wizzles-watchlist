@@ -5,6 +5,7 @@ import BloombergFeed from "./components/BloombergFeed";
 import FearGreedGauge from "./components/FearGreedGauge";
 import StatusBanner from "./components/StatusBanner";
 import TopBar from "./components/TopBar";
+import SupplyGraph from "./components/capex-map/SupplyGraph";
 import TrackCard from "./components/capex-map/TrackCard";
 import TrackPane from "./components/capex-map/TrackPane";
 import { useAdminActions } from "./hooks/useAdminActions";
@@ -1766,6 +1767,13 @@ export default function App() {
               Badge={Badge}
             />
           )}
+
+          <SupplyGraph
+            stressData={stressData}
+            gaugesData={gaugesData}
+            prices={prices}
+            onTickerClick={openPopup}
+          />
 
           <div>
             <div className="bottom-grid-all">
