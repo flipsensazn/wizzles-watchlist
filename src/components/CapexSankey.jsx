@@ -83,6 +83,26 @@ export default function CapexSankey({
       return node;
     });
 
+    // Label layout pass: when live intel makes one bar huge, the others get
+    // slivers and labels anchored to bar centers collide. Each label claims a
+    // minimum vertical slot — push down where needed (top→bottom), then clamp
+    // back inside the canvas (bottom→top). Render draws a leader line when a
+    // label ends up displaced from its bar.
+    function layoutLabels(nodes, slotH) {
+      let prevBottom = -Infinity;
+      for (const n of nodes) {
+        n.labelY = Math.max(n.y + n.h / 2, prevBottom + slotH / 2);
+        prevBottom = n.labelY + slotH / 2;
+      }
+      let nextTop = TOP_PAD + FLOW_H + 10;
+      for (let i = nodes.length - 1; i >= 0; i--) {
+        nodes[i].labelY = Math.min(nodes[i].labelY, nextTop - slotH / 2);
+        nextTop = nodes[i].labelY - slotH / 2;
+      }
+    }
+    layoutLabels(companies, 42);   // 3 text lines
+    layoutLabels(trackNodes, 30);  // 2 text lines
+
     // ribbons: company i → track j, thickness ∝ companyShare × trackShare
     const srcOff = companies.map(() => 0);
     const dstOff = trackNodes.map(() => 0);
@@ -163,16 +183,20 @@ export default function CapexSankey({
                 onMouseEnter={() => setHover(c.id)} onMouseLeave={() => setHover(null)}
                 opacity={hover && hover !== c.id && !ribbons.some(r => r.track === hover) ? 0.45 : 1}>
                 <rect x={LEFT_X} y={c.y} width={BAR_W} height={Math.max(c.h, 2)} rx={2} fill="#fbbf24" opacity={0.85} />
-                <text x={LEFT_X - 10} y={c.y + c.h / 2 - 8} textAnchor="end" style={{ fill: "#f8fafc", fontSize: 13, fontWeight: 800 }}>{c.label || c.id}</text>
-                <text x={LEFT_X - 10} y={c.y + c.h / 2 + 6} textAnchor="end" style={{ fill: "#fbbf24", fontSize: 11, fontWeight: 700 }}>{fmtB(c.capex)}</text>
+                {Math.abs(c.labelY - (c.y + c.h / 2)) > 8 && (
+                  <path d={`M ${LEFT_X - 2} ${c.y + c.h / 2} L ${LEFT_X - 7} ${c.labelY}`}
+                    stroke="rgba(148,163,184,0.35)" strokeWidth="1" fill="none" />
+                )}
+                <text x={LEFT_X - 10} y={c.labelY - 8} textAnchor="end" style={{ fill: "#f8fafc", fontSize: 13, fontWeight: 800 }}>{c.label || c.id}</text>
+                <text x={LEFT_X - 10} y={c.labelY + 6} textAnchor="end" style={{ fill: "#fbbf24", fontSize: 11, fontWeight: 700 }}>{fmtB(c.capex)}</text>
                 {entry ? (
-                  <text x={LEFT_X - 10} y={c.y + c.h / 2 + 19} textAnchor="end"
+                  <text x={LEFT_X - 10} y={c.labelY + 19} textAnchor="end"
                     style={{ fill: entry?.change != null ? (pos ? "#10b981" : "#ef4444") : "#475569", fontSize: 10, fontWeight: 700 }}>
                     {entry?.price ? `$${entry.price.toLocaleString("en-US", { maximumFractionDigits: 2 })} ` : ""}
                     {entry?.change != null ? `${pos ? "+" : ""}${entry.change.toFixed(2)}%` : ""}
                   </text>
                 ) : c.isPublic === false ? (
-                  <text x={LEFT_X - 10} y={c.y + c.h / 2 + 19} textAnchor="end"
+                  <text x={LEFT_X - 10} y={c.labelY + 19} textAnchor="end"
                     style={{ fill: "#475569", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em" }}>
                     PRIVATE
                   </text>
@@ -189,8 +213,12 @@ export default function CapexSankey({
               onMouseEnter={() => setHover(t.id)} onMouseLeave={() => setHover(null)}
               opacity={hover && hover !== t.id && !ribbons.some(r => r.company === hover) ? 0.45 : 1}>
               <rect x={RIGHT_X} y={t.y} width={BAR_W} height={Math.max(t.h, 2)} rx={2} fill={t.color} />
-              <text x={RIGHT_X + BAR_W + 10} y={t.y + t.h / 2 - 2} style={{ fill: t.color, fontSize: 12, fontWeight: 700 }}>{t.label}</text>
-              <text x={RIGHT_X + BAR_W + 10} y={t.y + t.h / 2 + 12} style={{ fill: "#94a3b8", fontSize: 10.5, fontWeight: 700 }}>{t.value || fmtB(t.capex)}</text>
+              {Math.abs(t.labelY - (t.y + t.h / 2)) > 8 && (
+                <path d={`M ${RIGHT_X + BAR_W + 2} ${t.y + t.h / 2} L ${RIGHT_X + BAR_W + 7} ${t.labelY}`}
+                  stroke="rgba(148,163,184,0.35)" strokeWidth="1" fill="none" />
+              )}
+              <text x={RIGHT_X + BAR_W + 10} y={t.labelY - 2} style={{ fill: t.color, fontSize: 12, fontWeight: 700 }}>{t.label}</text>
+              <text x={RIGHT_X + BAR_W + 10} y={t.labelY + 12} style={{ fill: "#94a3b8", fontSize: 10.5, fontWeight: 700 }}>{t.value || fmtB(t.capex)}</text>
               <title>{`${t.label}: ${t.value || fmtB(t.capex)} — click to open track`}</title>
             </g>
           ))}
