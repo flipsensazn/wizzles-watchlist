@@ -2,9 +2,9 @@ name: Weekly Transcript Stress ETL
 
 on:
   schedule:
-    # Saturday 12:00 UTC — after the week's earnings calls, transcripts have
-    # had a few days to be published by the providers
-    - cron: '0 12 * * 6'
+    # Saturday ~12:19 UTC — after the week's earnings calls, transcripts have
+    # had a few days to be published by the providers; off the :00 mark
+    - cron: '19 12 * * 6'
 
   # Manual trigger for testing / backfills
   workflow_dispatch:

@@ -2,9 +2,9 @@ name: Monthly Customer Exposure ETL
 
 on:
   schedule:
-    # 2nd day of each month, 13:00 UTC — 10-Ks/10-Qs are annual/quarterly,
-    # monthly refresh keeps the latest filings covered
-    - cron: '0 13 2 * *'
+    # 2nd day of each month, ~13:29 UTC — 10-Ks/10-Qs are annual/quarterly,
+    # monthly refresh keeps the latest filings covered; off the :00 mark
+    - cron: '29 13 2 * *'
 
   # Manual trigger for testing / backfills
   workflow_dispatch:

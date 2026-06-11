@@ -2,8 +2,8 @@ name: Weekly Bottleneck Scout
 
 on:
   schedule:
-    # Sunday 14:00 UTC — after the gauges/scanner runs, fresh queue for the week
-    - cron: '0 14 * * 0'
+    # Sunday ~14:11 UTC — after the gauges/scanner runs, off the :00 mark
+    - cron: '11 14 * * 0'
 
   # Manual trigger
   workflow_dispatch:
