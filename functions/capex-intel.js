@@ -44,18 +44,27 @@ const SECTORS = [
   },
 ];
 
-// --- PROMPT 1: Determine the total capex spending ---
+// --- PROMPT 1: Determine total + per-company capex (search-grounded) ---
+// This call runs with Google Search grounding so the numbers track the LATEST
+// guidance revisions and news, not the model's training data.
 function buildPrompt1() {
   return `You are a financial analyst specializing in AI infrastructure capital expenditure.
 
-Analyze the most recent public guidance, earnings calls, investor-day presentations, and SEC filings for the five primary hyperscalers: Amazon (AWS), Microsoft (Azure), Alphabet/Google, Meta, and Oracle.
+Search for the most recent capex guidance, earnings-call statements, and credible news for the five primary hyperscalers: Amazon (AWS), Microsoft (Azure), Alphabet/Google, Meta, and Oracle.
 
-Determine their collective announced or estimated AI-related capex for 2025-2026. Previously this was roughly $600 billion. 
+Determine each company's announced or estimated AI-related capex for their current fiscal year (2026 era guidance). Use the most recently reported or revised figures you can find.
 
-Respond with ONLY a valid JSON object containing the total estimated amount in billions of USD. No markdown fences, no preamble, no explanation outside the JSON:
+Respond with ONLY a valid JSON object — no markdown fences, no preamble, no explanation outside the JSON:
 
 {
-  "totalCapexBillions": <integer>
+  "totalCapexBillions": <integer, sum of the five>,
+  "byCompany": {
+    "AMZN": <integer billions>,
+    "MSFT": <integer billions>,
+    "GOOG": <integer billions>,
+    "META": <integer billions>,
+    "ORCL": <integer billions>
+  }
 }`;
 }
 
@@ -91,8 +100,13 @@ Respond with ONLY a valid JSON array — no markdown fences, no preamble, no exp
 ]`;
 }
 
-// Helper to execute Gemini API requests
-async function callGemini(promptText, apiKey, temperature, maxTokens, timeoutMs = 15000) {
+// Helper to execute Gemini API requests.
+// `grounded: true` attaches the Google Search tool — required for prompt 1 so
+// the totals reflect this week's guidance, not training-data memory. Search
+// grounding is incompatible with JSON response mode, so we always parse from
+// text with fence-stripping. Thinking is disabled: its tokens count against
+// maxOutputTokens and can truncate the JSON mid-string.
+async function callGemini(promptText, apiKey, temperature, maxTokens, timeoutMs = 15000, grounded = false) {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), timeoutMs);
 
@@ -105,9 +119,11 @@ async function callGemini(promptText, apiKey, temperature, maxTokens, timeoutMs 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           contents: [{ parts: [{ text: promptText }] }],
+          ...(grounded ? { tools: [{ google_search: {} }] } : {}),
           generationConfig: {
             temperature: temperature,
             maxOutputTokens: maxTokens,
+            thinkingConfig: { thinkingBudget: 0 },
           },
         }),
       }
@@ -134,6 +150,62 @@ async function callGemini(promptText, apiKey, temperature, maxTokens, timeoutMs 
     clearTimeout(timeout);
     if (err.name === "AbortError") throw new Error(`Gemini request timed out after ${timeoutMs}ms`);
     throw err;
+  }
+}
+
+const COMPANY_IDS = ["AMZN", "MSFT", "GOOG", "META", "ORCL"];
+
+function validateByCompany(raw) {
+  if (!raw || typeof raw !== "object") return null;
+  const out = {};
+  for (const id of COMPANY_IDS) {
+    const v = Number(raw[id]);
+    if (!Number.isFinite(v) || v <= 0 || v > 500) return null; // any bad value voids the split
+    out[id] = Math.round(v);
+  }
+  return out;
+}
+
+// Append each FRESH intel reading to Neon so guidance becomes a time series
+// (served by GET /capex-history). Failures are non-fatal — history is a
+// nice-to-have, the live response must not break on a DB hiccup.
+async function persistHistory(env, result) {
+  if (!env.DATABASE_URL) return;
+  try {
+    const host = new URL(
+      env.DATABASE_URL.replace("postgresql://", "https://").replace("postgres://", "https://")
+    ).hostname;
+    const sql = (query, params = []) =>
+      fetch(`https://${host}/sql`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          "Neon-Connection-String": env.DATABASE_URL,
+        },
+        body: JSON.stringify({ query, params }),
+      });
+
+    await sql(`
+      CREATE TABLE IF NOT EXISTS capex_intel_history (
+        fetched_at  TIMESTAMPTZ DEFAULT now(),
+        total_capex INTEGER NOT NULL,
+        by_company  JSONB,
+        allocations JSONB,
+        model       TEXT
+      )
+    `);
+    await sql(
+      `INSERT INTO capex_intel_history (total_capex, by_company, allocations, model)
+       VALUES ($1, $2, $3, $4)`,
+      [
+        result.totalCapexDerived,
+        JSON.stringify(result.byCompany),
+        JSON.stringify(result.allocations),
+        result.model,
+      ]
+    );
+  } catch (err) {
+    console.warn("capex history persist failed", err);
   }
 }
 
@@ -259,11 +331,16 @@ export async function onRequest(context) {
       }
 
       let totalCapex = 600; // Default fallback just in case the first prompt fails structurally
+      let byCompany  = null;
 
-      // STEP 2A: Execute Prompt 1 (Get Total Capex)
+      // STEP 2A: Execute Prompt 1 (search-grounded total + per-company split)
       try {
-        const totalResult = await callGemini(buildPrompt1(), geminiKey, 0.1, 100);
-        if (totalResult && typeof totalResult.totalCapexBillions === 'number') {
+        const totalResult = await callGemini(buildPrompt1(), geminiKey, 0.1, 1024, 25000, true);
+        byCompany = validateByCompany(totalResult?.byCompany);
+        if (byCompany) {
+          // The per-company sum is the most defensible total
+          totalCapex = Object.values(byCompany).reduce((s, v) => s + v, 0);
+        } else if (totalResult && typeof totalResult.totalCapexBillions === "number") {
           totalCapex = totalResult.totalCapexBillions;
         }
       } catch (prompt1Err) {
@@ -285,16 +362,18 @@ export async function onRequest(context) {
 
       const result = {
         totalCapexDerived: totalCapex, // Returning this so you can inspect what the model decided
+        byCompany,
         allocations,
         fetchedAt: Date.now(),
         model:     MODEL,
-        note:      "Allocations derived from Gemini based on public hyperscaler filings and earnings calls.",
+        note:      "Search-grounded per-company capex; allocations derived from Gemini based on public hyperscaler filings and earnings calls.",
       };
 
-      // 3. Persist to KV for 6 hours
+      // 3. Persist to KV for 6 hours + append to the guidance-history table
       if (env.SHARED_DATA) {
         await env.SHARED_DATA.put(CACHE_KEY, JSON.stringify(result));
       }
+      await persistHistory(env, result);
 
       return new Response(JSON.stringify({ ...result, fromCache: false }), { status: 200, headers });
 
