@@ -117,13 +117,37 @@ top = ", ".join(f"{g['symbol']} ({g['gap_pct']}%) — {g['catalyst'] or 'no cata
                 for g in gappers[:3])
 print(f"Premarket Gappers: {len(gappers)} names. Top: {top}")
 
-# Telegram notification (every run — this scanner fires once per day)
+# Telegram notification — deduped across local/cloud pipelines: if the
+# deployed KV already holds a scan from today, another pipeline ran first
+# and already sent the digest.
+import os
 import telegram_notify
-lines = [f"\U0001F4CA *Premarket Gappers* — {today}"]
-for g in gappers:
-    bullet = f"• {g['symbol']} ${g['price']} +{g['gap_pct']}%"
-    if g["catalyst"]:
-        bullet += f" — {g['catalyst']}"
-    lines.append(bullet)
-telegram_notify.send("\n".join(lines))
+
+def kv_has_todays_scan():
+    url = os.environ.get("GAP_SCANNER_URL")
+    if not url:
+        try:
+            cfg = json.load(open("gap_scanner_config.json", encoding="utf-8"))
+            url = cfg.get("url")
+        except OSError:
+            return False
+    if not url:
+        return False
+    try:
+        res = json.loads(fetch(url, timeout=30))
+        return bool(res.get("success")) and res.get("data", {}).get("scanned_at", "")[:10] == today
+    except Exception as e:
+        print(f"warn: KV dedupe check failed ({e}) — sending telegram anyway", file=sys.stderr)
+        return False
+
+if kv_has_todays_scan():
+    print("telegram: today's scan already in KV (other pipeline ran first) — skipping digest")
+else:
+    lines = [f"\U0001F4CA *Premarket Gappers* — {today}"]
+    for g in gappers:
+        bullet = f"• {g['symbol']} ${g['price']} +{g['gap_pct']}%"
+        if g["catalyst"]:
+            bullet += f" — {g['catalyst']}"
+        lines.append(bullet)
+    telegram_notify.send("\n".join(lines))
 PYEOF

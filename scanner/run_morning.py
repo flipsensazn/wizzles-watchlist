@@ -7,6 +7,7 @@ days (Yahoo's SPY calendar knows the holidays).
 
 Then: premarket gappers scan -> TJL evaluation -> KV push + Telegram.
 """
+import datetime
 import os
 import subprocess
 import sys
@@ -16,7 +17,19 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 
-from tjl_scan import spy_session  # noqa: E402
+from tjl_scan import fetch_stored_scan, spy_session  # noqa: E402
+
+
+def local_pipeline_already_ran():
+    """True if today's scan is already in KV — Wizzle's PC (the primary
+    pipeline, 8:30am ET) ran first; this cloud run (8:40am ET) is the
+    fallback for days the PC is asleep."""
+    url = os.environ.get("GAP_SCANNER_URL")
+    if not url:
+        return False
+    stored = fetch_stored_scan(url)
+    today = datetime.date.today().isoformat()
+    return bool(stored and stored.get("scanned_at", "")[:10] == today)
 
 
 def guards_pass():
@@ -44,6 +57,11 @@ def guards_pass():
 
 def main():
     if not guards_pass():
+        return
+
+    if not os.environ.get("FORCE_RUN") and local_pipeline_already_ran():
+        print("skip: today's scan already in KV — local pipeline ran first; "
+              "cloud fallback not needed")
         return
 
     print("running premarket gappers scan...")
