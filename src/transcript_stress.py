@@ -111,7 +111,7 @@ TRANSCRIPT_ALIAS = {"GOOG": "GOOGL"}
 # Fallback for Musk-map tickers not already covered above (see
 # src/components/capex-map/muskData.js — the live /musk-capex endpoint wins).
 MUSK_DEFAULT_TICKERS = [
-    "TSLA", "ALB", "SQM", "PLL", "PCRFY", "APTV", "ATI", "CRS", "HWM",
+    "TSLA", "ALB", "SQM", "ELVR", "PCRFF", "APTV", "ATI", "CRS", "HWM",
     "CAT", "GEV", "URI", "ON", "STM", "WOLF", "QRVO", "FLTCF", "RDW",
 ]
 

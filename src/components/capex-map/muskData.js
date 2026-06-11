@@ -11,12 +11,14 @@
 // Supplier edges are curated from documented relationships: Supermicro/Dell
 // build xAI's Colossus clusters, Vertiv cools them, CAT (Solar Turbines) and
 // GE Vernova power them; ON/ST supply Tesla SiC, Panasonic supplies cells,
-// Piedmont holds a Tesla lithium offtake; ST makes Starlink user-terminal
+// Elevra (ex-Piedmont) holds a Tesla lithium offtake; ST makes Starlink
 // silicon and Filtronic the E-band amplifiers; fab equipment majors feed the
 // planned Terafab project. Edit freely — this file is the model.
 
 export const MUSK_CAPEX_DATA = {
-  version: 1,
+  // version 2: PCRFY → PCRFF (Panasonic ADR no longer quotes; ordinary OTC
+  // shares do) and PLL → ELVR (Piedmont merged with Sayona → Elevra Lithium)
+  version: 2,
   companies: ["TSLA", "SPACEX", "XAI", "STARLINK", "BORING", "NEURALINK"],
   tracks: [
     {
@@ -34,7 +36,7 @@ export const MUSK_CAPEX_DATA = {
       color: "#34d399", borderColor: "#10b981",
       subsectors: [
         { id: "powersemi", label: "Power Semiconductors (SiC)", tickers: ["ON", "STM", "WOLF"], materials: ["SiC Boules", "200mm SiC Wafers"] },
-        { id: "battery", label: "Battery Cells & Materials", tickers: ["PCRFY", "ALB", "SQM", "PLL"], materials: [ { name: "Lithium", constraint: "Refining concentrated in China", color: "#f59e0b" }, { name: "Graphite Anode", constraint: "China export controls active", color: "#ef4444" }, "Nickel", "Separator Film" ] },
+        { id: "battery", label: "Battery Cells & Materials", tickers: ["PCRFF", "ALB", "SQM", "ELVR"], materials: [ { name: "Lithium", constraint: "Refining concentrated in China", color: "#f59e0b" }, { name: "Graphite Anode", constraint: "China export controls active", color: "#ef4444" }, "Nickel", "Separator Film" ] },
         { id: "components", label: "Vehicle Components", tickers: ["APTV"], materials: ["Wiring Harnesses", "Castings", "Aluminum"] },
         { id: "autonomy", label: "Autonomy Compute", tickers: ["NVDA", "TSM"], materials: ["FSD/Dojo Silicon", "Training Clusters"] },
       ],
@@ -52,7 +54,7 @@ export const MUSK_CAPEX_DATA = {
       id: "energy", label: "Energy & Storage", value: "~$5B", capex: 5,
       color: "#c084fc", borderColor: "#a855f7",
       subsectors: [
-        { id: "storage", label: "Cells & Storage Systems (Megapack)", tickers: ["PCRFY", "ENS"], materials: ["LFP Cells", "Inverters", "Thermal Management"] },
+        { id: "storage", label: "Cells & Storage Systems (Megapack)", tickers: ["PCRFF", "ENS"], materials: ["LFP Cells", "Inverters", "Thermal Management"] },
         { id: "gridinfra", label: "Grid & Charging Infrastructure", tickers: ["HUBB"], materials: ["Switchgear", "Charging Hardware", "Copper"] },
       ],
     },
@@ -107,7 +109,7 @@ export const MUSK_GRAPH_NODES = [
   // L1 — materials & equipment
   { id: "ALB",  label: "Albemarle · lithium",   layer: 1 },
   { id: "SQM",  label: "SQM · lithium",         layer: 1 },
-  { id: "PLL",  label: "Piedmont · Li offtake", layer: 1 },
+  { id: "ELVR",  label: "Elevra · Li offtake",   layer: 1 },
   { id: "ATI",  label: "ATI · specialty alloys",layer: 1 },
   { id: "CRS",  label: "Carpenter · alloys",    layer: 1 },
   { id: "AMAT", label: "AMAT · fab equipment",  layer: 1 },
@@ -129,7 +131,7 @@ export const MUSK_GRAPH_NODES = [
   { id: "SMCI",  label: "Supermicro · servers",  layer: 3 },
   { id: "DELL",  label: "Dell · servers",        layer: 3 },
   { id: "VRT",   label: "Vertiv · cooling",      layer: 3 },
-  { id: "PCRFY", label: "Panasonic · cells",     layer: 3 },
+  { id: "PCRFF", label: "Panasonic · cells",     layer: 3 },
   { id: "APTV",  label: "Aptiv · harnesses",     layer: 3 },
   { id: "HWM",   label: "Howmet · aero parts",   layer: 3 },
   { id: "RDW",   label: "Redwire · sat parts",   layer: 3 },
@@ -151,7 +153,7 @@ export const MUSK_GRAPH_EDGES = [
   // raw → materials
   { from: "CN_LITHIUM",  to: "ALB",   what: "refining capacity", criticality: 2 },
   { from: "CN_LITHIUM",  to: "SQM",   what: "refining capacity", criticality: 2 },
-  { from: "CN_GRAPHITE", to: "PCRFY", what: "anode graphite", criticality: 3 },
+  { from: "CN_GRAPHITE", to: "PCRFF", what: "anode graphite", criticality: 3 },
   { from: "SK_HYNIX",    to: "NVDA",  what: "HBM", criticality: 3 },
   { from: "TRANSFORMERS", to: "TSLA", what: "gigafactory power", criticality: 2 },
   { from: "TRANSFORMERS", to: "XAI",  what: "datacenter power", criticality: 2 },
@@ -160,9 +162,9 @@ export const MUSK_GRAPH_EDGES = [
 
   // materials → Musk cos / cells
   { from: "ALB", to: "TSLA",  what: "lithium hydroxide", criticality: 2 },
-  { from: "ALB", to: "PCRFY", what: "lithium", criticality: 2 },
+  { from: "ALB", to: "PCRFF", what: "lithium", criticality: 2 },
   { from: "SQM", to: "TSLA",  what: "lithium", criticality: 1 },
-  { from: "PLL", to: "TSLA",  what: "Li offtake agreement", criticality: 2 },
+  { from: "ELVR", to: "TSLA",  what: "Li offtake agreement", criticality: 2 },
   { from: "ATI", to: "SPACEX", what: "specialty alloys", criticality: 1 },
   { from: "CRS", to: "SPACEX", what: "superalloys", criticality: 1 },
 
@@ -189,7 +191,7 @@ export const MUSK_GRAPH_EDGES = [
   { from: "SMCI",  to: "XAI", what: "Colossus servers", criticality: 3 },
   { from: "DELL",  to: "XAI", what: "Colossus servers", criticality: 3 },
   { from: "VRT",   to: "XAI", what: "liquid cooling", criticality: 2 },
-  { from: "PCRFY", to: "TSLA", what: "battery cells", criticality: 3 },
+  { from: "PCRFF", to: "TSLA", what: "battery cells", criticality: 3 },
   { from: "APTV",  to: "TSLA", what: "wiring harnesses", criticality: 2 },
   { from: "HWM",   to: "SPACEX", what: "aero fasteners/castings", criticality: 1 },
   { from: "RDW",   to: "STARLINK", what: "satellite components", criticality: 1 },
