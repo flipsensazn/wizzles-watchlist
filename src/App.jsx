@@ -1485,11 +1485,15 @@ export default function App() {
         return;
       }
       if (action === "approved") {
-        const trackId = capexData.tracks.some(t => t.id === candidate.trackId) ? candidate.trackId : "frontier";
+        // Route the approval into whichever map the candidate was scouted for.
+        const isMuskCand = candidate.view === "musk";
+        const targetMap = isMuskCand ? muskCapexData : capexData;
+        const saveTarget = isMuskCand ? saveGlobalMuskCapex : saveGlobalCapex;
+        const trackId = targetMap.tracks.some(t => t.id === candidate.trackId) ? candidate.trackId : "frontier";
         const label = (candidate.suggestedSubsector || "Scout Additions").trim();
         const newData = {
-          ...capexData,
-          tracks: capexData.tracks.map(t => {
+          ...targetMap,
+          tracks: targetMap.tracks.map(t => {
             if (t.id !== trackId) return t;
             const existing = t.subsectors.find(s => s.label.toLowerCase() === label.toLowerCase());
             if (existing) {
@@ -1507,7 +1511,7 @@ export default function App() {
             };
           }),
         };
-        saveGlobalCapex(newData);
+        saveTarget(newData);
       }
       setCandidates(prev => prev.map(c => c.ticker === candidate.ticker
         ? { ...c, status: action, reviewedAt: new Date().toISOString() }

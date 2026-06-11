@@ -52,6 +52,13 @@ view: Approve adds the ticker to the capex map (auto-enrolling it in the
 weekly signal scans), Reject suppresses it permanently. Needs the existing
 `DATABASE_URL` + `GEMINI_API_KEY` secrets and `WATCHLIST_BASE_URL` variable.
 
+The scout covers BOTH views: each weekly run scouts the AI hyperscaler chain
+and the Musk Galaxy chain (themes per Musk track — Colossus suppliers, the
+Tesla battery/SiC chain, SpaceX/Starlink, Optimus). Candidates carry a
+`view` tag (🚀 MUSK chip in the queue) and approval routes the ticker into
+the matching map. The `SCOUT_VIEW` workflow input restricts a run to `ai`
+or `musk`; `MAX_NEW_CANDIDATES` caps each view separately.
+
 ## Capex guidance: grounded intel, history, Sankey hero
 
 `/capex-intel` now runs its total-capex prompt with Google Search grounding,

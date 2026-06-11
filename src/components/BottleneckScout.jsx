@@ -7,9 +7,16 @@ import { stressColor } from "./capex-map/StressBadge";
 // or rejects (never suggested again). GET/POST /candidates.
 
 const TRACK_LABELS = {
-  compute: "Compute & Silicon", networking: "Networking & Connectivity",
-  photonics: "Photonics & Interconnects", neoclouds: "Neoclouds & Data Centers",
-  power: "Power & Cooling", frontier: "Frontier / Speculative",
+  ai: {
+    compute: "Compute & Silicon", networking: "Networking & Connectivity",
+    photonics: "Photonics & Interconnects", neoclouds: "Neoclouds & Data Centers",
+    power: "Power & Cooling", frontier: "Frontier / Speculative",
+  },
+  musk: {
+    ai: "AI & Compute (xAI · Dojo · Terafab)", vehicles: "Vehicles & Autonomy (Tesla)",
+    space: "Launch & Starlink (SpaceX)", energy: "Energy & Storage",
+    infra: "Build-out, Power & Tunnels", frontier: "Neuralink & Robotics",
+  },
 };
 
 const DIR_LABELS = {
@@ -57,6 +64,9 @@ function CandidateCard({ c, isAdmin, onReview, onTickerClick }) {
         {c.isOtc && (
           <span style={{ fontSize: 9, fontWeight: 800, color: "#fbbf24", border: "1px solid #fbbf2466", background: "#fbbf2414", borderRadius: 3, padding: "1px 5px" }}>OTC</span>
         )}
+        {c.view === "musk" && (
+          <span title="Musk Galaxy supply-chain candidate" style={{ fontSize: 9, fontWeight: 800, color: "#c084fc", border: "1px solid #c084fc66", background: "#c084fc14", borderRadius: 3, padding: "1px 5px" }}>🚀 MUSK</span>
+        )}
         <span style={{ fontSize: 10, color: "#475569", marginLeft: "auto" }}>
           {fmtCap(c.marketCap)}{c.price != null && ` · $${c.price.toLocaleString("en-US", { maximumFractionDigits: 2 })}`}
         </span>
@@ -67,7 +77,7 @@ function CandidateCard({ c, isAdmin, onReview, onTickerClick }) {
           {c.chokepoint || "bottleneck candidate"}
         </span>
         <span style={{ fontSize: 10, color: "#64748b" }}>
-          → {TRACK_LABELS[c.trackId] || c.trackId}{c.suggestedSubsector ? ` · ${c.suggestedSubsector}` : ""}
+          → {TRACK_LABELS[c.view === "musk" ? "musk" : "ai"][c.trackId] || c.trackId}{c.suggestedSubsector ? ` · ${c.suggestedSubsector}` : ""}
         </span>
       </div>
 
