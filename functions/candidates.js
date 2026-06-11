@@ -89,7 +89,7 @@ export async function onRequest(context) {
     try {
       const res = await sql(`
         SELECT ticker, company_name, exchange, is_otc, market_cap, price,
-               track_id, suggested_subsector, chokepoint, thesis,
+               track_id, view, suggested_subsector, chokepoint, thesis,
                stress_score, stress_direction, stress_summary, stress_quotes,
                order_gap, rpo_yoy, revenue_yoy, inventory_days, backlog_score,
                status, discovered_at, reviewed_at
@@ -123,6 +123,7 @@ export async function onRequest(context) {
           marketCap: num(r.market_cap),
           price: num(r.price),
           trackId: r.track_id,
+          view: r.view || "ai",
           suggestedSubsector: r.suggested_subsector,
           chokepoint: r.chokepoint,
           thesis: r.thesis,

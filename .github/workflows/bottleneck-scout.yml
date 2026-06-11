@@ -9,9 +9,15 @@ on:
   workflow_dispatch:
     inputs:
       max_candidates:
-        description: 'Max new candidates this run'
+        description: 'Max new candidates per view this run'
         required: false
         default: '12'
+      scout_view:
+        description: 'Which supply chain to scout'
+        required: false
+        type: choice
+        default: 'both'
+        options: [both, ai, musk]
 
 jobs:
   run-bottleneck-scout:
@@ -37,6 +43,7 @@ jobs:
           GEMINI_API_KEY:     ${{ secrets.GEMINI_API_KEY }}
           WATCHLIST_BASE_URL: ${{ vars.WATCHLIST_BASE_URL }}
           MAX_NEW_CANDIDATES: ${{ github.event.inputs.max_candidates }}
+          SCOUT_VIEW:         ${{ github.event.inputs.scout_view }}
         run: python src/bottleneck_scout.py
 
       - name: Notify on failure

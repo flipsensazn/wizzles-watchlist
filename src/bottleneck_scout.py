@@ -45,10 +45,18 @@ from transcript_stress import (
 from xbrl_gauges import get_cik_map, fetch_companyfacts, compute_gauges
 
 DATABASE_URL       = os.environ.get("DATABASE_URL")
-MAX_NEW_CANDIDATES = int(os.environ.get("MAX_NEW_CANDIDATES") or 12)
+MAX_NEW_CANDIDATES = int(os.environ.get("MAX_NEW_CANDIDATES") or 12)  # per view
+SCOUT_VIEW         = (os.environ.get("SCOUT_VIEW") or "both").lower()
 GEMINI_MODEL       = "gemini-2.5-flash"
 
-# Discovery themes — one grounded search per track.
+# Discovery themes — one grounded search per track, per view. The "ai" view
+# hunts the hyperscaler capex chain; the "musk" view hunts the supply chains
+# of Elon Musk's companies. SCOUT_VIEW env: "ai" | "musk" | "both" (default).
+AI_CONTEXT = "AI infrastructure (the hyperscaler capex build-out)"
+MUSK_CONTEXT = ("the supply chains of Elon Musk's companies — Tesla, SpaceX/"
+                "Starlink, xAI (Colossus datacenters), the Terafab chip fab "
+                "project, The Boring Company, and Neuralink")
+
 THEMES = [
     ("compute", "Compute & Silicon",
      "AI chips, HBM memory, advanced packaging (CoWoS/SoIC), leading-edge foundry, "
@@ -70,7 +78,30 @@ THEMES = [
      "space infrastructure, robotics for fabs and datacenters"),
 ]
 
-DISCOVER_PROMPT = """You are a supply-chain analyst hunting for PUBLIC companies exposed to CURRENT bottlenecks in AI infrastructure.
+# Track ids must match MUSK_CAPEX_DATA in src/components/capex-map/muskData.js
+MUSK_THEMES = [
+    ("ai", "AI & Compute (xAI · Dojo · Terafab)",
+     "suppliers to xAI's Colossus datacenters (servers, cooling, power), Dojo "
+     "silicon, the Terafab fab project (equipment, materials, construction)"),
+    ("vehicles", "Vehicles & Autonomy (Tesla)",
+     "Tesla supply chain: SiC power semiconductors, battery cells and "
+     "materials (lithium, graphite, cathode/anode), castings, wiring, "
+     "autonomy compute"),
+    ("space", "Launch & Starlink (SpaceX)",
+     "SpaceX/Starlink suppliers: specialty alloys and aerostructures, RF and "
+     "phased-array silicon, satellite components, ground equipment"),
+    ("energy", "Energy & Storage",
+     "Megapack/storage supply chain: LFP cells, inverters, grid interconnect "
+     "hardware, charging infrastructure"),
+    ("infra", "Build-out, Power & Tunnels",
+     "gigafactory/datacenter construction, gas turbines and site power, "
+     "switchgear, tunneling equipment"),
+    ("frontier", "Neuralink & Robotics",
+     "humanoid robot (Optimus) actuators, harmonic drives, sensors; "
+     "implant-grade components and surgical robotics"),
+]
+
+DISCOVER_PROMPT = """You are a supply-chain analyst hunting for PUBLIC companies exposed to CURRENT bottlenecks in {context}.
 
 Domain: {label} — {description}
 
@@ -228,6 +259,7 @@ BOOTSTRAP_SQL = """
         market_cap          DOUBLE PRECISION,
         price               DOUBLE PRECISION,
         track_id            TEXT,
+        view                TEXT DEFAULT 'ai',
         suggested_subsector TEXT,
         chokepoint          TEXT,
         thesis              TEXT,
@@ -246,13 +278,18 @@ BOOTSTRAP_SQL = """
     );
 """
 
+MIGRATE_SQL = """
+    ALTER TABLE bottleneck_candidates
+        ADD COLUMN IF NOT EXISTS view TEXT DEFAULT 'ai';
+"""
+
 INSERT_SQL = """
     INSERT INTO bottleneck_candidates
         (ticker, company_name, exchange, is_otc, market_cap, price, track_id,
-         suggested_subsector, chokepoint, thesis, stress_score, stress_direction,
-         stress_summary, stress_quotes, order_gap, rpo_yoy, revenue_yoy,
-         inventory_days, backlog_score)
-    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
+         view, suggested_subsector, chokepoint, thesis, stress_score,
+         stress_direction, stress_summary, stress_quotes, order_gap, rpo_yoy,
+         revenue_yoy, inventory_days, backlog_score)
+    VALUES (%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s,%s)
     ON CONFLICT (ticker) DO NOTHING;
 """
 
@@ -270,10 +307,12 @@ if __name__ == "__main__":
     try:
         with conn.cursor() as cur:
             cur.execute(BOOTSTRAP_SQL)
+            cur.execute(MIGRATE_SQL)
         conn.commit()
 
-        # Exclusions: everything on the live map + every candidate ever
-        # suggested (pending, approved, or rejected — never re-pitch).
+        # Exclusions: everything on EITHER live map (a ticker already tracked
+        # anywhere can be added to the other map manually via admin) + every
+        # candidate ever suggested (pending, approved, or rejected).
         exclusions = set(get_universe())
         with conn.cursor() as cur:
             cur.execute("SELECT ticker FROM bottleneck_candidates")
@@ -281,58 +320,68 @@ if __name__ == "__main__":
         print(f"{len(exclusions)} tickers excluded from discovery.")
 
         cik_map = get_cik_map()
-        added = 0
+        total_added = 0
 
-        for track_id, label, description in THEMES:
-            if added >= MAX_NEW_CANDIDATES:
-                break
-            print(f"\n[{label}] searching...")
-            try:
-                proposals = grounded_gemini(DISCOVER_PROMPT.format(
-                    label=label, description=description,
-                    exclusions=", ".join(sorted(exclusions))))
-            except Exception as e:
-                print(f"  discovery failed — {e}")
-                continue
-            time.sleep(GEMINI_PAUSE)
+        view_plans = [v for v in (
+            ("ai", AI_CONTEXT, THEMES),
+            ("musk", MUSK_CONTEXT, MUSK_THEMES),
+        ) if SCOUT_VIEW in ("both", v[0])]
 
-            for p in proposals:
+        for view, context, themes in view_plans:
+            added = 0
+            print(f"\n===== {view.upper()} view =====")
+            for track_id, label, description in themes:
                 if added >= MAX_NEW_CANDIDATES:
                     break
-                if not isinstance(p, dict):
+                print(f"\n[{view}/{label}] searching...")
+                try:
+                    proposals = grounded_gemini(DISCOVER_PROMPT.format(
+                        context=context, label=label, description=description,
+                        exclusions=", ".join(sorted(exclusions))))
+                except Exception as e:
+                    print(f"  discovery failed — {e}")
                     continue
-                ticker = str(p.get("ticker") or "").strip().upper()
-                claimed = str(p.get("companyName") or "").strip()
-                if not ticker or not claimed or ticker in exclusions:
-                    continue
+                time.sleep(GEMINI_PAUSE)
 
-                v = validate_ticker(ticker, claimed)
-                time.sleep(1.0)  # Yahoo politeness
-                if not v:
-                    print(f"  {ticker}: failed validation — dropped")
-                    continue
+                for p in proposals:
+                    if added >= MAX_NEW_CANDIDATES:
+                        break
+                    if not isinstance(p, dict):
+                        continue
+                    ticker = str(p.get("ticker") or "").strip().upper()
+                    claimed = str(p.get("companyName") or "").strip()
+                    if not ticker or not claimed or ticker in exclusions:
+                        continue
 
-                print(f"  {ticker} ({v['name']}): validated — enriching signals...")
-                s = stress_snapshot(ticker)
-                g = gauge_snapshot(ticker, cik_map)
+                    v = validate_ticker(ticker, claimed)
+                    time.sleep(1.0)  # Yahoo politeness
+                    if not v:
+                        print(f"  {ticker}: failed validation — dropped")
+                        continue
 
-                with conn.cursor() as cur:
-                    cur.execute(INSERT_SQL, (
-                        ticker, v["name"], v["exchange"], v["is_otc"],
-                        v["market_cap"], v["price"], track_id,
-                        str(p.get("suggestedSubsector") or "")[:80],
-                        str(p.get("chokepoint") or "")[:120],
-                        str(p.get("thesis") or "")[:600],
-                        s["stress_score"], s["stress_direction"], s["stress_summary"],
-                        psycopg2.extras.Json(s["stress_quotes"]),
-                        g["order_gap"], g["rpo_yoy"], g["revenue_yoy"],
-                        g["inventory_days"], g["backlog_score"],
-                    ))
-                conn.commit()
-                exclusions.add(ticker)
-                added += 1
-                print(f"  {ticker}: queued (stress={s['stress_score']}, gap={g['order_gap']})")
+                    print(f"  {ticker} ({v['name']}): validated — enriching signals...")
+                    s = stress_snapshot(ticker)
+                    g = gauge_snapshot(ticker, cik_map)
+
+                    with conn.cursor() as cur:
+                        cur.execute(INSERT_SQL, (
+                            ticker, v["name"], v["exchange"], v["is_otc"],
+                            v["market_cap"], v["price"], track_id, view,
+                            str(p.get("suggestedSubsector") or "")[:80],
+                            str(p.get("chokepoint") or "")[:120],
+                            str(p.get("thesis") or "")[:600],
+                            s["stress_score"], s["stress_direction"], s["stress_summary"],
+                            psycopg2.extras.Json(s["stress_quotes"]),
+                            g["order_gap"], g["rpo_yoy"], g["revenue_yoy"],
+                            g["inventory_days"], g["backlog_score"],
+                        ))
+                    conn.commit()
+                    exclusions.add(ticker)
+                    added += 1
+                    print(f"  {ticker}: queued (stress={s['stress_score']}, gap={g['order_gap']})")
+            total_added += added
+            print(f"\n{view} view: {added} candidates queued")
     finally:
         conn.close()
 
-    print(f"\n=== Bottleneck Scout complete: {added} new candidates queued ===")
+    print(f"\n=== Bottleneck Scout complete: {total_added} new candidates queued ===")

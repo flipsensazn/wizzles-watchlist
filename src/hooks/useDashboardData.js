@@ -165,7 +165,6 @@ export function useDashboardData({
         if (json.success && Array.isArray(json.candidates)) setCandidates(json.candidates);
       })
       .catch(() => {});
-
     fetch("/capex-history")
       .then(res => res.json())
       .then(json => {
