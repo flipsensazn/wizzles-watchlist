@@ -23,6 +23,22 @@ Configure these Cloudflare environment variables as needed:
 - `GEMINI_API_KEY`
 - `SHARED_DATA` KV binding
 
+## Capex guidance: grounded intel, history, Sankey hero
+
+`/capex-intel` now runs its total-capex prompt with Google Search grounding,
+so the headline number tracks the latest guidance revisions and news instead
+of the model's training data, and returns a per-hyperscaler breakdown
+(`byCompany`). Every fresh reading is appended to the Neon
+`capex_intel_history` table (auto-created; needs the same `DATABASE_URL`
+binding as the other endpoints) and served by `GET /capex-history`, giving
+the UI a guidance trend — the first derivative of hyperscaler capex, which is
+the actual signal. The old Sector News / Bloomberg panels are gone; the hero
+is now a Sankey (`src/components/CapexSankey.jsx`): hyperscalers on the left
+(grounded $B + live prices), the six tracks on the right, ribbon widths
+proportional to dollars, click a sector to open its track pane. Per-company
+sector mix isn't disclosed anywhere, so ribbons fan out proportionally — the
+footnote says so.
+
 ## Customer-exposure extraction (filed edge weights)
 
 `src/customer_exposure.py` (run monthly by

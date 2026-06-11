@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef, memo, useMemo, createContext, useContext } from "react";
 import AdminModal from "./components/AdminModal";
 import AnalysisDrawer from "./components/AnalysisDrawer";
-import BloombergFeed from "./components/BloombergFeed";
+import CapexSankey from "./components/CapexSankey";
 import FearGreedGauge from "./components/FearGreedGauge";
 import StatusBanner from "./components/StatusBanner";
 import TopBar from "./components/TopBar";
@@ -1345,7 +1345,7 @@ export default function App() {
     capexIntel,
     capexIntelStatus,
     capexIntelError,
-    newsFeed,
+    capexHistory,
     stressData,
     gaugesData,
     exposureData,
@@ -1632,113 +1632,16 @@ export default function App() {
 
         <div className="main-content" style={{ maxWidth: 1480, margin: "0 auto", padding: "32px 20px 64px", display: "flex", flexDirection: "column", gap: 28, overflowX: "hidden", boxSizing: "border-box", width: "100%" }}>
           
-          <div className="top-node-layout" style={{ display: "flex", alignItems: "stretch", justifyContent: "center", gap: 20, width: "100%" }}>
-            
-            {/* LEFT SIDE: Sector News */}
-            <div className="side-panel" style={{ flex: "1 1 0", maxWidth: 350, minWidth: 250, display: "flex", flexDirection: "column" }}>
-              <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 8, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 14 }}>🗞</span> Sector News
-              </div>
-              <div style={{ height: 250, background: "linear-gradient(to bottom, #1c1917, #0a0a0a)", border: "1px solid #27272a", borderRadius: 4, padding: "12px", overflowY: "auto", display: "flex", flexDirection: "column", gap: 12, boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)" }}>
-                {newsFeed.length === 0 ? (
-                  <div style={{ color: "#475569", fontSize: 11, textAlign: "center", marginTop: 20 }}>Loading news...</div>
-                ) : (
-                  newsFeed.slice(0, 15).map((item, i) => (
-                    <a key={i} href={item.link} target="_blank" rel="noopener noreferrer" style={{ textDecoration: "none", display: "block", borderBottom: i < Math.min(newsFeed.length, 15) - 1 ? "1px solid rgba(255,255,255,0.05)" : "none", paddingBottom: i < Math.min(newsFeed.length, 15) - 1 ? 12 : 0 }}>
-                      {item.relatedTickers && (
-                        <div style={{ fontSize: 9, color: "#fbbf24", fontWeight: 700, marginBottom: 4, letterSpacing: "0.05em" }}>
-                          {item.relatedTickers.slice(0, 4).join(", ")}
-                        </div>
-                      )}
-                      <div style={{ fontSize: 12, color: "#e2e8f0", lineHeight: 1.4, fontWeight: 600, marginBottom: 6 }}>
-                        {item.title}
-                      </div>
-                      <div style={{ fontSize: 9, color: "#64748b", display: "flex", justifyContent: "space-between" }}>
-                        <span>{item.publisher}</span>
-                        <span>{new Date(item.providerPublishTime * 1000).toLocaleDateString()}</span>
-                      </div>
-                    </a>
-                  ))
-                )}
-              </div>
-            </div>
-
-            {/* CENTER: Existing Hyperscaler Box */}
-            <div className="top-node-center" style={{ display: "flex", flexDirection: "column", alignItems: "center", flex: "0 0 auto", width: "100%", maxWidth: 540 }}>
-              <div style={{ 
-                width: "100%", 
-                borderRadius: 4, 
-                padding: "26px 30px", 
-                textAlign: "center", 
-                background: "linear-gradient(to bottom, #1c1917, #0a0a0a)", 
-                border: "1px solid #27272a", 
-                borderTop: "3px solid #fbbf24", 
-                boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 12px rgba(0,0,0,0.6)",
-                boxSizing: "border-box",
-                height: "100%"
-              }}>
-                <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 6, fontFamily: "'Roboto Condensed', sans-serif" }}>Total Investment Flow</div>
-                <div className="capex-number" style={{ fontSize: 68, fontWeight: 800, color: "#fbbf24", lineHeight: 1, marginBottom: 8, textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}>~${liveTotal}B{capexIntelStatus === "success" ? "" : "+"}</div>
-                
-                <div style={{ fontSize: 12, fontWeight: 600, color: "#64748b", marginBottom: 20, letterSpacing: "0.08em", textTransform: "uppercase" }}>
-                  Hyperscaler AI Capex{" "}
-                  <span style={{ color: capexIntelStatus === "success" ? "#34d399" : "#d97706" }}>
-                    {capexIntelStatus === "success" ? "(Live Intel)" : "(2026 Est.)"}
-                  </span>
-                </div>
-                
-                <div style={{ display: "flex", justifyContent: "center", gap: 8, flexWrap: "wrap", marginTop: 4 }}>
-                  {CAPEX_DATA.companies.map(co => {
-                    const entry = marketData[co];
-                    const pos = (entry?.change ?? 0) >= 0;
-                    const sessionLabel = entry?.session === "POST" || entry?.session === "CLOSED" ? "AH" : entry?.session === "PRE" ? "PM" : null;
-                    return (
-                      <div key={co} style={{ 
-                        display: "flex", flexDirection: "column", alignItems: "center", 
-                        padding: "8px 12px", borderRadius: 2, minWidth: 85, 
-                        background: "linear-gradient(to bottom, #262626, #0a0a0a)", 
-                        border: "1px solid #171717",
-                        boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02), 0 2px 4px rgba(0,0,0,0.5)",
-                        fontFamily: "'Roboto Condensed', sans-serif"
-                      }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 4, marginBottom: 4 }}>
-                          <span style={{ fontSize: 12, fontWeight: 800, color: "#f8fafc", letterSpacing: "0.02em" }}>{co}</span>
-                          {sessionLabel && <span style={{ fontSize: 7, fontWeight: 800, color: "#94a3b8", background: "#171717", border: "1px solid #333", borderRadius: 2, padding: "1px 3px" }}>{sessionLabel}</span>}
-                        </div>
-                        <span style={{ fontSize: 13, fontWeight: 700, color: sessionLabel ? "rgba(255,255,255,0.6)" : "#f8fafc", marginBottom: 2 }}>
-                          {entry?.price ? "$" + entry.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 }) : "—"}
-                        </span>
-                        {entry?.change !== undefined && entry?.change !== null ? (
-                          <span style={{ fontSize: 12, fontWeight: 700, color: pos ? "#10b981" : "#ef4444" }}>
-                            {pos ? "+" : ""}{entry.change.toFixed(2)}%
-                          </span>
-                        ) : <span style={{ fontSize: 11, color: "#475569" }}>—</span>}
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-              
-              {/* Downward Connector Lines */}
-              <div style={{ display: "flex", flexDirection: "column", alignItems: "center", width: "100%", maxWidth: 540 }}>
-                <div style={{ width: 1, height: 28, background: "linear-gradient(to bottom,#fbbf24,transparent)" }} />
-                <div style={{ position: "relative", width: "100%", height: 1, background: "linear-gradient(90deg,transparent 5%,rgba(255,255,255,.1) 20%,rgba(255,255,255,.1) 80%,transparent 95%)" }}>
-                  {capexData.tracks.map((_, i, arr) => <div key={i} style={{ position: "absolute", top: 0, left: `${(i / (arr.length - 1)) * 70 + 15}%`, width: 1, height: 18, background: "linear-gradient(to bottom,rgba(255,255,255,.15),transparent)" }} />)}
-                </div>
-              </div>
-            </div>
-
-            {/* RIGHT SIDE: Bloomberg Feed */}
-            <div className="side-panel" style={{ flex: "1 1 0", maxWidth: 350, minWidth: 250, display: "flex", flexDirection: "column" }}>
-              <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.15em", textTransform: "uppercase", marginBottom: 8, fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
-                <span style={{ fontSize: 14 }}>🌐</span> Bloomberg Live
-              </div>
-              <div style={{ height: 250, background: "linear-gradient(to bottom, #1c1917, #0a0a0a)", border: "1px solid #27272a", borderRadius: 4, overflowY: "auto", overflowX: "hidden", boxShadow: "inset 0 1px 0 rgba(255,255,255,0.02)" }}>
-                <BloombergFeed />
-              </div>
-            </div>
-
-          </div>
+          {/* HERO: capex flow Sankey — hyperscalers → tracks, with guidance trend */}
+          <CapexSankey
+            total={liveTotal}
+            live={capexIntelStatus === "success"}
+            byCompany={capexIntel?.byCompany}
+            tracks={liveCapexData.tracks}
+            marketData={marketData}
+            history={capexHistory}
+            onTrackClick={trackId => setActiveTrack(p => p === trackId ? null : trackId)}
+          />
 
           <div className="track-grid" style={{ display: "grid", gridTemplateColumns: "repeat(6,minmax(0,1fr))", gap: 10, paddingTop: 8 }}>
             {liveCapexData.tracks.map(track => (

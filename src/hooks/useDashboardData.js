@@ -51,7 +51,7 @@ export function useDashboardData({
   const [capexIntel, setCapexIntel] = useState(null);
   const [capexIntelStatus, setCapexIntelStatus] = useState("idle");
   const [capexIntelError, setCapexIntelError] = useState(null);
-  const [newsFeed, setNewsFeed] = useState([]);
+  const [capexHistory, setCapexHistory] = useState([]);
   const [stressData, setStressData] = useState({});
   const [gaugesData, setGaugesData] = useState({});
   const [exposureData, setExposureData] = useState({});
@@ -130,6 +130,13 @@ export function useDashboardData({
       })
       .catch(() => {});
 
+    fetch("/capex-history")
+      .then(res => res.json())
+      .then(json => {
+        if (json.success && Array.isArray(json.history)) setCapexHistory(json.history);
+      })
+      .catch(() => {});
+
     fetch("/shortlist")
       .then(res => res.json())
       .then(data => {
@@ -140,26 +147,6 @@ export function useDashboardData({
       })
       .catch(() => {});
   }, [defaultCapexData.version]);
-
-  useEffect(() => {
-    const fetchSectorNews = () => {
-      fetch("/news")
-        .then(res => res.json())
-        .then(data => {
-          if (data.news) setNewsFeed(data.news);
-        })
-        .catch(() => {});
-    };
-
-    fetchSectorNews();
-    const newsInterval = setInterval(() => {
-      if (!document.hidden) {
-        fetchSectorNews();
-      }
-    }, 60000);
-
-    return () => clearInterval(newsInterval);
-  }, []);
 
   useEffect(() => {
     const marketTickers = [...indexTickers, ...cryptoTickers, ...hyperscalerTickers];
@@ -262,7 +249,7 @@ export function useDashboardData({
     capexIntel,
     capexIntelStatus,
     capexIntelError,
-    newsFeed,
+    capexHistory,
     stressData,
     gaugesData,
     exposureData,

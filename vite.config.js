@@ -19,6 +19,7 @@ export default defineConfig({
       '/stress':      'http://localhost:8788',
       '/gauges':      'http://localhost:8788',
       '/exposure':    'http://localhost:8788',
+      '/capex-history': 'http://localhost:8788',
     },
   },
 })
