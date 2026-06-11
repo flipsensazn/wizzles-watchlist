@@ -2,8 +2,8 @@ name: Weekly Small-Cap Scanner ETL
 
 on:
   schedule:
-    # Sunday 6:00 AM EDT (10:00 UTC) — completes well before Monday open
-    - cron: '0 10 * * 0'
+    # Sunday ~6:13 AM EDT — off the :00 mark (congested cron slots get skipped)
+    - cron: '13 10 * * 0'
 
   # Manual trigger for testing
   workflow_dispatch:

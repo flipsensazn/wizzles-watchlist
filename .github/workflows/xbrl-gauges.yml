@@ -2,8 +2,8 @@ name: Weekly XBRL Gauges ETL
 
 on:
   schedule:
-    # Sunday 11:00 UTC — after the small-cap scanner, before Monday open
-    - cron: '0 11 * * 0'
+    # Sunday ~11:17 UTC — after the small-cap scanner, off the :00 mark
+    - cron: '17 11 * * 0'
 
   # Manual trigger for testing / backfills
   workflow_dispatch:
