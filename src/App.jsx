@@ -1161,7 +1161,7 @@ function GapScannerPanel({ prices, onTickerClick }) {
             )}
           </div>
           <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>
-            Gap &gt;5% · price &gt;$3 · vol &gt;50K · Trend Join Long: above prev daily high, 200 SMA, PMH &amp; HOD
+            Gap &gt;5% · price &gt;$3 · vol &gt;25K · Trend Join Long: above prev daily high, 200 SMA, PMH &amp; HOD
             {scannedAgo ? ` · scanned ${scannedAgo}` : ""}
           </p>
         </div>

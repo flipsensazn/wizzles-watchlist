@@ -5,7 +5,7 @@
 # for news catalysts. NOTE: finance.yahoo.com/quote/{T}/news/ returns 503 —
 # do not switch the news source back to Yahoo.
 #
-# Filters: gap_pct > 5, price > $3, volume > 50000, top 10 by gap_pct.
+# Filters: gap_pct > 5, price > $3, volume > 25000, top 10 by gap_pct.
 # Output: ./premarket_gappers_YYYY-MM-DD.json
 set -uo pipefail
 cd "$(dirname "$0")"
@@ -47,7 +47,7 @@ for q in quotes:
     vol = q.get("preMarketVolume") or q.get("regularMarketVolume")
     if not sym or price is None or gap is None or vol is None:
         continue
-    if gap > 5 and price > 3 and vol > 50000:
+    if gap > 5 and price > 3 and vol > 25000:
         rows.append({"symbol": sym, "price": round(float(price), 2),
                      "gap_pct": round(float(gap), 2), "premarket_volume": int(vol)})
 
