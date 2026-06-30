@@ -8,6 +8,7 @@ export function useAdminActions({
   setShortList,
   setCapexData,
   setMuskCapexData,
+  setRoboticsCapexData,
   shortListRef,
   showNotice,
   refresh,
@@ -135,11 +136,37 @@ export function useAdminActions({
     }
   }, [adminPassword, refresh, setAdminPassword, setIsAdmin, setMuskCapexData, showNotice]);
 
+  const saveGlobalRoboticsCapex = useCallback(async (newData) => {
+    try {
+      const res = await fetch("/robotics-capex", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ capexData: newData, password: adminPassword }),
+      });
+      const json = await res.json().catch(() => ({}));
+
+      if (res.ok) {
+        setRoboticsCapexData(newData);
+        showNotice("Robotics capex map updated.", "success");
+        refresh();
+      } else {
+        showNotice(json.error || "Robotics capex update failed.");
+        if (res.status === 401) {
+          setIsAdmin(false);
+          setAdminPassword("");
+        }
+      }
+    } catch {
+      showNotice("Network error while updating Robotics capex data.");
+    }
+  }, [adminPassword, refresh, setAdminPassword, setIsAdmin, setRoboticsCapexData, showNotice]);
+
   return {
     verifyAdminPassword,
     saveGlobalScanner,
     saveGlobalShortlist,
     saveGlobalCapex,
     saveGlobalMuskCapex,
+    saveGlobalRoboticsCapex,
   };
 }

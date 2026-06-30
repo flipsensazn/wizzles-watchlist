@@ -40,6 +40,7 @@ export function useDashboardData({
   defaultScannerPool,
   defaultCapexData,
   defaultMuskData,
+  defaultRoboticsData,
   indexTickers,
   cryptoTickers,
   hyperscalerTickers,
@@ -61,10 +62,14 @@ export function useDashboardData({
   const [muskCapexData, setMuskCapexData] = useState(defaultMuskData);
   const [muskIntel, setMuskIntel] = useState(null);
   const [muskIntelStatus, setMuskIntelStatus] = useState("idle");
+  const [roboticsCapexData, setRoboticsCapexData] = useState(defaultRoboticsData);
+  const [roboticsIntel, setRoboticsIntel] = useState(null);
+  const [roboticsIntelStatus, setRoboticsIntelStatus] = useState("idle");
   const [prices, setPrices] = useState({});
   const pricesRef = useRef({});
   const capexDataRef = useRef(defaultCapexData);
   const muskDataRef = useRef(defaultMuskData);
+  const roboticsDataRef = useRef(defaultRoboticsData);
   // Which view is showing — refresh fetches only that view's map, not both
   // (fetching both doubled the per-cycle ticker count and broke the cache).
   const activeViewRef = useRef("ai");
@@ -117,6 +122,29 @@ export function useDashboardData({
         }
       })
       .catch(() => setMuskIntelStatus("error"));
+
+    fetch("/robotics-capex")
+      .then(res => res.json())
+      .then(data => {
+        if (data.capexData && (data.capexData.version ?? 0) >= (defaultRoboticsData?.version ?? 1)) {
+          setRoboticsCapexData(data.capexData);
+          roboticsDataRef.current = data.capexData;
+        }
+      })
+      .catch(() => {});
+
+    setRoboticsIntelStatus("loading");
+    fetch("/robotics-intel")
+      .then(res => res.json())
+      .then(data => {
+        if (!data.error && data.allocations?.length) {
+          setRoboticsIntel(data);
+          setRoboticsIntelStatus("success");
+        } else {
+          setRoboticsIntelStatus("error");
+        }
+      })
+      .catch(() => setRoboticsIntelStatus("error"));
 
     setCapexIntelStatus("loading");
     const intelController = new AbortController();
@@ -215,6 +243,10 @@ export function useDashboardData({
   }, [muskCapexData]);
 
   useEffect(() => {
+    roboticsDataRef.current = roboticsCapexData;
+  }, [roboticsCapexData]);
+
+  useEffect(() => {
     scannerPoolRef.current = scannerPool;
   }, [scannerPool]);
 
@@ -228,9 +260,10 @@ export function useDashboardData({
     // Only the ACTIVE view's map is on screen, so only fetch its tickers —
     // the heat map, watchlist, Sankey, graph and earnings panels all read the
     // active view. The inactive view's prices are fetched when you switch to it.
-    const activeMap = activeViewRef.current === "musk" && muskDataRef.current
-      ? muskDataRef.current
-      : capexDataRef.current;
+    const activeMap =
+      activeViewRef.current === "robotics" && roboticsDataRef.current ? roboticsDataRef.current :
+      activeViewRef.current === "musk" && muskDataRef.current ? muskDataRef.current :
+      capexDataRef.current;
     const allTickers = [...new Set([
       ...getAllTickers(activeMap),
       ...scannerPoolRef.current,
@@ -309,6 +342,10 @@ export function useDashboardData({
     setMuskCapexData,
     muskIntel,
     muskIntelStatus,
+    roboticsCapexData,
+    setRoboticsCapexData,
+    roboticsIntel,
+    roboticsIntelStatus,
     prices,
     pricesRef,
     marketData,
@@ -317,6 +354,7 @@ export function useDashboardData({
     refresh,
     capexDataRef,
     muskDataRef,
+    roboticsDataRef,
     activeViewRef,
     scannerPoolRef,
     shortListRef,

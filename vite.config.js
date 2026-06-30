@@ -23,6 +23,8 @@ export default defineConfig({
       '/candidates':  'http://localhost:8788',
       '/musk-capex':  'http://localhost:8788',
       '/musk-intel':  'http://localhost:8788',
+      '/robotics-capex': 'http://localhost:8788',
+      '/robotics-intel': 'http://localhost:8788',
     },
   },
 })
