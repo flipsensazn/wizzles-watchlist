@@ -115,6 +115,17 @@ MUSK_DEFAULT_TICKERS = [
     "CAT", "GEV", "URI", "ON", "STM", "WOLF", "QRVO", "FLTCF", "RDW",
 ]
 
+# Fallback for Robotics-map tickers (see src/components/capex-map/roboticsData.js
+# — the live /robotics-capex endpoint wins). 6324.T / 6481.T are Yahoo-covered
+# Japanese listings; defeatbeta won't have transcripts for them, so they fall
+# through to lexicon-only / no-data, which is fine.
+ROBOTICS_DEFAULT_TICKERS = [
+    "NVDA", "QCOM", "AMBA", "LSCC", "CEVA", "OUST", "CGNX", "HSAI", "ALGM",
+    "VPG", "NOVT", "NJDCY", "AME", "RRX", "RBC", "6324.T", "6481.T", "ALNT",
+    "NVTS", "WOLF", "ON", "TXN", "STM", "MPWR", "IFNNY", "RNECY",
+    "MP", "USAR", "LYSCF", "UUUU", "ENS",
+]
+
 
 def _map_tickers(path):
     """Tickers from a KV-backed capex-map endpoint, or None on failure/empty."""
@@ -135,15 +146,17 @@ def _map_tickers(path):
 
 
 def get_universe():
-    """Union of the AI capex map and the Musk Galaxy map (live endpoints with
-    embedded fallbacks) plus the hyperscalers."""
+    """Union of the AI capex map, the Musk Galaxy map and the Robotics map
+    (live endpoints with embedded fallbacks) plus the hyperscalers."""
     tickers = list(DEFAULT_MAP_TICKERS)
     musk = list(MUSK_DEFAULT_TICKERS)
+    robotics = list(ROBOTICS_DEFAULT_TICKERS)
     if WATCHLIST_BASE_URL:
         tickers = _map_tickers("/capex") or tickers
         musk = _map_tickers("/musk-capex") or musk
+        robotics = _map_tickers("/robotics-capex") or robotics
 
-    universe = list(dict.fromkeys(HYPERSCALERS + tickers + musk))  # dedupe, keep order
+    universe = list(dict.fromkeys(HYPERSCALERS + tickers + musk + robotics))  # dedupe, keep order
     if TICKER_LIMIT > 0:
         universe = universe[:TICKER_LIMIT]
         print(f"TICKER_LIMIT={TICKER_LIMIT} — restricting run to {universe}")

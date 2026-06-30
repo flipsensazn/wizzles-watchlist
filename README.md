@@ -36,6 +36,21 @@ with the same stress propagation. Musk-map tickers are automatically unioned
 into the weekly transcript/XBRL/exposure scan universe, so STRESS and BKLG
 badges light up on Musk sub-sectors with no extra setup.
 
+## Robotics view
+
+A third view (tab, or `#robotics` in the URL) tracking the humanoid-robot
+buildout, structured on Goldman Sachs' framework — the thesis that the value
+is in the ~40 repeating component parts, not the robot maker. Six tracks from
+Goldman's component categories (Brain & Edge AI, Sensors, Motors, Joints &
+Precision Motion, Power Electronics, Rare Earth & Energy); the bottleneck is
+precision motion (harmonic/strain-wave gears — Harmonic Drive `6324.T`,
+roller screws — THK `6481.T`) and rare-earth magnets (MP, USAR). Robot makers
+(Tesla, Figure, Agility/CCXI, Unitree, 1X, XPeng, BYD — mostly private) are
+demand hubs on the Sankey, fed by search-grounded `/robotics-intel`. KV-backed
+map at `/robotics-capex`, dataset in
+`src/components/capex-map/roboticsData.js`. All US/ADR tickers were validated
+against live quotes; robotics-map tickers join the weekly scan universe.
+
 ## Bottleneck Scout (AI candidate discovery)
 
 `src/bottleneck_scout.py` (run weekly by `.github/workflows/bottleneck-scout.yml`)

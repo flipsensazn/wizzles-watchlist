@@ -10,6 +10,7 @@ import EarningsWeek from "./components/EarningsWeek";
 import SupplyGraph from "./components/capex-map/SupplyGraph";
 import TrackPane from "./components/capex-map/TrackPane";
 import { MUSK_CAPEX_DATA, MUSK_COMPANIES, MUSK_GRAPH_NODES, MUSK_GRAPH_EDGES, MUSK_LAYERS } from "./components/capex-map/muskData";
+import { ROBOTICS_CAPEX_DATA, ROBOTICS_COMPANIES, ROBOTICS_GRAPH_NODES, ROBOTICS_GRAPH_EDGES, ROBOTICS_LAYERS } from "./components/capex-map/roboticsData";
 import { useAdminActions } from "./hooks/useAdminActions";
 import { useDashboardData } from "./hooks/useDashboardData";
 import { usePresence } from "./hooks/usePresence";
@@ -24,7 +25,10 @@ const CRYPTO_TICKERS = ["BTC-USD", "ETH-USD", "XRP-USD"];
 const HYPERSCALER_TICKERS = ["AMZN", "MSFT", "GOOG", "META", "ORCL"];
 // Public hub companies shown on a Sankey but not present as suppliers in a
 // capex map — always fetched so their price renders (TSLA on the Musk view).
-const PINNED_TICKERS = MUSK_COMPANIES.filter(c => c.isPublic).map(c => c.id);
+const PINNED_TICKERS = [...new Set([
+  ...MUSK_COMPANIES.filter(c => c.isPublic).map(c => c.id),
+  ...ROBOTICS_COMPANIES.filter(c => c.isPublic).map(c => c.id),
+])];
 
 // The default Multibagger Scanner list
 const DEFAULT_MULTIBAGGER = [
@@ -1345,13 +1349,17 @@ export default function App() {
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [appNotice, setAppNotice] = useState(null);
 
-  // "ai" = hyperscaler capex flow · "musk" = the Musk Galaxy view
-  const [view, setView] = useState(() => (window.location.hash === "#musk" ? "musk" : "ai"));
+  // "ai" = hyperscaler capex flow · "musk" = Musk Galaxy · "robotics" = humanoid robotics
+  const VALID_VIEWS = ["ai", "musk", "robotics"];
+  const [view, setView] = useState(() => {
+    const h = window.location.hash.replace("#", "");
+    return VALID_VIEWS.includes(h) ? h : "ai";
+  });
   const isMusk = view === "musk";
   function switchView(next) {
     setView(next);
     setActiveTrack(null);
-    window.location.hash = next === "musk" ? "musk" : "";
+    window.location.hash = next === "ai" ? "" : next;
   }
 
   const [activeTrack, setActiveTrack] = useState(null);
@@ -1380,6 +1388,10 @@ export default function App() {
     setMuskCapexData,
     muskIntel,
     muskIntelStatus,
+    roboticsCapexData,
+    setRoboticsCapexData,
+    roboticsIntel,
+    roboticsIntelStatus,
     prices,
     pricesRef,
     marketData,
@@ -1394,6 +1406,7 @@ export default function App() {
     defaultScannerPool: DEFAULT_MULTIBAGGER,
     defaultCapexData: CAPEX_DATA,
     defaultMuskData: MUSK_CAPEX_DATA,
+    defaultRoboticsData: ROBOTICS_CAPEX_DATA,
     indexTickers: INDEX_TICKERS,
     cryptoTickers: CRYPTO_TICKERS,
     hyperscalerTickers: HYPERSCALER_TICKERS,
@@ -1421,6 +1434,7 @@ export default function App() {
     saveGlobalShortlist,
     saveGlobalCapex,
     saveGlobalMuskCapex,
+    saveGlobalRoboticsCapex,
   } = useAdminActions({
     adminPassword,
     setAdminPassword,
@@ -1429,14 +1443,15 @@ export default function App() {
     setShortList,
     setCapexData,
     setMuskCapexData,
+    setRoboticsCapexData,
     shortListRef,
     showNotice,
     refresh,
   });
 
   // Admin map edits operate on whichever view is active.
-  const activeMapData = isMusk ? muskCapexData : capexData;
-  const saveActiveMap = isMusk ? saveGlobalMuskCapex : saveGlobalCapex;
+  const activeMapData = view === "robotics" ? roboticsCapexData : isMusk ? muskCapexData : capexData;
+  const saveActiveMap = view === "robotics" ? saveGlobalRoboticsCapex : isMusk ? saveGlobalMuskCapex : saveGlobalCapex;
 
   useEffect(() => {
     if (!appNotice) return;
@@ -1507,10 +1522,13 @@ export default function App() {
       }
       if (action === "approved") {
         // Route the approval into whichever map the candidate was scouted for.
-        const isMuskCand = candidate.view === "musk";
-        const targetMap = isMuskCand ? muskCapexData : capexData;
-        const saveTarget = isMuskCand ? saveGlobalMuskCapex : saveGlobalCapex;
-        const trackId = targetMap.tracks.some(t => t.id === candidate.trackId) ? candidate.trackId : "frontier";
+        const targetMap = candidate.view === "robotics" ? roboticsCapexData
+          : candidate.view === "musk" ? muskCapexData : capexData;
+        const saveTarget = candidate.view === "robotics" ? saveGlobalRoboticsCapex
+          : candidate.view === "musk" ? saveGlobalMuskCapex : saveGlobalCapex;
+        // Fall back to the map's last track if the suggested one doesn't exist.
+        const trackId = targetMap.tracks.some(t => t.id === candidate.trackId)
+          ? candidate.trackId : targetMap.tracks[targetMap.tracks.length - 1].id;
         const label = (candidate.suggestedSubsector || "Scout Additions").trim();
         const newData = {
           ...targetMap,
@@ -1610,9 +1628,11 @@ export default function App() {
 
   const liveCapexData = useMemo(() => mergeIntel(capexData, capexIntel), [capexData, capexIntel]);
   const liveMuskData = useMemo(() => mergeIntel(muskCapexData, muskIntel), [muskCapexData, muskIntel]);
-  const activeLiveData = isMusk ? liveMuskData : liveCapexData;
-  const activeIntelStatus = isMusk ? muskIntelStatus : capexIntelStatus;
-  const activeIntel = isMusk ? muskIntel : capexIntel;
+  const liveRoboticsData = useMemo(() => mergeIntel(roboticsCapexData, roboticsIntel), [roboticsCapexData, roboticsIntel]);
+  const isRobotics = view === "robotics";
+  const activeLiveData = isRobotics ? liveRoboticsData : isMusk ? liveMuskData : liveCapexData;
+  const activeIntelStatus = isRobotics ? roboticsIntelStatus : isMusk ? muskIntelStatus : capexIntelStatus;
+  const activeIntel = isRobotics ? roboticsIntel : isMusk ? muskIntel : capexIntel;
 
   // Aggregate per-ticker transcript stress (GET /stress) up to each subsector:
   // score = avg of member companies' latest scores, trend = avg QoQ delta,
@@ -1743,9 +1763,9 @@ export default function App() {
 
         <div className="main-content" style={{ maxWidth: 1480, margin: "0 auto", padding: "32px 20px 64px", display: "flex", flexDirection: "column", gap: 28, overflowX: "hidden", boxSizing: "border-box", width: "100%" }}>
           
-          {/* VIEW SWITCHER: AI hyperscaler capex flow ↔ Musk Galaxy */}
-          <div style={{ display: "flex", gap: 8 }}>
-            {[["ai", "🌐 AI Capex Flow"], ["musk", "🚀 Musk Galaxy"]].map(([id, label]) => (
+          {/* VIEW SWITCHER: AI hyperscaler capex flow · Musk Galaxy · Robotics */}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            {[["ai", "🌐 AI Capex Flow"], ["musk", "🚀 Musk Galaxy"], ["robotics", "🦾 Robotics"]].map(([id, label]) => (
               <button key={id} onClick={() => switchView(id)}
                 style={{
                   background: view === id ? "rgba(251,191,36,0.12)" : "rgba(255,255,255,0.03)",
@@ -1767,10 +1787,10 @@ export default function App() {
             live={activeIntelStatus === "success"}
             byCompany={activeIntel?.byCompany}
             tracks={activeLiveData.tracks}
-            marketData={isMusk ? prices : marketData}
-            history={isMusk ? [] : capexHistory}
-            companyConfig={isMusk ? MUSK_COMPANIES : undefined}
-            subtitle={isMusk ? "Musk Companies Capex" : undefined}
+            marketData={view === "ai" ? marketData : prices}
+            history={view === "ai" ? capexHistory : []}
+            companyConfig={isRobotics ? ROBOTICS_COMPANIES : isMusk ? MUSK_COMPANIES : undefined}
+            subtitle={isRobotics ? "Humanoid Robot Investment" : isMusk ? "Musk Companies Capex" : undefined}
             activeTrack={activeTrack}
             onTrackClick={trackId => setActiveTrack(p => p === trackId ? null : trackId)}
           />
@@ -1797,10 +1817,10 @@ export default function App() {
             exposureData={exposureData}
             prices={prices}
             onTickerClick={openPopup}
-            graphNodes={isMusk ? MUSK_GRAPH_NODES : undefined}
-            graphEdges={isMusk ? MUSK_GRAPH_EDGES : undefined}
-            layers={isMusk ? MUSK_LAYERS : undefined}
-            title={isMusk ? "Musk Galaxy Dependency Graph" : undefined}
+            graphNodes={isRobotics ? ROBOTICS_GRAPH_NODES : isMusk ? MUSK_GRAPH_NODES : undefined}
+            graphEdges={isRobotics ? ROBOTICS_GRAPH_EDGES : isMusk ? MUSK_GRAPH_EDGES : undefined}
+            layers={isRobotics ? ROBOTICS_LAYERS : isMusk ? MUSK_LAYERS : undefined}
+            title={isRobotics ? "Robotics Dependency Graph" : isMusk ? "Musk Galaxy Dependency Graph" : undefined}
           />
 
           <EarningsWeek
