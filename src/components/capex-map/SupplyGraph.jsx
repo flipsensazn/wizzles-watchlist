@@ -32,7 +32,7 @@ const DIR_LABEL = {
 };
 
 export default function SupplyGraph({
-  stressData = {}, gaugesData = {}, exposureData = {}, prices = {}, onTickerClick,
+  stressData = {}, gaugesData = {}, exposureData = {}, compositeData = {}, prices = {}, onTickerClick,
   // Dataset props — default to the AI hyperscaler graph; the Musk Galaxy
   // view passes its own nodes/edges/layers.
   graphNodes = GRAPH_NODES, graphEdges = GRAPH_EDGES, layers = LAYERS,
@@ -234,6 +234,16 @@ export default function SupplyGraph({
           {/* intrinsic signals */}
           <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
             {selNode.note && <div>{selNode.note}</div>}
+            {compositeData[selected]?.score != null && (
+              <div>
+                ⬢ Composite Bottleneck Score: <span style={{ color: "#e2e8f0", fontWeight: 700 }}>{compositeData[selected].score.toFixed(0)}</span>
+                {compositeData[selected].delta != null && (
+                  <span style={{ color: compositeData[selected].delta > 0 ? "#ef4444" : "#34d399" }}>
+                    {" "}({compositeData[selected].delta > 0 ? "+" : ""}{compositeData[selected].delta.toFixed(0)} this week)
+                  </span>
+                )}
+              </div>
+            )}
             {stressData[selected]?.latest && (
               <div>
                 Transcript: <span style={{ color: "#e2e8f0", fontWeight: 700 }}>{stressData[selected].latest.stressScore?.toFixed(0)}</span>

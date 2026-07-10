@@ -3,6 +3,7 @@ import AdminModal from "./components/AdminModal";
 import AnalysisDrawer from "./components/AnalysisDrawer";
 import BottleneckScout from "./components/BottleneckScout";
 import CapexSankey from "./components/CapexSankey";
+import CompositeMovers from "./components/CompositeMovers";
 import FearGreedGauge from "./components/FearGreedGauge";
 import StatusBanner from "./components/StatusBanner";
 import TopBar from "./components/TopBar";
@@ -1382,6 +1383,7 @@ export default function App() {
     stressData,
     gaugesData,
     exposureData,
+    compositeData,
     candidates,
     setCandidates,
     muskCapexData,
@@ -1797,6 +1799,7 @@ export default function App() {
               track={activeData} prices={prices} isAdmin={isAdmin}
               stressBySub={subsectorStress}
               gauges={gaugesData}
+              composite={compositeData}
               onAddTicker={addTickerToSubsector} onRemoveTicker={removeTickerFromSubsector} onTickerClick={openPopup}
               onAddSubsector={addSubsector}
               onRemoveSubsector={removeSubsector}
@@ -1807,11 +1810,18 @@ export default function App() {
             />
           )}
 
+          <CompositeMovers
+            tickers={watchlistTickers}
+            composite={compositeData}
+            onTickerClick={openPopup}
+          />
+
           <SupplyGraph
             key={`graph-${view}`}
             stressData={stressData}
             gaugesData={gaugesData}
             exposureData={exposureData}
+            compositeData={compositeData}
             prices={prices}
             onTickerClick={openPopup}
             graphNodes={isRobotics ? ROBOTICS_GRAPH_NODES : isMusk ? MUSK_GRAPH_NODES : undefined}

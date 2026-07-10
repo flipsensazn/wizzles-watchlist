@@ -92,6 +92,84 @@ export const GaugeChip = memo(function GaugeChip({ tickers, gauges, onClick, ope
 const fmtPct = v => `${v >= 0 ? "+" : ""}${v.toFixed(0)}%`;
 const fmtB = v => v >= 1e9 ? `$${(v / 1e9).toFixed(1)}B` : `$${(v / 1e6).toFixed(0)}M`;
 
+// ── COMPOSITE BOTTLENECK SCORE (GET /composite — weekly blend of transcript
+// stress, XBRL gauges and filed customer concentration) ──
+
+export function compositeSummary(tickers = [], composite = {}) {
+  const scored = tickers.map(t => composite[t]).filter(c => c && c.score != null);
+  if (!scored.length) return null;
+  const deltas = scored.filter(c => c.delta != null);
+  return {
+    avg: scored.reduce((s, c) => s + c.score, 0) / scored.length,
+    trend: deltas.length ? deltas.reduce((s, c) => s + c.delta, 0) / deltas.length : null,
+    count: scored.length,
+  };
+}
+
+// "⬢ 74 ↑" chip — the subsector's average Composite Bottleneck Score.
+export const CompositeChip = memo(function CompositeChip({ tickers, composite, onClick, open }) {
+  const sum = compositeSummary(tickers, composite);
+  if (!sum) return null;
+  const color = stressColor(sum.avg);
+  const arrow = sum.trend == null ? "" : sum.trend > 3 ? " ↑" : sum.trend < -3 ? " ↓" : "";
+  return (
+    <button
+      onClick={e => { e.stopPropagation(); onClick?.(); }}
+      title={`Composite Bottleneck Score ${sum.avg.toFixed(0)}/100 (avg of ${sum.count} — transcript + XBRL + concentration, weekly) — click for breakdown`}
+      style={{
+        background: color + "22", border: `1px solid ${color}`, color,
+        fontSize: 10, fontWeight: 700, letterSpacing: "0.1em",
+        padding: "2px 7px", borderRadius: 3, whiteSpace: "nowrap",
+        cursor: "pointer", fontFamily: "inherit",
+        boxShadow: open ? `0 0 6px ${color}66` : "none",
+      }}
+    >
+      ⬢ {sum.avg.toFixed(0)}{arrow}
+    </button>
+  );
+});
+
+// Tiny inline history sparkline for the drilldown rows.
+export function CbsSparkline({ history, color = "#94a3b8" }) {
+  if (!history || history.length < 2) return null;
+  const scores = history.map(h => h.score).filter(s => s != null);
+  if (scores.length < 2) return null;
+  const w = 64, h = 16;
+  const min = Math.min(...scores), max = Math.max(...scores);
+  const range = max - min || 1;
+  const pts = scores.map((s, i) =>
+    `${(i / (scores.length - 1)) * w},${h - 2 - ((s - min) / range) * (h - 4)}`).join(" ");
+  return (
+    <svg width={w} height={h} style={{ display: "inline-block", verticalAlign: "middle" }}
+      title={`${scores.length} weekly snapshots`}>
+      <polyline points={pts} fill="none" stroke={color} strokeWidth="1.2" />
+    </svg>
+  );
+}
+
+// Per-company CBS line for the drilldown: score, weekly delta, sparkline,
+// and the component breakdown so the number stays auditable.
+export function CompositeLine({ c }) {
+  if (!c || c.score == null) return null;
+  const color = stressColor(c.score);
+  const parts = [];
+  if (c.parts?.transcript != null) parts.push(`call ${c.parts.transcript.toFixed(0)}`);
+  if (c.parts?.gauge != null) parts.push(`xbrl ${c.parts.gauge.toFixed(0)}`);
+  if (c.parts?.concentration != null) parts.push(`conc ${c.parts.concentration.toFixed(0)}`);
+  return (
+    <div style={{ fontSize: 10.5, marginTop: 5, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+      <span style={{ color, fontWeight: 700 }}>⬢ CBS {c.score.toFixed(0)}</span>
+      {c.delta != null && (
+        <span style={{ color: c.delta > 0 ? "#ef4444" : c.delta < 0 ? "#34d399" : "#64748b" }}>
+          {c.delta > 0 ? "+" : ""}{c.delta.toFixed(0)} wk
+        </span>
+      )}
+      <CbsSparkline history={c.history} color={color} />
+      {parts.length > 0 && <span style={{ color: "#475569" }}>({parts.join(" · ")})</span>}
+    </div>
+  );
+}
+
 function GaugeLine({ g }) {
   if (!g) return null;
   const hasBacklog = g.rpoYoy != null;
@@ -120,12 +198,14 @@ function GaugeLine({ g }) {
 // Drilldown: one row per company, merging the transcript signal (score,
 // direction, verbatim quotes) with the SEC XBRL gauges. Companies with only
 // one of the two signals still get a row.
-export function StressDetail({ stress, tickers = [], gauges = {}, onTickerClick }) {
+export function StressDetail({ stress, tickers = [], gauges = {}, composite = {}, onTickerClick }) {
   const byTicker = {};
   for (const c of stress?.companies ?? []) byTicker[c.ticker] = c;
   const order = (stress?.companies ?? []).map(c => c.ticker);
   for (const t of tickers) {
-    if (!byTicker[t] && gauges[t] && (gauges[t].orderGap != null || gauges[t].inventoryDays != null)) {
+    if (!byTicker[t] && !order.includes(t) &&
+        ((gauges[t] && (gauges[t].orderGap != null || gauges[t].inventoryDays != null)) ||
+         composite[t]?.score != null)) {
       order.push(t);
     }
   }
@@ -165,6 +245,7 @@ export function StressDetail({ stress, tickers = [], gauges = {}, onTickerClick 
             {c?.summary && (
               <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 5, lineHeight: 1.5 }}>{c.summary}</div>
             )}
+            <CompositeLine c={composite[ticker]} />
             <GaugeLine g={g} />
             {c?.quotes?.length > 0 && (
               <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
