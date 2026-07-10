@@ -95,8 +95,7 @@ export async function onRequest(context) {
                status, discovered_at, reviewed_at
         FROM bottleneck_candidates
         WHERE status = 'pending'
-           OR (status = 'rejected' AND reviewed_at > now() - interval '14 days')
-        ORDER BY (status = 'pending') DESC, discovered_at DESC
+        ORDER BY discovered_at DESC
         LIMIT 60
       `);
       if (!res.ok) {
