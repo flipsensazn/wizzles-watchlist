@@ -1,12 +1,13 @@
 import { useState } from "react";
 import TickerChip from "./TickerChip";
-import StressBadge, { StressDetail, GaugeChip, hasGaugeData } from "./StressBadge";
+import StressBadge, { StressDetail, GaugeChip, CompositeChip, hasGaugeData, compositeSummary } from "./StressBadge";
 
 export default function SubsectorCard({
   sub,
   prices,
   stress,
   gauges = {},
+  composite = {},
   isAdmin,
   onAddTicker,
   onRemoveTicker,
@@ -53,6 +54,7 @@ export default function SubsectorCard({
           textStyles={{ fontSize: 12, fontWeight: 600, color: "#cbd5e1", lineHeight: 1.4 }}
         />
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <CompositeChip tickers={sub.tickers} composite={composite} open={stressOpen} onClick={() => setStressOpen(v => !v)} />
           <StressBadge stress={stress} open={stressOpen} onClick={() => setStressOpen(v => !v)} />
           <GaugeChip tickers={sub.tickers} gauges={gauges} open={stressOpen} onClick={() => setStressOpen(v => !v)} />
           {isAdmin && (
@@ -104,13 +106,13 @@ export default function SubsectorCard({
         </div>
       )}
 
-      {(stress || hasGaugeData(sub.tickers, gauges)) && (
+      {(stress || hasGaugeData(sub.tickers, gauges) || compositeSummary(sub.tickers, composite)) && (
         <div>
           <button onClick={() => setStressOpen(v => !v)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, padding: 0, fontFamily: "inherit" }}>
             <span style={{ display: "inline-block", transition: "transform .2s", transform: stressOpen ? "rotate(90deg)" : "rotate(0deg)" }}>▶</span>
             Stress Signals
           </button>
-          {stressOpen && <StressDetail stress={stress} tickers={sub.tickers} gauges={gauges} onTickerClick={onTickerClick} />}
+          {stressOpen && <StressDetail stress={stress} tickers={sub.tickers} gauges={gauges} composite={composite} onTickerClick={onTickerClick} />}
         </div>
       )}
 

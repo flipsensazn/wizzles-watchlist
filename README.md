@@ -36,6 +36,22 @@ with the same stress propagation. Musk-map tickers are automatically unioned
 into the weekly transcript/XBRL/exposure scan universe, so STRESS and BKLG
 badges light up on Musk sub-sectors with no extra setup.
 
+## Composite Bottleneck Score (CBS)
+
+`src/composite_score.py` (runs each Sunday right after the XBRL gauges, same
+workflow) blends everything the system knows about a ticker's OWN bottleneck
+evidence into one 0-100 number: transcript stress (0.50), XBRL backlog score
+(0.35), filed customer concentration (0.15) — weights renormalized over the
+components a name actually has, inputs stored per row so every score is
+auditable. Weekly snapshots accumulate in Neon `composite_scores` (history →
+sparklines), served by `GET /composite`. Surfaces as ⬢ chips on sub-sector
+cards, per-company CBS lines with sparklines in the stress drilldowns, a
+"Bottleneck Score Movers" strip (heating/cooling, weekly deltas) above the
+dependency graph, and a CBS line in the graph's node panel. A Telegram digest
+fires on meaningful weekly moves (Δ ≥ 15 or crossing 70). Graph-inherited
+risk is deliberately not blended in — CBS measures intrinsic heat; the graph
+radiates it.
+
 ## Robotics view
 
 A third view (tab, or `#robotics` in the URL) tracking the humanoid-robot

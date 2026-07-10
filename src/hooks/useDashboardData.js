@@ -58,6 +58,7 @@ export function useDashboardData({
   const [stressData, setStressData] = useState({});
   const [gaugesData, setGaugesData] = useState({});
   const [exposureData, setExposureData] = useState({});
+  const [compositeData, setCompositeData] = useState({});
   const [candidates, setCandidates] = useState([]);
   const [muskCapexData, setMuskCapexData] = useState(defaultMuskData);
   const [muskIntel, setMuskIntel] = useState(null);
@@ -188,6 +189,13 @@ export function useDashboardData({
       .then(res => res.json())
       .then(json => {
         if (json.success && json.data) setExposureData(json.data);
+      })
+      .catch(() => {});
+
+    fetch("/composite")
+      .then(res => res.json())
+      .then(json => {
+        if (json.success && json.data) setCompositeData(json.data);
       })
       .catch(() => {});
 
@@ -336,6 +344,7 @@ export function useDashboardData({
     stressData,
     gaugesData,
     exposureData,
+    compositeData,
     candidates,
     setCandidates,
     muskCapexData,
