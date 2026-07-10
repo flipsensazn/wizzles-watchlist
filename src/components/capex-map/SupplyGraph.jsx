@@ -11,6 +11,8 @@ import {
 
 const NODE_W = 118, NODE_H = 26, GAP_Y = 10, COL_W = 158, PAD_X = 16, PAD_Y = 46;
 
+// Absolute color scale — used directly only when the chain has too few
+// scored nodes for a meaningful distribution (see colorFor in the component).
 function nodeColor(strength, risk) {
   if (strength >= 70) return "#ef4444";
   if (strength >= 40) return "#f59e0b";
@@ -64,6 +66,29 @@ export default function SupplyGraph({
   const strength = useMemo(() => computeStrength(graphNodes, stressData, gaugesData), [graphNodes, stressData, gaugesData]);
   const risk = useMemo(() => propagate(graphNodes, edges, strength), [graphNodes, edges, strength]);
 
+  // Relative color scale. When the whole chain runs hot (every transcript
+  // says "sold out"), absolute thresholds paint everything red and the graph
+  // stops discriminating. Color by each node's heat RELATIVE to this chain's
+  // distribution instead, with absolute floors so a cool chain never shows
+  // fake red. Falls back to the absolute scale when too few nodes are scored.
+  const colorFor = useMemo(() => {
+    const heats = graphNodes
+      .map(n => Math.max(strength[n.id] ?? 0, risk[n.id]?.score ?? 0))
+      .filter(h => h > 0)
+      .sort((a, b) => a - b);
+    if (heats.length < 8) return nodeColor;
+    const pct = p => heats[Math.min(heats.length - 1, Math.floor(p * heats.length))];
+    const p85 = pct(0.85), p60 = pct(0.60), p35 = pct(0.35);
+    return (s, r) => {
+      const heat = Math.max(s, r);
+      const own = s >= r; // own bottleneck vs inherited risk → warm vs yellow-orange
+      if (heat >= Math.max(p85, 60)) return own ? "#ef4444" : "#fb923c";
+      if (heat >= Math.max(p60, 40)) return own ? "#f59e0b" : "#fbbf24";
+      if (heat >= Math.max(p35, 15)) return "#60a5fa";
+      return "#334155";
+    };
+  }, [graphNodes, strength, risk]);
+
   const highlight = useMemo(() => {
     if (!selected) return null;
     return {
@@ -116,7 +141,7 @@ export default function SupplyGraph({
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10, alignItems: "center" }}>
           <span style={{ fontSize: 10, color: "#64748b", fontWeight: 700, letterSpacing: "0.1em" }}>RADIATING:</span>
           {topBottlenecks.map(({ id, s }) => {
-            const c = nodeColor(s, 0);
+            const c = colorFor(s, 0);
             return (
               <button key={id} onClick={() => setSelected(p => p === id ? null : id)}
                 style={{ background: c + "1c", border: `1px solid ${c}`, color: c, fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 3, cursor: "pointer", fontFamily: "inherit", boxShadow: selected === id ? `0 0 6px ${c}88` : "none" }}>
@@ -166,7 +191,7 @@ export default function SupplyGraph({
             const p = positions[n.id];
             const s = strength[n.id] ?? 0;
             const r = risk[n.id]?.score ?? 0;
-            const c = nodeColor(s, r);
+            const c = colorFor(s, r);
             const isBottleneck = s >= 40;
             const isSel = selected === n.id;
             const chg = n.type !== "external" ? fmtChange(prices[n.id]?.change ?? prices[n.id]) : null;
@@ -206,6 +231,7 @@ export default function SupplyGraph({
         <span><span style={{ color: "#ef4444" }}>━</span> downstream of selection</span>
         <span><span style={{ color: "#60a5fa" }}>━</span> upstream suppliers</span>
         <span><span style={{ color: "#7dd3fc" }}>━</span> filed revenue exposure (10-K/10-Q)</span>
+        <span style={{ color: "#475569" }}>· colors scale to this chain's heat distribution — red = hottest relative to peers</span>
       </div>
 
       {/* detail panel */}
@@ -219,7 +245,7 @@ export default function SupplyGraph({
             </span>
             <span style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>{layers[selNode.layer]}</span>
             {(strength[selected] ?? 0) >= 40 && (
-              <span style={{ fontSize: 10, fontWeight: 700, color: nodeColor(strength[selected], 0), border: `1px solid ${nodeColor(strength[selected], 0)}`, background: nodeColor(strength[selected], 0) + "1c", padding: "1px 7px", borderRadius: 3 }}>
+              <span style={{ fontSize: 10, fontWeight: 700, color: colorFor(strength[selected], 0), border: `1px solid ${colorFor(strength[selected], 0)}`, background: colorFor(strength[selected], 0) + "1c", padding: "1px 7px", borderRadius: 3 }}>
                 BOTTLENECK {strength[selected].toFixed(0)}
               </span>
             )}
@@ -297,7 +323,7 @@ export default function SupplyGraph({
                 <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                   {list.sort((a, b) => (b.exposurePct ?? 0) - (a.exposurePct ?? 0) || b.criticality - a.criticality).map((e, i) => {
                     const other = pick(e);
-                    const oc = nodeColor(strength[other] ?? 0, risk[other]?.score ?? 0);
+                    const oc = colorFor(strength[other] ?? 0, risk[other]?.score ?? 0);
                     return (
                       <div key={i} style={{ fontSize: 10.5, color: "#94a3b8" }}>
                         <span onClick={() => setSelected(other)} style={{ color: oc === "#334155" ? "#cbd5e1" : oc, fontWeight: 700, cursor: "pointer" }}>{other}</span>
