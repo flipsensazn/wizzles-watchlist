@@ -1552,13 +1552,10 @@ export default function App() {
         };
         saveTarget(newData);
       }
-      // Approved tickers leave the queue immediately (they now live on the
-      // map); rejected ones stay briefly, dimmed, as a reminder.
-      setCandidates(prev => action === "approved"
-        ? prev.filter(c => c.ticker !== candidate.ticker)
-        : prev.map(c => c.ticker === candidate.ticker
-            ? { ...c, status: action, reviewedAt: new Date().toISOString() }
-            : c));
+      // Both approve and reject remove the card immediately. The rejection
+      // persists in the DB (status='rejected') so the scout never re-suggests
+      // the ticker — the row just stops being served to the queue.
+      setCandidates(prev => prev.filter(c => c.ticker !== candidate.ticker));
       showNotice(`${candidate.ticker} ${action}${action === "approved" ? " — added to the map" : ""}`, "success");
     } catch (err) {
       showNotice(err.message || "Review failed");
