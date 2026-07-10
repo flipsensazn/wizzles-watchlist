@@ -360,7 +360,15 @@ Classify the company's position:
 - "both": clearly both at once
 - "neutral": flagged language turned out to be routine (e.g., normal backlog commentary, improving lead times)
 
-stress_score guide: 0-15 routine commentary; 16-39 mild tightness mentioned; 40-69 clear, repeated constraint language; 70-100 explicit allocation/sold-out/shortage statements about current operations.
+stress_score guide — in a hot market many companies cite constraints, so DISCRIMINATE within the hot zone rather than defaulting everything to the top band:
+- 0-15: routine commentary, no real constraint
+- 16-39: mild tightness mentioned in passing
+- 40-59: clear constraint language, but the company is managing it — capacity additions on track, lead times stable
+- 60-74: constraints are materially limiting shipments or revenue NOW; allocation on some product lines
+- 75-89: broad allocation or sold-out across major product lines for multiple quarters; constraint is a central theme of the call
+- 90-100: extreme — sold out a year or more out, turning away business, the constraint IS the story
+
+Calibrate hard: reserve 85+ for the most extreme cases you have seen across earnings calls generally, not just this one. Use the full integer range (e.g. 47, 63, 81) — do NOT default to round numbers like 75, 85, or 95.
 
 Quotes MUST be verbatim substrings of the excerpts. Max 5, pick the most load-bearing.
 

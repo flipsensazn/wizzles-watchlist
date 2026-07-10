@@ -333,8 +333,13 @@ export function propagate(nodes, edges, strength) {
 
   for (const entry of Object.values(risk)) {
     entry.contributors.sort((a, b) => b.score - a.score);
-    // Soft-OR: independent risks stack but never exceed 100
-    entry.score = Math.round(100 * (1 - entry.contributors.reduce((p, c) => p * (1 - c.score / 100), 1)));
+    // Weighted top-3: the worst exposure dominates, additional independent
+    // sources add modest increments. (The previous soft-OR stacked ALL
+    // contributors multiplicatively — with many nodes radiating at once it
+    // saturated everything downstream toward 100, destroying discrimination.)
+    const [c1, c2, c3] = entry.contributors;
+    entry.score = Math.round(Math.min(100,
+      (c1?.score ?? 0) + 0.25 * (c2?.score ?? 0) + 0.10 * (c3?.score ?? 0)));
   }
   return risk;
 }
