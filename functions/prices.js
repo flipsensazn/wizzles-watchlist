@@ -59,6 +59,41 @@ async function getYahooSession(env) {
   return { cookie, crumb };
 }
 
+// ── CHART-META FALLBACK ──────────────────────────────────────────────────────
+// Yahoo's v7/finance/quote endpoint periodically freezes, serving every symbol
+// a snapshot of the previous close (observed 2026-07-14: regularMarketTime
+// stuck at Monday's 4:00 PM close all Tuesday morning). The v8 chart endpoint
+// keeps ticking through these outages, and we already fetch it per ticker for
+// the historical percentages — its meta.regularMarketPrice is a live quote.
+// This derives {price, change} from chart data: previous close is the bar
+// before today's (today's daily bar updates in near-realtime during the
+// session), or the last bar if today's hasn't opened.
+function chartFallback(cd) {
+  if (cd?.metaPrice == null) return null;
+  const pts = [];
+  for (let i = 0; i < (cd.timestamps?.length ?? 0); i++) {
+    if (cd.closes?.[i] != null) pts.push({ ts: cd.timestamps[i], close: cd.closes[i] });
+  }
+  let prev = null;
+  if (pts.length) {
+    const day = t => new Date(t * 1000).toISOString().slice(0, 10);
+    const last = pts[pts.length - 1];
+    prev = (cd.metaTime && day(last.ts) === day(cd.metaTime) && pts.length >= 2)
+      ? pts[pts.length - 2].close
+      : last.close;
+  }
+  return {
+    price: cd.metaPrice,
+    change: prev > 0 ? ((cd.metaPrice - prev) / prev) * 100 : 0,
+  };
+}
+
+// A v7 quote is stale when the chart meta has traded meaningfully past it.
+function quoteIsStale(q, cd) {
+  if (cd?.metaPrice == null) return false;
+  return q?.regularMarketTime == null || (cd.metaTime ?? 0) > q.regularMarketTime + 120;
+}
+
 // ── HISTORICAL CHANGE HELPER ─────────────────────────────────────────────────
 function getHistoricalChanges(timestamps, closes, currentPrice) {
   if (!timestamps || !closes || timestamps.length === 0 || !currentPrice) return {};
@@ -135,6 +170,7 @@ export async function onRequest(context) {
 
     await Promise.all([
       (async () => {
+        const v7 = {};
         try {
           const { cookie, crumb } = await getYahooSession(env);
           const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${INDEX_TICKERS.join(",")}&corsDomain=finance.yahoo.com&formatted=false&crumb=${crumb}`;
@@ -163,10 +199,31 @@ export async function onRequest(context) {
                 change = q.regularMarketChangePercent ?? 0;
                 session = "REGULAR";
               }
-              stripResults[q.symbol] = { price: parseFloat(price.toFixed(2)), change: parseFloat(change.toFixed(2)), session };
+              v7[q.symbol] = { price: parseFloat(price.toFixed(2)), change: parseFloat(change.toFixed(2)), session, time: q.regularMarketTime ?? 0 };
             }
           }
         } catch (err) {}
+
+        // v7 freeze protection (see chartFallback): the 1d chart meta keeps
+        // ticking when v7 serves a frozen snapshot; prefer whichever is fresher.
+        await Promise.all(INDEX_TICKERS.map(async (t) => {
+          try {
+            const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?range=1d&interval=5m`, { headers: { "User-Agent": USER_AGENT } });
+            if (!res.ok) return;
+            const meta = (await res.json())?.chart?.result?.[0]?.meta;
+            if (meta?.regularMarketPrice == null) return;
+            const q7 = v7[t];
+            if (q7 && (meta.regularMarketTime ?? 0) <= q7.time + 120) return; // v7 is fresh — keep its pre/post awareness
+            const prev = meta.chartPreviousClose;
+            const change = prev > 0 ? ((meta.regularMarketPrice - prev) / prev) * 100 : 0;
+            stripResults[t] = { price: parseFloat(meta.regularMarketPrice.toFixed(2)), change: parseFloat(change.toFixed(2)), session: "REGULAR" };
+          } catch (err) {}
+        }));
+        for (const t of INDEX_TICKERS) {
+          if (!stripResults[t] && v7[t]) {
+            stripResults[t] = { price: v7[t].price, change: v7[t].change, session: v7[t].session };
+          }
+        }
       })(),
       ...CRYPTO_TICKERS.map(async (yahooSymbol) => {
         if (!FINNHUB_KEY) return;
@@ -224,6 +281,11 @@ export async function onRequest(context) {
               chartData[ticker] = {
                 timestamps: r.timestamp,
                 closes:     r.indicators?.quote?.[0]?.close || [],
+                // Live quote fields — the fallback when v7 freezes
+                metaPrice:  r.meta?.regularMarketPrice ?? null,
+                metaTime:   r.meta?.regularMarketTime ?? null,
+                meta52Low:  r.meta?.fiftyTwoWeekLow ?? null,
+                meta52High: r.meta?.fiftyTwoWeekHigh ?? null,
               };
             }
           }
@@ -268,8 +330,15 @@ export async function onRequest(context) {
             session = "REGULAR";
           }
 
-          const currentPrice = parseFloat(price.toFixed(2));
+          // v7 freeze protection: prefer the live chart meta when this quote
+          // snapshot is older than the chart's last trade.
           const cd = chartData[q.symbol];
+          if (quoteIsStale(q, cd)) {
+            const fb = chartFallback(cd);
+            if (fb) { price = fb.price; change = fb.change; session = "REGULAR"; }
+          }
+
+          const currentPrice = parseFloat(price.toFixed(2));
           const extraChanges = cd
             ? getHistoricalChanges(cd.timestamps, cd.closes, currentPrice)
             : {};
@@ -292,6 +361,31 @@ export async function onRequest(context) {
         if (env.SHARED_DATA) {
           try { await env.SHARED_DATA.delete(KV_CRUMB_KEY); } catch {}
         }
+      }
+
+      // v7 sometimes drops symbols entirely (or fails outright) — synthesize
+      // an entry from the chart meta so one flaky endpoint can't blank the
+      // board (also feeds fewer tickers to the capped Finnhub fallback).
+      for (const tkr of batch) {
+        if (results[tkr]) continue;
+        const cd = chartData[tkr];
+        const fb = chartFallback(cd);
+        if (!fb) continue;
+        const currentPrice = parseFloat(fb.price.toFixed(2));
+        const extraChanges = getHistoricalChanges(cd.timestamps, cd.closes, currentPrice);
+        results[tkr] = {
+          price:      currentPrice,
+          change:     parseFloat(fb.change.toFixed(2)),
+          change5D:   extraChanges["5D"]  ?? null,
+          change1M:   extraChanges["1M"]  ?? null,
+          change6M:   extraChanges["6M"]  ?? null,
+          changeYTD:  extraChanges["YTD"] ?? null,
+          change1Y:   extraChanges["1Y"]  ?? null,
+          session:    "REGULAR",
+          week52Low:  cd.meta52Low  != null ? parseFloat(cd.meta52Low.toFixed(2))  : null,
+          week52High: cd.meta52High != null ? parseFloat(cd.meta52High.toFixed(2)) : null,
+          earningsDate: null,
+        };
       }
     }
 
