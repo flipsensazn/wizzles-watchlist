@@ -37,16 +37,27 @@ jobs:
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           workingDirectory: workers/site
-          # Sync the Worker's runtime secrets from the repo secrets the ETL
-          # workflows already use — rotate once in GitHub, next deploy syncs.
-          # (env FINNHUB_KEY maps from the repo's FINNHUB_API_KEY name.)
-          secrets: |
-            ADMIN_PASSWORD
-            DATABASE_URL
-            GEMINI_API_KEY
-            FINNHUB_KEY
+          wranglerVersion: "4.113.0"
+
+      # Sync the Worker's runtime secrets from the repo secrets the ETL
+      # workflows already use — rotate once in GitHub, next deploy syncs.
+      # Done explicitly (jq-built JSON + `secret bulk --name`) because the
+      # action's own secrets uploader fails to read wrangler.jsonc.
+      # (env FINNHUB_KEY maps from the repo's FINNHUB_API_KEY name.)
+      - name: Sync Worker Secrets
+        working-directory: workers/site
         env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
           ADMIN_PASSWORD: ${{ secrets.ADMIN_PASSWORD }}
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           FINNHUB_KEY: ${{ secrets.FINNHUB_API_KEY }}
+        run: |
+          jq -n \
+            --arg a "$ADMIN_PASSWORD" \
+            --arg d "$DATABASE_URL" \
+            --arg g "$GEMINI_API_KEY" \
+            --arg f "$FINNHUB_KEY" \
+            '{ADMIN_PASSWORD: $a, DATABASE_URL: $d, GEMINI_API_KEY: $g, FINNHUB_KEY: $f}' > .secrets.json
+          npx --yes wrangler@4.113.0 secret bulk .secrets.json --name wizzles-watchlist
+          rm .secrets.json
