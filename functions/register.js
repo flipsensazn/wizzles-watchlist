@@ -82,57 +82,88 @@ export async function onRequest(context) {
   }
 
   const accountId = env.ACCESS_ACCOUNT_ID || DEFAULT_ACCOUNT_ID;
-  const api = `https://api.cloudflare.com/client/v4/accounts/${accountId}/access/groups`;
+  const base = `https://api.cloudflare.com/client/v4/accounts/${accountId}`;
   const apiHeaders = { "Authorization": `Bearer ${apiToken}`, "Content-Type": "application/json" };
+  const norm = s => (s || "").toLowerCase().replace(/\s+/g, " ").trim();
+  const nameMatches = (name) =>
+    name === MEMBERS_GROUP_NAME || norm(name) === norm(MEMBERS_GROUP_NAME)
+    || (/capex/i.test(name || "") && /member/i.test(name || ""));
 
   try {
-    // Resolve the Members group id (cached in KV after first lookup).
-    let groupId = env.SHARED_DATA ? await env.SHARED_DATA.get(GROUP_ID_KV_KEY) : null;
-    if (!groupId) {
-      // List and match client-side — exact first, then a whitespace/case
-      // tolerant pass, then a capex+member heuristic (scoped so another
-      // project's "Members" group can never be picked up by accident).
-      const listRes = await fetch(`${api}?per_page=50`, { headers: apiHeaders });
-      const listBody = await listRes.text();
-      let list = null;
-      try { list = JSON.parse(listBody); } catch {}
-      const groups = list?.result || [];
-      const norm = s => (s || "").toLowerCase().replace(/\s+/g, " ").trim();
-      groupId =
-        groups.find(g => g.name === MEMBERS_GROUP_NAME)?.id
-        ?? groups.find(g => norm(g.name) === norm(MEMBERS_GROUP_NAME))?.id
-        ?? groups.find(g => /capex/i.test(g.name) && /member/i.test(g.name))?.id;
-      if (!groupId) {
-        console.error("register: Members group not found; status:", listRes.status,
-          "groups:", JSON.stringify(groups.map(g => g.name)),
-          "body:", listBody.slice(0, 400));
-        return reply(503, { success: false, message: "Registration is being set up — check back soon." });
+    // The members roster can be either an Access Group (include rules) or a
+    // Zero Trust email List (referenced by an "Emails in list" policy rule).
+    // Support both; find whichever exists. Cached in KV after first lookup
+    // as "group:<id>" or "list:<id>".
+    let target = env.SHARED_DATA ? await env.SHARED_DATA.get(GROUP_ID_KV_KEY) : null;
+
+    if (!target) {
+      const groupsRes = await fetch(`${base}/access/groups?per_page=50`, { headers: apiHeaders });
+      const groups = (await groupsRes.json())?.result || [];
+      const group = groups.find(g => nameMatches(g.name));
+      if (group) {
+        target = `group:${group.id}`;
+      } else {
+        const listsRes = await fetch(`${base}/gateway/lists`, { headers: apiHeaders });
+        const listsBody = await listsRes.text();
+        let lists = [];
+        try { lists = JSON.parse(listsBody)?.result || []; } catch {}
+        const list = lists.find(l => (l.type || "").toUpperCase() === "EMAIL" && nameMatches(l.name))
+          ?? lists.find(l => nameMatches(l.name));
+        if (list) {
+          target = `list:${list.id}`;
+        } else {
+          console.error("register: no Members roster found;",
+            "groups:", JSON.stringify(groups.map(g => g.name)),
+            "lists status:", listsRes.status, "lists:", listsBody.slice(0, 300));
+          return reply(503, { success: false, message: "Registration is being set up — check back soon." });
+        }
       }
       if (env.SHARED_DATA) {
-        try { await env.SHARED_DATA.put(GROUP_ID_KV_KEY, groupId); } catch {}
+        try { await env.SHARED_DATA.put(GROUP_ID_KV_KEY, target); } catch {}
       }
     }
 
-    // Read-modify-write the group's email includes.
-    const groupRes = await fetch(`${api}/${groupId}`, { headers: apiHeaders });
-    const group = (await groupRes.json())?.result;
-    if (!group) {
-      return reply(502, { success: false, message: "Registration failed — please try again." });
-    }
-    const include = group.include || [];
-    const already = include.some(rule => rule?.email?.email?.toLowerCase() === email);
+    const [kind, targetId] = target.split(":");
+    let already = false;
 
-    if (!already) {
-      include.push({ email: { email } });
-      const putRes = await fetch(`${api}/${groupId}`, {
-        method: "PUT",
-        headers: apiHeaders,
-        body: JSON.stringify({ name: group.name, include, exclude: group.exclude || [], require: group.require || [] }),
-      });
-      const put = await putRes.json();
-      if (!put?.success) {
-        console.error("register: group update failed", put?.errors);
+    if (kind === "group") {
+      // Read-modify-write the Access group's email includes.
+      const groupRes = await fetch(`${base}/access/groups/${targetId}`, { headers: apiHeaders });
+      const group = (await groupRes.json())?.result;
+      if (!group) {
         return reply(502, { success: false, message: "Registration failed — please try again." });
+      }
+      const include = group.include || [];
+      already = include.some(rule => rule?.email?.email?.toLowerCase() === email);
+      if (!already) {
+        include.push({ email: { email } });
+        const putRes = await fetch(`${base}/access/groups/${targetId}`, {
+          method: "PUT",
+          headers: apiHeaders,
+          body: JSON.stringify({ name: group.name, include, exclude: group.exclude || [], require: group.require || [] }),
+        });
+        const put = await putRes.json();
+        if (!put?.success) {
+          console.error("register: group update failed", JSON.stringify(put?.errors));
+          return reply(502, { success: false, message: "Registration failed — please try again." });
+        }
+      }
+    } else {
+      // Zero Trust email list: check current items, then append.
+      const itemsRes = await fetch(`${base}/gateway/lists/${targetId}/items?per_page=1000`, { headers: apiHeaders });
+      const items = (await itemsRes.json())?.result || [];
+      already = items.some(it => (it.value || "").toLowerCase() === email);
+      if (!already) {
+        const patchRes = await fetch(`${base}/gateway/lists/${targetId}`, {
+          method: "PATCH",
+          headers: apiHeaders,
+          body: JSON.stringify({ append: [{ value: email }], remove: [] }),
+        });
+        const patch = await patchRes.json();
+        if (!patch?.success) {
+          console.error("register: list append failed", JSON.stringify(patch?.errors));
+          return reply(502, { success: false, message: "Registration failed — please try again." });
+        }
       }
     }
 
