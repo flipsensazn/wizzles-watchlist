@@ -20,12 +20,14 @@ import * as exposure       from "../../functions/exposure.js";
 import * as gapScanner     from "../../functions/gap-scanner.js";
 import * as gauges         from "../../functions/gauges.js";
 import * as marketNews     from "../../functions/market-news.js";
+import * as me             from "../../functions/me.js";
 import * as muskCapex      from "../../functions/musk-capex.js";
 import * as muskIntel      from "../../functions/musk-intel.js";
 import * as news           from "../../functions/news.js";
 import * as presence       from "../../functions/presence.js";
 import * as prices         from "../../functions/prices.js";
 import * as quote          from "../../functions/quote.js";
+import * as register       from "../../functions/register.js";
 import * as roboticsCapex  from "../../functions/robotics-capex.js";
 import * as roboticsIntel  from "../../functions/robotics-intel.js";
 import * as scannerRanked  from "../../functions/scanner-ranked.js";
@@ -46,12 +48,14 @@ const ROUTES = {
   "/gap-scanner":     gapScanner,
   "/gauges":          gauges,
   "/market-news":     marketNews,
+  "/me":              me,
   "/musk-capex":      muskCapex,
   "/musk-intel":      muskIntel,
   "/news":            news,
   "/presence":        presence,
   "/prices":          prices,
   "/quote":           quote,
+  "/register":        register,
   "/robotics-capex":  roboticsCapex,
   "/robotics-intel":  roboticsIntel,
   "/scanner-ranked":  scannerRanked,
@@ -63,7 +67,16 @@ const ROUTES = {
 
 export default {
   async fetch(request, env, ctx) {
-    const { pathname } = new URL(request.url);
+    const url = new URL(request.url);
+    const { pathname } = url;
+
+    // The dashboard lives at /app (Cloudflare Access protects this path at
+    // the edge — see README). The built asset is app.html; rewrite so the
+    // clean URL serves it.
+    if (pathname === "/app" || pathname === "/app/") {
+      return env.ASSETS.fetch(new Request(`${url.origin}/app.html`, request));
+    }
+
     const route = ROUTES[pathname.replace(/\/$/, "") || "/"];
     if (route?.onRequest) {
       // Pages Functions context shim — every function here uses only

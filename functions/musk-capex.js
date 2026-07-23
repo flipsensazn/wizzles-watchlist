@@ -4,6 +4,8 @@
 // GET: public read of the saved map (null → frontend uses its default).
 // POST: admin-only save.
 
+import { isAdminRequest } from "./access-lib.js";
+
 export async function onRequest(context) {
   const { request, env } = context;
 
@@ -44,7 +46,7 @@ export async function onRequest(context) {
       if (!adminPassword) {
         return new Response(JSON.stringify({ error: "Server misconfiguration: ADMIN_PASSWORD not set." }), { status: 500, headers });
       }
-      if (body.password !== adminPassword) {
+      if (body.password !== adminPassword && !(await isAdminRequest(request, env))) {
         return new Response(JSON.stringify({ error: "Incorrect Admin Password" }), { status: 401, headers });
       }
 

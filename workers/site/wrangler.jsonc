@@ -8,6 +8,9 @@
   "name": "capex-iq",
   "account_id": "0e727bf4fae81b99443d3150ca244484",
   "main": "index.js",
+  // No workers.dev URL: capex-iq.us is the only entry point, so Cloudflare
+  // Access path protection on the custom domain cannot be bypassed.
+  "workers_dev": false,
   "compatibility_date": "2026-07-01",
   "assets": {
     "directory": "../../dist",
@@ -24,7 +27,14 @@
   ],
   "vars": {
     // CORS allowlist origin — the canonical custom domain.
-    "ALLOWED_ORIGIN": "https://capex-iq.us"
+    "ALLOWED_ORIGIN": "https://capex-iq.us",
+    // Cloudflare Access (Zero Trust) — filled in once the Access app exists.
+    // Team domain like "yourteam.cloudflareaccess.com"; AUD from the Access
+    // application's overview tab. Empty = auth features disabled gracefully.
+    "ACCESS_TEAM_DOMAIN": "",
+    "ACCESS_AUD": "",
+    // Comma-separated admin emails (mirrors the Zero Trust Admins group).
+    "ADMIN_EMAILS": "flipsensazn@gmail.com"
   },
   "observability": {
     "enabled": true

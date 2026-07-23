@@ -1351,6 +1351,18 @@ export default function App() {
   const [showAdminModal, setShowAdminModal] = useState(false);
   const [appNotice, setAppNotice] = useState(null);
 
+  // Cloudflare Access identity: signed-in admins (Zero Trust Admins list)
+  // get editing automatically — the server accepts their Access JWT in
+  // place of the admin password, so no password prompt is needed.
+  useEffect(() => {
+    fetch("/me")
+      .then(res => res.json())
+      .then(data => {
+        if (data.isAdmin) setIsAdmin(true);
+      })
+      .catch(() => {});
+  }, []);
+
   // "ai" = hyperscaler capex flow · "musk" = Musk Galaxy · "robotics" = humanoid robotics
   const VALID_VIEWS = ["ai", "musk", "robotics"];
   const [view, setView] = useState(() => {

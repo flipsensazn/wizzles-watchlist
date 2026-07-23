@@ -9,6 +9,8 @@
 // responsible for actually inserting the ticker into the capex map (it owns
 // the current map state and the existing admin save flow).
 
+import { isAdminRequest } from "./access-lib.js";
+
 export async function onRequest(context) {
   const { request, env } = context;
 
@@ -59,7 +61,7 @@ export async function onRequest(context) {
     try {
       const body = await request.json();
       const adminPassword = env.ADMIN_PASSWORD;
-      if (!adminPassword || body.password !== adminPassword) {
+      if ((!adminPassword || body.password !== adminPassword) && !(await isAdminRequest(request, env))) {
         return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers });
       }
       const ticker = String(body.ticker || "").toUpperCase();

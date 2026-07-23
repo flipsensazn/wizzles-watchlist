@@ -128,6 +128,8 @@ function validateAllocations(allocations, totalCapex) {
   return cleaned;
 }
 
+import { isAdminRequest } from "./access-lib.js";
+
 export async function onRequest(context) {
   const { request, env } = context;
 
@@ -155,7 +157,7 @@ export async function onRequest(context) {
   if (request.method === "POST") {
     try {
       const body = await request.json();
-      if (!env.ADMIN_PASSWORD || body.password !== env.ADMIN_PASSWORD) {
+      if ((!env.ADMIN_PASSWORD || body.password !== env.ADMIN_PASSWORD) && !(await isAdminRequest(request, env))) {
         return new Response(JSON.stringify({ error: "Unauthorized" }), { status: 401, headers });
       }
       if (env.SHARED_DATA) await env.SHARED_DATA.delete(CACHE_KEY);
