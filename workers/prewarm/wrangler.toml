@@ -1,0 +1,13 @@
+# Pre-warm Worker — keeps the /prices KV cache hot during market hours so
+# every visitor load hits a warm cache instead of paying the Yahoo round-trip.
+# Deploy: npx wrangler deploy  (from this directory)
+name = "watchlist-prewarm"
+main = "index.js"
+compatibility_date = "2026-07-01"
+workers_dev = false
+
+[triggers]
+# Every 2 minutes, 13:00–21:59 UTC, Mon–Fri — covers US regular hours
+# (8:30am–3:00pm CT) across both CST and CDT. ~250 runs/day; each run
+# causes at most one KV write via the /prices function it warms.
+crons = ["*/2 13-21 * * 1-5"]

@@ -9,7 +9,10 @@ const FINNHUB_CRYPTO_MAP = {
   "ETH-USD": "BINANCE:ETHUSDT",
   "XRP-USD": "BINANCE:XRPUSDT",
 };
-const KV_CACHE_KEY  = "priceCache_v9"; // v9: replaced broken spark with chart endpoint
+const KV_CACHE_KEY  = "priceCache_v10"; // v10: covered-set hit check (see below)
+const KV_REFS_KEY   = "priceRefs_v1";   // long-lived per-ticker reference data
+const REFS_TTL_MS   = 6 * 60 * 60 * 1000; // history refs change ~daily; 6h is plenty
+const QUOTE_STALE_SEC = 20 * 60;        // v7 quote older than this → live-probe it
 const KV_CRUMB_KEY  = "yahooSession_v1";
 const CRUMB_TTL_MS  = 55 * 60 * 1000; // 55 minutes
 const USER_AGENT    = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
@@ -63,11 +66,10 @@ async function getYahooSession(env) {
 // Yahoo's v7/finance/quote endpoint periodically freezes, serving every symbol
 // a snapshot of the previous close (observed 2026-07-14: regularMarketTime
 // stuck at Monday's 4:00 PM close all Tuesday morning). The v8 chart endpoint
-// keeps ticking through these outages, and we already fetch it per ticker for
-// the historical percentages — its meta.regularMarketPrice is a live quote.
-// This derives {price, change} from chart data: previous close is the bar
-// before today's (today's daily bar updates in near-realtime during the
-// session), or the last bar if today's hasn't opened.
+// keeps ticking through these outages — its meta.regularMarketPrice is a live
+// quote. This derives {price, change} from 2y chart data: previous close is
+// the bar before today's (today's daily bar updates in near-realtime during
+// the session), or the last bar if today's hasn't opened.
 function chartFallback(cd) {
   if (cd?.metaPrice == null) return null;
   const pts = [];
@@ -94,44 +96,48 @@ function quoteIsStale(q, cd) {
   return q?.regularMarketTime == null || (cd.metaTime ?? 0) > q.regularMarketTime + 120;
 }
 
-// ── HISTORICAL CHANGE HELPER ─────────────────────────────────────────────────
-function getHistoricalChanges(timestamps, closes, currentPrice) {
-  if (!timestamps || !closes || timestamps.length === 0 || !currentPrice) return {};
+// ── REFERENCE PRICES ─────────────────────────────────────────────────────────
+// The 5D/1M/6M/YTD/1Y percentages only need one historical close each, and
+// those change once per trading day — refetching 2 years of daily bars per
+// ticker every 30s refresh was ~95% of this function's Yahoo traffic. We
+// instead resolve each period to its reference CLOSE once, cache the refs in
+// KV for REFS_TTL_MS, and recompute the percentage against the live price on
+// every request (so cached refs never serve a stale current-day number).
+function findRefPrices(timestamps, closes) {
+  if (!timestamps || !closes || timestamps.length === 0) return {};
 
   const now = Date.now() / 1000;
 
   // Per-period tolerance: how many calendar days the nearest bar can be off-target.
   // Wider for longer periods to absorb weekends, holidays, and sparse data.
   const targets = {
-    "5D":  { ts: now - 7   * 86400, maxGapDays: 10 },
-    "1M":  { ts: now - 30  * 86400, maxGapDays: 10 },
-    "6M":  { ts: now - 182 * 86400, maxGapDays: 14 },
-    "YTD": { ts: new Date(new Date().getFullYear(), 0, 1).getTime() / 1000, maxGapDays: 10 },
-    "1Y":  { ts: now - 365 * 86400, maxGapDays: 14 },
+    r5D:  { ts: now - 7   * 86400, maxGapDays: 10 },
+    r1M:  { ts: now - 30  * 86400, maxGapDays: 10 },
+    r6M:  { ts: now - 182 * 86400, maxGapDays: 14 },
+    rYTD: { ts: new Date(new Date().getFullYear(), 0, 1).getTime() / 1000, maxGapDays: 10 },
+    r1Y:  { ts: now - 365 * 86400, maxGapDays: 14 },
   };
 
-  const changes = {};
-
-  for (const [period, { ts: targetTs, maxGapDays }] of Object.entries(targets)) {
+  const refs = {};
+  for (const [key, { ts: targetTs, maxGapDays }] of Object.entries(targets)) {
     let bestIdx = -1;
     let minDiff = Infinity;
-
     for (let i = 0; i < timestamps.length; i++) {
       if (closes[i] == null) continue;
       const diff = Math.abs(timestamps[i] - targetTs);
       if (diff < minDiff) { minDiff = diff; bestIdx = i; }
     }
-
-    if (bestIdx !== -1 && minDiff < maxGapDays * 86400) {
-      const oldPrice = closes[bestIdx];
-      changes[period] = oldPrice > 0
-        ? parseFloat((((currentPrice - oldPrice) / oldPrice) * 100).toFixed(2))
-        : null;
-    } else {
-      changes[period] = null;
-    }
+    refs[key] = (bestIdx !== -1 && minDiff < maxGapDays * 86400 && closes[bestIdx] > 0)
+      ? parseFloat(closes[bestIdx].toFixed(4))
+      : null;
   }
-  return changes;
+  return refs;
+}
+
+function pctFrom(ref, price) {
+  return (ref > 0 && price > 0)
+    ? parseFloat((((price - ref) / ref) * 100).toFixed(2))
+    : null;
 }
 
 // ── REQUEST HANDLER ──────────────────────────────────────────────────────────
@@ -244,12 +250,19 @@ export async function onRequest(context) {
     return new Response(JSON.stringify({ data: stripResults, cached: false }), { status: 200, headers });
   }
 
+  // ── QUOTE CACHE (60s) ──────────────────────────────────────────────────────
+  // The hit check is subset-based against the set of tickers the cached cycle
+  // ATTEMPTED ("covered"), not the set that resolved. A dead or delisted
+  // ticker used to make `t in data` fail forever, forcing every request down
+  // the uncached path — one bad symbol poisoned the whole board's cache.
   if (env.SHARED_DATA) {
     try {
       const cached = await env.SHARED_DATA.get(KV_CACHE_KEY, "json");
       if (cached && cached.timestamp && (Date.now() - cached.timestamp < CACHE_TTL_SECONDS * 1000)) {
-        const allPresent = tickers.every(t => cached.data && t in cached.data);
-        if (allPresent) return new Response(JSON.stringify({ data: cached.data, cached: true }), { status: 200, headers });
+        const covered = new Set(cached.covered ?? Object.keys(cached.data ?? {}));
+        if (tickers.every(t => covered.has(t))) {
+          return new Response(JSON.stringify({ data: cached.data, cached: true }), { status: 200, headers });
+        }
       }
     } catch (err) {}
   }
@@ -257,19 +270,25 @@ export async function onRequest(context) {
   const results = {};
   const FINNHUB_KEY = env.FINNHUB_KEY;
 
+  // Long-lived reference data (historical closes, 52wk range, earnings date)
+  let refs = null;
+  if (env.SHARED_DATA) {
+    try { refs = await env.SHARED_DATA.get(KV_REFS_KEY, "json"); } catch (err) {}
+  }
+  const refsFresh = !!(refs?.timestamp && (Date.now() - refs.timestamp < REFS_TTL_MS));
+  if (!refs || typeof refs.data !== "object" || refs.data == null) refs = { timestamp: 0, data: {} };
+  const needRefs = refsFresh ? tickers.filter(t => !refs.data[t]) : [...tickers];
+  let refsDirty = false;
+
   try {
     const { cookie, crumb } = await getYahooSession(env);
-    const batchSize = 40;
-    
-    for (let i = 0; i < tickers.length; i += batchSize) {
-      const batch = tickers.slice(i, i + batchSize);
 
-      // ── STEP 1: Fetch 2-year daily chart history for every ticker in parallel.
-      // Uses /v8/finance/chart per ticker — the same endpoint that powers the
-      // Bloomberg macro charts and is confirmed to work reliably.
-      // The /v8/finance/spark endpoint has been removed; it silently returned
-      // empty results and was the root cause of all non-1D percentages being blank.
-      const chartData = {};
+    // ── STEP 1: rebuild reference data where missing/expired (2y chart per
+    // ticker). On warm cycles this set is EMPTY, so the expensive per-ticker
+    // history fetches happen once per REFS_TTL_MS instead of every refresh.
+    const chartData = {};
+    for (let i = 0; i < needRefs.length; i += 40) {
+      const batch = needRefs.slice(i, i + 40);
       await Promise.all(batch.map(async (ticker) => {
         try {
           const chartUrl = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?range=2y&interval=1d&crumb=${encodeURIComponent(crumb)}`;
@@ -281,7 +300,6 @@ export async function onRequest(context) {
               chartData[ticker] = {
                 timestamps: r.timestamp,
                 closes:     r.indicators?.quote?.[0]?.close || [],
-                // Live quote fields — the fallback when v7 freezes
                 metaPrice:  r.meta?.regularMarketPrice ?? null,
                 metaTime:   r.meta?.regularMarketTime ?? null,
                 meta52Low:  r.meta?.fiftyTwoWeekLow ?? null,
@@ -291,102 +309,128 @@ export async function onRequest(context) {
           }
         } catch (e) {}
       }));
+    }
+    for (const [tkr, cd] of Object.entries(chartData)) {
+      refs.data[tkr] = {
+        ...findRefPrices(cd.timestamps, cd.closes),
+        w52L: cd.meta52Low,
+        w52H: cd.meta52High,
+        earnings: refs.data[tkr]?.earnings ?? null,
+      };
+      refsDirty = true;
+    }
 
-      // ── STEP 2: Fetch current quote data for the batch
+    // ── STEP 2: live quotes for every requested ticker (1 call per 40)
+    const quotes = {};
+    for (let i = 0; i < tickers.length; i += 40) {
+      const batch = tickers.slice(i, i + 40);
       const url = `https://query2.finance.yahoo.com/v7/finance/quote?symbols=${batch.join(",")}&corsDomain=finance.yahoo.com&formatted=false&crumb=${encodeURIComponent(crumb)}`;
       const res = await fetch(url, { headers: { "User-Agent": USER_AGENT, "Cookie": cookie } });
-
       if (res.ok) {
         const data = await res.json();
-        const quoteList = data?.quoteResponse?.result || [];
-
-        for (const q of quoteList) {
-          if (q.regularMarketPrice === undefined) continue;
-
-          const state = q.marketState;
-          let price, change, session;
-
-          if (state === "POST" || state === "POSTPOST") {
-            price   = q.postMarketPrice ?? q.regularMarketPrice;
-            change  = q.postMarketChangePercent ?? q.regularMarketChangePercent ?? 0;
-            session = "POST";
-          } else if (state === "PRE") {
-            price   = q.preMarketPrice ?? q.regularMarketPrice;
-            change  = q.preMarketChangePercent ?? q.regularMarketChangePercent ?? 0;
-            session = "PRE";
-          } else if (state === "CLOSED") {
-            if (q.postMarketPrice != null) {
-              price   = q.postMarketPrice;
-              change  = q.postMarketChangePercent ?? q.regularMarketChangePercent ?? 0;
-              session = "POST";
-            } else {
-              price   = q.regularMarketPrice;
-              change  = q.regularMarketChangePercent ?? 0;
-              session = "CLOSED";
-            }
-          } else {
-            price   = q.regularMarketPrice;
-            change  = q.regularMarketChangePercent ?? 0;
-            session = "REGULAR";
-          }
-
-          // v7 freeze protection: prefer the live chart meta when this quote
-          // snapshot is older than the chart's last trade.
-          const cd = chartData[q.symbol];
-          if (quoteIsStale(q, cd)) {
-            const fb = chartFallback(cd);
-            if (fb) { price = fb.price; change = fb.change; session = "REGULAR"; }
-          }
-
-          const currentPrice = parseFloat(price.toFixed(2));
-          const extraChanges = cd
-            ? getHistoricalChanges(cd.timestamps, cd.closes, currentPrice)
-            : {};
-
-          results[q.symbol] = {
-            price:      currentPrice,
-            change:     parseFloat(change.toFixed(2)),
-            change5D:   extraChanges["5D"]  ?? null,
-            change1M:   extraChanges["1M"]  ?? null,
-            change6M:   extraChanges["6M"]  ?? null,
-            changeYTD:  extraChanges["YTD"] ?? null,
-            change1Y:   extraChanges["1Y"]  ?? null,
-            session,
-            week52Low:  q.fiftyTwoWeekLow  != null ? parseFloat(q.fiftyTwoWeekLow.toFixed(2))  : null,
-            week52High: q.fiftyTwoWeekHigh != null ? parseFloat(q.fiftyTwoWeekHigh.toFixed(2)) : null,
-            earningsDate: q.earningsTimestamp || q.earningsTimestampStart || null,
-          };
-        }
+        for (const q of data?.quoteResponse?.result || []) quotes[q.symbol] = q;
       } else if (res.status === 401 || res.status === 403) {
         if (env.SHARED_DATA) {
           try { await env.SHARED_DATA.delete(KV_CRUMB_KEY); } catch {}
         }
       }
+    }
 
-      // v7 sometimes drops symbols entirely (or fails outright) — synthesize
-      // an entry from the chart meta so one flaky endpoint can't blank the
-      // board (also feeds fewer tickers to the capped Finnhub fallback).
-      for (const tkr of batch) {
-        if (results[tkr]) continue;
-        const cd = chartData[tkr];
-        const fb = chartFallback(cd);
-        if (!fb) continue;
-        const currentPrice = parseFloat(fb.price.toFixed(2));
-        const extraChanges = getHistoricalChanges(cd.timestamps, cd.closes, currentPrice);
-        results[tkr] = {
-          price:      currentPrice,
-          change:     parseFloat(fb.change.toFixed(2)),
-          change5D:   extraChanges["5D"]  ?? null,
-          change1M:   extraChanges["1M"]  ?? null,
-          change6M:   extraChanges["6M"]  ?? null,
-          changeYTD:  extraChanges["YTD"] ?? null,
-          change1Y:   extraChanges["1Y"]  ?? null,
-          session:    "REGULAR",
-          week52Low:  cd.meta52Low  != null ? parseFloat(cd.meta52Low.toFixed(2))  : null,
-          week52High: cd.meta52High != null ? parseFloat(cd.meta52High.toFixed(2)) : null,
-          earningsDate: null,
-        };
+    // ── STEP 3: live-probe tickers v7 dropped or went stale on (frozen-v7
+    // outages, delistings, symbol drift). The 1d chart meta is a live quote.
+    const probes = {};
+    const nowSec = Date.now() / 1000;
+    const needProbe = tickers.filter(t => {
+      if (chartData[t]?.metaPrice != null) return false; // this cycle already has live meta
+      const q = quotes[t];
+      return !q || q.regularMarketPrice === undefined || q.regularMarketTime == null
+        || (nowSec - q.regularMarketTime) > QUOTE_STALE_SEC;
+    });
+    for (let i = 0; i < needProbe.length; i += 40) {
+      const batch = needProbe.slice(i, i + 40);
+      await Promise.all(batch.map(async (t) => {
+        try {
+          const res = await fetch(`https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(t)}?range=1d&interval=5m`, { headers: { "User-Agent": USER_AGENT } });
+          if (!res.ok) return;
+          const meta = (await res.json())?.chart?.result?.[0]?.meta;
+          if (meta?.regularMarketPrice == null) return;
+          probes[t] = {
+            metaPrice: meta.regularMarketPrice,
+            metaTime:  meta.regularMarketTime ?? null,
+            prevClose: meta.chartPreviousClose ?? null,
+          };
+        } catch (e) {}
+      }));
+    }
+
+    // ── STEP 4: assemble results — v7 when fresh (keeps pre/post sessions),
+    // chart meta when v7 is stale or missing the symbol.
+    for (const tkr of tickers) {
+      const q = quotes[tkr];
+      const cd = chartData[tkr];
+      const probe = probes[tkr];
+
+      let price = null, change = 0, session = "REGULAR";
+      if (q?.regularMarketPrice !== undefined) {
+        const state = q.marketState;
+        if (state === "POST" || state === "POSTPOST") {
+          price   = q.postMarketPrice ?? q.regularMarketPrice;
+          change  = q.postMarketChangePercent ?? q.regularMarketChangePercent ?? 0;
+          session = "POST";
+        } else if (state === "PRE") {
+          price   = q.preMarketPrice ?? q.regularMarketPrice;
+          change  = q.preMarketChangePercent ?? q.regularMarketChangePercent ?? 0;
+          session = "PRE";
+        } else if (state === "CLOSED") {
+          if (q.postMarketPrice != null) {
+            price   = q.postMarketPrice;
+            change  = q.postMarketChangePercent ?? q.regularMarketChangePercent ?? 0;
+            session = "POST";
+          } else {
+            price   = q.regularMarketPrice;
+            change  = q.regularMarketChangePercent ?? 0;
+            session = "CLOSED";
+          }
+        } else {
+          price   = q.regularMarketPrice;
+          change  = q.regularMarketChangePercent ?? 0;
+          session = "REGULAR";
+        }
       }
+
+      if (cd && quoteIsStale(q, cd)) {
+        const fb = chartFallback(cd);
+        if (fb) { price = fb.price; change = fb.change; session = "REGULAR"; }
+      } else if (probe?.metaPrice != null
+                 && (price == null || (probe.metaTime ?? 0) > (q?.regularMarketTime ?? 0) + 120)) {
+        price   = probe.metaPrice;
+        change  = probe.prevClose > 0 ? ((probe.metaPrice - probe.prevClose) / probe.prevClose) * 100 : 0;
+        session = "REGULAR";
+      }
+
+      if (price == null) continue; // Finnhub fallback below
+
+      const currentPrice = parseFloat(price.toFixed(2));
+      const r = refs.data[tkr] || {};
+      const qEarnings = q?.earningsTimestamp || q?.earningsTimestampStart || null;
+      if (qEarnings && refs.data[tkr] && refs.data[tkr].earnings !== qEarnings) {
+        refs.data[tkr].earnings = qEarnings;
+        if (needRefs.includes(tkr)) refsDirty = true; // persist on rebuild cycles only
+      }
+
+      results[tkr] = {
+        price:      currentPrice,
+        change:     parseFloat(change.toFixed(2)),
+        change5D:   pctFrom(r.r5D,  currentPrice),
+        change1M:   pctFrom(r.r1M,  currentPrice),
+        change6M:   pctFrom(r.r6M,  currentPrice),
+        changeYTD:  pctFrom(r.rYTD, currentPrice),
+        change1Y:   pctFrom(r.r1Y,  currentPrice),
+        session,
+        week52Low:  q?.fiftyTwoWeekLow  != null ? parseFloat(q.fiftyTwoWeekLow.toFixed(2))  : (r.w52L != null ? parseFloat(r.w52L.toFixed(2)) : null),
+        week52High: q?.fiftyTwoWeekHigh != null ? parseFloat(q.fiftyTwoWeekHigh.toFixed(2)) : (r.w52H != null ? parseFloat(r.w52H.toFixed(2)) : null),
+        earningsDate: qEarnings || r.earnings || null,
+      };
     }
 
     const MACRO_TICKERS = new Set(["^GSPC", "^DJI", "^IXIC", "BTC-USD", "ETH-USD", "XRP-USD"]);
@@ -435,9 +479,17 @@ export async function onRequest(context) {
 
   if (Object.keys(results).length > 0 && env.SHARED_DATA) {
     try {
-      const cachePayload = JSON.stringify({ data: results, timestamp: Date.now() });
+      // covered = every ticker this cycle ATTEMPTED, resolved or not — so a
+      // dead symbol can't force every future request down the uncached path.
+      const cachePayload = JSON.stringify({ data: results, covered: tickers, timestamp: Date.now() });
       await env.SHARED_DATA.put(KV_CACHE_KEY, cachePayload, { expirationTtl: CACHE_TTL_SECONDS * 4 });
     } catch (err) {}
+    if (refsDirty) {
+      try {
+        refs.timestamp = refsFresh ? refs.timestamp : Date.now();
+        await env.SHARED_DATA.put(KV_REFS_KEY, JSON.stringify(refs), { expirationTtl: 172800 });
+      } catch (err) {}
+    }
   }
 
   return new Response(JSON.stringify({ data: results, cached: false }), { status: 200, headers });

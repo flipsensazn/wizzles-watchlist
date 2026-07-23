@@ -28,8 +28,8 @@ const HYPERSCALER_TICKERS = ["AMZN", "MSFT", "GOOG", "META", "ORCL"];
 // Public hub companies shown on a Sankey but not present as suppliers in a
 // capex map — always fetched so their price renders (TSLA on the Musk view).
 const PINNED_TICKERS = [...new Set([
-  ...MUSK_COMPANIES.filter(c => c.isPublic).map(c => c.id),
-  ...ROBOTICS_COMPANIES.filter(c => c.isPublic).map(c => c.id),
+  ...MUSK_COMPANIES.filter(c => c.isPublic).map(c => c.ticker ?? c.id),
+  ...ROBOTICS_COMPANIES.filter(c => c.isPublic).map(c => c.ticker ?? c.id),
 ])];
 
 // The default Multibagger Scanner list
