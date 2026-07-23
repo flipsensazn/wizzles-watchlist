@@ -93,7 +93,9 @@ export async function onRequest(context) {
       // tolerant pass, then a capex+member heuristic (scoped so another
       // project's "Members" group can never be picked up by accident).
       const listRes = await fetch(`${api}?per_page=50`, { headers: apiHeaders });
-      const list = await listRes.json();
+      const listBody = await listRes.text();
+      let list = null;
+      try { list = JSON.parse(listBody); } catch {}
       const groups = list?.result || [];
       const norm = s => (s || "").toLowerCase().replace(/\s+/g, " ").trim();
       groupId =
@@ -101,8 +103,9 @@ export async function onRequest(context) {
         ?? groups.find(g => norm(g.name) === norm(MEMBERS_GROUP_NAME))?.id
         ?? groups.find(g => /capex/i.test(g.name) && /member/i.test(g.name))?.id;
       if (!groupId) {
-        console.error("register: Members group not found; groups visible:",
-          JSON.stringify(groups.map(g => g.name)), "errors:", JSON.stringify(list?.errors));
+        console.error("register: Members group not found; status:", listRes.status,
+          "groups:", JSON.stringify(groups.map(g => g.name)),
+          "body:", listBody.slice(0, 400));
         return reply(503, { success: false, message: "Registration is being set up — check back soon." });
       }
       if (env.SHARED_DATA) {
