@@ -89,7 +89,9 @@ export async function onRequest(context) {
     // Resolve the Members group id (cached in KV after first lookup).
     let groupId = env.SHARED_DATA ? await env.SHARED_DATA.get(GROUP_ID_KV_KEY) : null;
     if (!groupId) {
-      const listRes = await fetch(`${api}?name=${MEMBERS_GROUP_NAME}`, { headers: apiHeaders });
+      // List and match exactly — the name may contain spaces, and matching
+      // client-side avoids any API filter quirks.
+      const listRes = await fetch(`${api}?per_page=50`, { headers: apiHeaders });
       const list = await listRes.json();
       groupId = list?.result?.find(g => g.name === MEMBERS_GROUP_NAME)?.id;
       if (!groupId) {
