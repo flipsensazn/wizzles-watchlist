@@ -5,16 +5,29 @@ news, and scanner APIs.
 
 ## Deployment
 
-This project is deployed on Cloudflare Pages.
+This project is deployed on Cloudflare Workers (static assets) at
+https://wizzles-watchlist.flipsensazn.workers.dev.
 
-- Frontend: Vite build output from `dist/`
-- Backend: Cloudflare Pages Functions from `functions/`
-- Runtime expectation: app routes call root-relative endpoints such as `/prices`,
-  `/scanner`, `/market-news`, and `/capex-intel`
+- Frontend: Vite build output from `dist/`, served as Worker static assets
+  (SPA fallback enabled)
+- Backend: the files in `functions/` are unchanged Pages-style functions;
+  `workers/site/index.js` routes `/prices`, `/scanner`, `/capex-intel`, etc.
+  to them with a Pages-compatible context shim
+- Deploys: `.github/workflows/deploy-site.yml` builds and runs
+  `wrangler deploy` from `workers/site/` on every merge to main (requires the
+  `CLOUDFLARE_API_TOKEN` repo secret). Manual: `npx vite build` at the root,
+  then `npx wrangler deploy` in `workers/site/`.
+- Secrets on the Worker: `ADMIN_PASSWORD`, `DATABASE_URL`, `GEMINI_API_KEY`,
+  `FINNHUB_KEY` (set via dashboard or `wrangler secret put`). `ALLOWED_ORIGIN`
+  and the `SHARED_DATA` KV binding live in `workers/site/wrangler.jsonc` —
+  the KV namespace is the same one the old Pages project used.
 - Scheduled Worker: `workers/prewarm/` (deployed separately via
   `npx wrangler deploy`) warms the `/prices` KV cache every 2 minutes during
   US market hours by requesting the full ticker universe through the public
   site, so visitor loads hit a warm cache.
+- The legacy Cloudflare Pages deployment (wizzles-watchlist.pages.dev) can be
+  retired once the Workers URL is confirmed healthy; both share the same KV
+  and Neon data in the meantime.
 
 ### /prices caching model
 

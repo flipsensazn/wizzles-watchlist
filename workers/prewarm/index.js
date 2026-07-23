@@ -10,7 +10,7 @@
 // frontend uses, so cache keys, TTLs, and fallback logic stay in one place
 // (functions/prices.js).
 
-const BASE = "https://wizzles-watchlist.pages.dev";
+const BASE = "https://wizzles-watchlist.flipsensazn.workers.dev";
 
 // Mirrors App.jsx — keep in sync if those constants change.
 const MARKET_TICKERS = [

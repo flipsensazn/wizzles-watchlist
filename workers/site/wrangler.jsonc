@@ -1,0 +1,32 @@
+// Site Worker — Workers + static assets deployment of the watchlist.
+// Lives in a subdirectory (not the repo root) so the Pages project's build
+// never sees a Workers-format config while both deployments coexist.
+//
+// Secrets (set once, dashboard or `npx wrangler secret put <NAME>` here):
+//   ADMIN_PASSWORD, DATABASE_URL, GEMINI_API_KEY, FINNHUB_KEY
+{
+  "name": "wizzles-watchlist",
+  "account_id": "0e727bf4fae81b99443d3150ca244484",
+  "main": "index.js",
+  "compatibility_date": "2026-07-01",
+  "assets": {
+    "directory": "../../dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application"
+  },
+  "kv_namespaces": [
+    {
+      "binding": "SHARED_DATA",
+      // The SAME namespace the Pages project uses — maps, caches, shortlist
+      // and scanner data carry over with no migration.
+      "id": "1dadc46e52b146bea2fbc4b8511c7d90"
+    }
+  ],
+  "vars": {
+    // CORS allowlist origin — the workers.dev URL once known.
+    "ALLOWED_ORIGIN": "https://wizzles-watchlist.flipsensazn.workers.dev"
+  },
+  "observability": {
+    "enabled": true
+  }
+}
