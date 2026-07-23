@@ -13,12 +13,6 @@ const CACHE_KEY = "capexIntel";
 // treated as a stale prior-year answer rather than current guidance. See the
 // staleness tripwire in the handler.
 const STALE_TOTAL_FLOOR = 400;
-
-// Ceiling on any single company's AI share of its own total capex. These
-// companies all carry material non-AI capex (Amazon fulfilment and logistics,
-// Meta Reality Labs, Google's non-AI infrastructure), so a reading claiming
-// ~all of total capex is AI is an attribution failure, not a finding.
-const MAX_AI_SHARE = 0.80;
 const CACHE_TTL = 6 * 60 * 60 * 1000; // 6 hours in ms
 const MODEL     = "gemini-2.5-flash";
 
@@ -58,56 +52,37 @@ const SECTORS = [
 // --- PROMPT 1: Determine total + per-company capex (search-grounded) ---
 // This call runs with Google Search grounding so the numbers track the LATEST
 // guidance revisions and news, not the model's training data.
+// We report TOTAL capex, not an AI-attributable split. The AI portion is not a
+// disclosed line item, and asking the model to estimate it produced wildly
+// unstable answers (conflated with the total, then prior-year actuals, then a
+// ~90% attribution). Total capex is what companies actually guide, so it is
+// what we publish — and the UI labels it as exactly that.
 function buildPrompt1() {
-  return `You are a financial analyst specializing in AI infrastructure capital expenditure.
+  return `You are a financial analyst specializing in hyperscaler capital expenditure.
 
 Search for the most recent capex guidance, earnings-call statements, and credible reporting for the five primary hyperscalers: Amazon (AWS), Microsoft (Azure), Alphabet/Google, Meta, and Oracle.
 
-RECENCY IS MANDATORY. Report the CURRENT fiscal-year (2026) guidance as most recently revised —
-not a prior-year actual. Hyperscaler capex has grown several-fold since 2023, so a figure that
-looks like a 2022-2024 actual is wrong for this question. As calibration: each of these companies
-now guides annual TOTAL capex in the high tens to low hundreds of billions. If your total-capex
-figure for Amazon, Microsoft, Alphabet or Meta is below $80B, you are almost certainly quoting a
-historical year — search again for the latest guidance and use that instead.
+Report each company's TOTAL announced or guided capital expenditure for its current fiscal year (2026).
 
-For EACH company, report two distinct figures for its current fiscal year (2026-era guidance):
-  1. totalCapex — the company's total announced/guided capital expenditure.
-  2. aiCapex — ONLY the portion attributable to AI infrastructure.
+RECENCY IS MANDATORY — report current guidance as most recently revised, not a prior-year actual.
+Hyperscaler capex has grown several-fold since 2023, so a figure that looks like a 2022-2024 actual
+is wrong for this question. As calibration: these companies now guide annual capex in the high tens
+to low hundreds of billions. If your figure for Amazon, Microsoft, Alphabet or Meta is below $80B,
+you are almost certainly quoting a historical year — search again and use the latest guidance.
 
-CRITICAL — these are not the same number, and aiCapex must be strictly LESS than totalCapex for
-every company. Total capex includes large non-AI investment: fulfillment centres, warehouses and
-logistics, offices and real estate, retail, vehicles, consumer devices, content, and general
-non-AI network build. aiCapex counts only AI/ML infrastructure: AI servers and accelerators, the
-datacentre shells and power/cooling capacity built to house them, and AI-specific networking.
-
-Where a company does not disclose the split, estimate the AI-attributable share from management
-commentary rather than assuming all datacentre spend is AI, and say what share you applied. Do NOT
-report a company's headline total capex in the aiCapex field — that is the most common error and
-it materially overstates the figure.
-
-Use the most recently reported or revised numbers you can find, preferring company guidance over
-third-party estimates.
+Prefer company guidance over third-party estimates.
 
 Respond with ONLY a valid JSON object — no markdown fences, no preamble, no explanation outside the JSON:
 
 {
-  "totalCapexBillions": <integer, the sum of the five aiCapex values>,
+  "totalCapexBillions": <integer, sum of the five>,
   "byCompany": {
-    "AMZN": <integer billions, AI-attributable only>,
-    "MSFT": <integer billions, AI-attributable only>,
-    "GOOG": <integer billions, AI-attributable only>,
-    "META": <integer billions, AI-attributable only>,
-    "ORCL": <integer billions, AI-attributable only>
-  },
-  "byCompanyTotalCapex": {
-    "AMZN": <integer billions, total capex>,
-    "MSFT": <integer billions, total capex>,
-    "GOOG": <integer billions, total capex>,
-    "META": <integer billions, total capex>,
-    "ORCL": <integer billions, total capex>
-  },
-  "fiscalYear": "<the fiscal year these figures cover, e.g. 2026>",
-  "aiShareNote": "<one sentence: how the AI-attributable share was derived, and the share applied>"
+    "AMZN": <integer billions>,
+    "MSFT": <integer billions>,
+    "GOOG": <integer billions>,
+    "META": <integer billions>,
+    "ORCL": <integer billions>
+  }
 }`;
 }
 
@@ -115,7 +90,7 @@ Respond with ONLY a valid JSON object — no markdown fences, no preamble, no ex
 function buildPrompt2(totalCapex) {
   return `You are a financial analyst specializing in AI infrastructure capital expenditure.
 
-The five primary hyperscalers (Amazon, Microsoft, Alphabet, Meta, Oracle) have collectively announced roughly $${totalCapex} billion in AI-related capex for 2025-2026.
+The five primary hyperscalers (Amazon, Microsoft, Alphabet, Meta, Oracle) have collectively guided roughly $${totalCapex} billion in total capital expenditure for 2026.
 
 Based on your knowledge of their public guidance and capital allocation priorities, estimate how this $${totalCapex} billion total spend flows across the following six infrastructure sectors.
 
@@ -377,76 +352,42 @@ export async function onRequest(context) {
 
       let totalCapex = null;
       let byCompany  = null;
-      let byCompanyTotalCapex = null;
-      let aiShareNote = null;
 
       // STEP 2A: Execute Prompt 1 (search-grounded total + per-company split)
       try {
         const totalResult = await callGemini(buildPrompt1(), geminiKey, 0.1, 1024, 25000, true);
         byCompany = validateByCompany(totalResult?.byCompany);
-        byCompanyTotalCapex = validateByCompany(totalResult?.byCompanyTotalCapex);
-        aiShareNote = typeof totalResult?.aiShareNote === "string" ? totalResult.aiShareNote : null;
-
-        // Guard: the model's classic failure here is reporting each company's
-        // HEADLINE capex in the AI field — which inflates a number the UI labels
-        // "AI capex". AI-attributable spend must be strictly below the company's
-        // own total; if it isn't, the split is conflated and we discard it
-        // rather than publish an overstated figure.
-        if (byCompany && byCompanyTotalCapex) {
-          const conflated = COMPANY_IDS.filter(id => byCompany[id] >= byCompanyTotalCapex[id]);
-          if (conflated.length) {
-            console.warn("capex-intel: AI capex conflated with total capex for",
-              conflated.join(", "), "— discarding this reading");
-            byCompany = null;
-          }
-        }
-
-        // Attribution-plausibility ceiling. Softer failure than outright
-        // conflation: the model concedes AI < total but assigns ~90-96% of
-        // every company's capex to AI, which no hyperscaler's mix supports.
-        if (byCompany && byCompanyTotalCapex) {
-          const implausible = COMPANY_IDS.filter(
-            id => byCompany[id] / byCompanyTotalCapex[id] > MAX_AI_SHARE);
-          if (implausible.length) {
-            console.warn("capex-intel: implausible AI share (>", MAX_AI_SHARE, ") for",
-              implausible.join(", "), "— discarding this reading");
-            byCompany = null;
-          }
-        }
-
-        // Staleness tripwire. The opposite failure to conflation: the model
-        // answers with a prior-year actual instead of current guidance (a 2023
-        // reading lands near $200B across the five, versus the ~$700B+ these
-        // companies now guide). This is a floor for detecting obviously-stale
-        // data, NOT a target — a genuine reading well above it is untouched.
-        if (byCompany && byCompanyTotalCapex) {
-          const totalSum = Object.values(byCompanyTotalCapex).reduce((s, v) => s + v, 0);
-          if (totalSum < STALE_TOTAL_FLOOR) {
-            console.warn("capex-intel: total capex sum", totalSum,
-              "is below the staleness floor", STALE_TOTAL_FLOOR, "— discarding this reading");
-            byCompany = null;
-          }
-        }
 
         if (byCompany) {
           // The per-company sum is the most defensible total
           totalCapex = Object.values(byCompany).reduce((s, v) => s + v, 0);
-        } else if (!byCompanyTotalCapex && totalResult && typeof totalResult.totalCapexBillions === "number") {
-          // No per-company detail to cross-check against — accept the headline.
+        } else if (totalResult && typeof totalResult.totalCapexBillions === "number") {
           totalCapex = totalResult.totalCapexBillions;
+        }
+
+        // Staleness tripwire: the model sometimes answers with a prior-year
+        // actual instead of current guidance (a 2023 reading lands near $200B
+        // across the five, versus the ~$700B+ now guided). A floor for
+        // detecting obviously-stale data, NOT a target — genuine readings
+        // above it pass through untouched.
+        if (totalCapex && totalCapex < STALE_TOTAL_FLOOR) {
+          console.warn("capex-intel: total", totalCapex,
+            "is below the staleness floor", STALE_TOTAL_FLOOR, "— discarding this reading");
+          totalCapex = null;
+          byCompany = null;
         }
       } catch (prompt1Err) {
         console.warn("capex-intel: prompt 1 failed", prompt1Err);
       }
 
-      // No trustworthy AI-attributable total → serve an error instead of a
-      // fabricated one. Both surfaces fall back to the curated map values,
-      // which are conservative and clearly labelled as estimates.
+      // No trustworthy total → serve an error instead of a fabricated one.
+      // Both surfaces fall back to the curated map values, which are
+      // conservative and clearly labelled as estimates.
       if (!totalCapex || totalCapex <= 0) {
         return new Response(
           JSON.stringify({
-            error: "Could not establish an AI-attributable capex total",
-            detail: "The grounded reading was missing or conflated AI capex with total capex.",
+            error: "Could not establish a current capex total",
+            detail: "The grounded reading was missing or looked like a prior-year figure.",
           }),
           { status: 502, headers: { ...headers, "Cache-Control": "no-store" } }
         );
@@ -467,12 +408,10 @@ export async function onRequest(context) {
       const result = {
         totalCapexDerived: totalCapex, // Returning this so you can inspect what the model decided
         byCompany,
-        byCompanyTotalCapex, // headline capex per company — the audit trail for the AI split
-        aiShareNote,
         allocations,
         fetchedAt: Date.now(),
         model:     MODEL,
-        note:      "Search-grounded AI-ATTRIBUTABLE capex per hyperscaler (the AI portion of total capex, not total capex); sector allocations derived from Gemini based on public filings and earnings calls.",
+        note:      "Search-grounded TOTAL capex guidance per hyperscaler (not an AI-only split — the AI portion is not a disclosed line item); sector allocations derived from Gemini based on public filings and earnings calls.",
       };
 
       // 3. Persist to KV for 6 hours + append to the guidance-history table
