@@ -50,7 +50,7 @@ function Sparkline({ history }) {
 export default function CapexSankey({
   total, live, byCompany, tracks, marketData, history, onTrackClick, activeTrack,
   companyConfig = AI_COMPANIES,
-  subtitle = "Hyperscaler AI Capex",
+  subtitle = "Hyperscaler Capex",
 }) {
   const [hover, setHover] = useState(null); // company id | track id | null
 
