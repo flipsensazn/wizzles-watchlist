@@ -74,14 +74,17 @@ export const ROBOTICS_CAPEX_DATA = {
 // Sankey left side — the robot makers (demand). share = fallback split until
 // the grounded robotics-intel byCompany arrives. Most makers are private or
 // foreign; only TSLA / AGILITY(CCXI) / XPEV / BYD are accessible.
+// `ticker` is the tradable symbol when it differs from the display id —
+// price lookups must use ticker (raw "BYD" is Boyd Gaming on Yahoo, and
+// "AGILITY" is not a symbol at all; both silently poisoned the price cache).
 export const ROBOTICS_COMPANIES = [
   { id: "TSLA",    label: "Tesla (Optimus)", share: 0.30, isPublic: true },
   { id: "FIGURE",  label: "Figure AI",       share: 0.16, isPublic: false },
-  { id: "AGILITY", label: "Agility (CCXI)",  share: 0.12, isPublic: true },
+  { id: "AGILITY", label: "Agility (CCXI)",  share: 0.12, isPublic: true, ticker: "CCXI" },
   { id: "UNITREE", label: "Unitree",         share: 0.12, isPublic: false },
   { id: "ONEX",    label: "1X",              share: 0.10, isPublic: false },
   { id: "XPEV",    label: "XPeng (Iron)",    share: 0.10, isPublic: true },
-  { id: "BYD",     label: "BYD",             share: 0.10, isPublic: true },
+  { id: "BYD",     label: "BYD",             share: 0.10, isPublic: true, ticker: "BYDDY" },
 ];
 
 // ── DEPENDENCY GRAPH ─────────────────────────────────────

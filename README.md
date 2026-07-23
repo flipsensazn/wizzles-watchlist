@@ -11,6 +11,21 @@ This project is deployed on Cloudflare Pages.
 - Backend: Cloudflare Pages Functions from `functions/`
 - Runtime expectation: app routes call root-relative endpoints such as `/prices`,
   `/scanner`, `/market-news`, and `/capex-intel`
+- Scheduled Worker: `workers/prewarm/` (deployed separately via
+  `npx wrangler deploy`) warms the `/prices` KV cache every 2 minutes during
+  US market hours by requesting the full ticker universe through the public
+  site, so visitor loads hit a warm cache.
+
+### /prices caching model
+
+Two KV layers: a 60s quote cache (hit check is subset-based against the
+`covered` ticker set the cached cycle attempted, so a dead symbol can't
+poison the cache) and a 6h reference blob (`priceRefs_v1`) holding each
+ticker's historical closes for the 5D/1M/6M/YTD/1Y percentages, 52-week
+range, and earnings date. Warm cycles fetch only live v7 quotes (1 request
+per 40 tickers); the expensive 2-year chart fetches happen once per 6h.
+When Yahoo's v7 quote endpoint freezes (it happens), prices fall back to the
+live v8 chart meta per ticker automatically.
 
 ## Environment
 

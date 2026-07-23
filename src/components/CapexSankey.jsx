@@ -177,7 +177,7 @@ export default function CapexSankey({
 
           {/* company nodes */}
           {companies.map(c => {
-            const entry = c.isPublic !== false ? marketData?.[c.id] : null;
+            const entry = c.isPublic !== false ? marketData?.[c.ticker ?? c.id] : null;
             const pos = (entry?.change ?? 0) >= 0;
             return (
               <g key={c.id} style={{ cursor: "default" }}
