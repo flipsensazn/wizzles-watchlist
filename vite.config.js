@@ -3,6 +3,16 @@ import react from '@vitejs/plugin-react'
 
 export default defineConfig({
   plugins: [react()],
+  build: {
+    rollupOptions: {
+      // Two entries: index.html is the public hero page, app.html is the
+      // dashboard (served at /app by the site Worker, behind Access).
+      input: {
+        main: "index.html",
+        app: "app.html",
+      },
+    },
+  },
   server: {
     proxy: {
       '/prices':      'http://localhost:8788',
@@ -27,6 +37,8 @@ export default defineConfig({
       '/robotics-intel': 'http://localhost:8788',
       '/composite':   'http://localhost:8788',
       '/scoreboard':  'http://localhost:8788',
+      '/me':          'http://localhost:8788',
+      '/register':    'http://localhost:8788',
     },
   },
 })

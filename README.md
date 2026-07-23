@@ -26,7 +26,26 @@ https://capex-iq.us (custom domain on the `capex-iq` Worker).
   US market hours by requesting the full ticker universe through the public
   site, so visitor loads hit a warm cache.
 - The legacy Cloudflare Pages deployment has been deleted; capex-iq.us is
-  the only deployment.
+  the only deployment (workers.dev serving is disabled so Access path
+  protection can't be bypassed).
+
+### Tiered access (Cloudflare Zero Trust)
+
+`/` is the public hero/landing page (static `index.html`); the dashboard is
+the second Vite entry (`app.html`) served at `/app`, which Cloudflare Access
+protects at the edge with One-time PIN sign-in against two Access Groups:
+**Members** (self-service, populated by `POST /register` through the
+Cloudflare API using the `CF_ACCESS_API_TOKEN` Worker secret) and
+**Admins**. Signed-in admins get editing automatically: the admin-gated
+endpoints accept a verified Access JWT (`functions/access-lib.js` checks
+signature against the team JWKS, AUD, expiry, and membership in
+`ADMIN_EMAILS`) as an alternative to the legacy admin password, and the app
+auto-enables admin UI via `GET /me`. API endpoints stay public — the
+prewarm Worker and local digest depend on unauthenticated reads. Config
+vars in `workers/site/wrangler.jsonc`: `ACCESS_TEAM_DOMAIN`, `ACCESS_AUD`
+(both empty = auth features off), `ADMIN_EMAILS`. To move members behind a
+paywall later, stop auto-adding in `/register` and let the payment webhook
+do the group add — the Access policy itself doesn't change.
 
 ### /prices caching model
 

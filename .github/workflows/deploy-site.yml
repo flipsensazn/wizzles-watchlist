@@ -53,12 +53,18 @@ jobs:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
           FINNHUB_KEY: ${{ secrets.FINNHUB_API_KEY }}
+          CF_ACCESS_API_TOKEN: ${{ secrets.CF_ACCESS_API_TOKEN }}
         run: |
+          # CF_ACCESS_API_TOKEN (member registration) is optional — included
+          # only when the repo secret exists, so registration stays cleanly
+          # 503 until Zero Trust is configured.
           jq -n \
             --arg a "$ADMIN_PASSWORD" \
             --arg d "$DATABASE_URL" \
             --arg g "$GEMINI_API_KEY" \
             --arg f "$FINNHUB_KEY" \
-            '{ADMIN_PASSWORD: $a, DATABASE_URL: $d, GEMINI_API_KEY: $g, FINNHUB_KEY: $f}' > .secrets.json
+            --arg t "$CF_ACCESS_API_TOKEN" \
+            '{ADMIN_PASSWORD: $a, DATABASE_URL: $d, GEMINI_API_KEY: $g, FINNHUB_KEY: $f}
+             + (if $t != "" then {CF_ACCESS_API_TOKEN: $t} else {} end)' > .secrets.json
           npx --yes wrangler@4.113.0 secret bulk .secrets.json --name capex-iq
           rm .secrets.json
