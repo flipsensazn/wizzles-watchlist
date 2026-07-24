@@ -13,7 +13,7 @@ import { useMemo, useState } from "react";
 // BMO/AMC tags are derived from the call's New York time; mid-day timestamps
 // are usually placeholders, so they stay untagged.
 
-const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
+const DAY_LABELS = ["Mon", "Tue", "Wed", "Thu", "Fri"];  // markets are shut at the weekend
 const MONTHS = ["January", "February", "March", "April", "May", "June",
   "July", "August", "September", "October", "November", "December"];
 
@@ -68,18 +68,29 @@ export default function EarningsCalendar({ tickers = [], prices = {}, onTickerCl
   const { cells, label, monthTotal } = useMemo(() => {
     const view = new Date(today.getFullYear(), today.getMonth() + monthOffset, 1);
     const y = view.getFullYear(), m = view.getMonth();
-    const lead = (view.getDay() + 6) % 7;               // Mon-first grid
-    const daysInMonth = new Date(y, m + 1, 0).getDate();
-    const cellCount = Math.ceil((lead + daysInMonth) / 7) * 7;
+    const monthEnd = new Date(y, m + 1, 0);
+    const isWeekend = d => d.getDay() === 0 || d.getDay() === 6;
+
+    // Start from the Monday of the week holding the month's first WEEKDAY, so
+    // a month opening on a Saturday doesn't lead with a blank row.
+    const firstWeekday = new Date(y, m, 1);
+    while (isWeekend(firstWeekday)) firstWeekday.setDate(firstWeekday.getDate() + 1);
+    const cursor = new Date(firstWeekday);
+    cursor.setDate(firstWeekday.getDate() - ((firstWeekday.getDay() + 6) % 7));
 
     const cells = [];
     let monthTotal = 0;
-    for (let i = 0; i < cellCount; i++) {
-      const date = new Date(y, m, i - lead + 1);
-      const inMonth = date.getMonth() === m;
-      const entries = byDay.get(dayKey(date)) || [];
-      if (inMonth) monthTotal += entries.length;
-      cells.push({ date, inMonth, entries, key: dayKey(date) });
+    // Collect weekdays until we're past the month AND the last row is full.
+    while (cells.length < 40) {
+      if (!isWeekend(cursor)) {
+        const date = new Date(cursor);
+        const inMonth = date.getMonth() === m && date.getFullYear() === y;
+        const entries = byDay.get(dayKey(date)) || [];
+        if (inMonth) monthTotal += entries.length;
+        cells.push({ date, inMonth, entries, key: dayKey(date) });
+      }
+      cursor.setDate(cursor.getDate() + 1);
+      if (cursor > monthEnd && cells.length % 5 === 0) break;
     }
     return { cells, label: `${MONTHS[m]} ${y}`, monthTotal };
   }, [monthOffset, byDay]);
@@ -131,31 +142,29 @@ export default function EarningsCalendar({ tickers = [], prices = {}, onTickerCl
         <span style={{ color: "var(--event)" }}>AMC</span> after close
       </div>
 
-      {/* ec-scroll / ec-inner: seven columns can't fit a phone, so the month
-          becomes a horizontal swipe row below 900px (see GLOBAL_STYLES). */}
+      {/* ec-scroll / ec-inner: five columns still can't fit a phone, so the
+          month becomes a horizontal swipe row below 900px (GLOBAL_STYLES). */}
       <div className="ec-scroll">
         <div className="ec-inner">
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0,1fr))", gap: 6, marginBottom: 6 }}>
-            {DAY_LABELS.map((d, i) => (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0,1fr))", gap: 6, marginBottom: 6 }}>
+            {DAY_LABELS.map(d => (
               <div key={d} style={{
                 fontFamily: "var(--font-condensed)", fontSize: 9, letterSpacing: "0.15em",
-                textTransform: "uppercase", color: i > 4 ? "var(--ink-600)" : "var(--text-muted)",
+                textTransform: "uppercase", color: "var(--text-muted)",
                 textAlign: "center", paddingBottom: 2,
               }}>{d}</div>
             ))}
           </div>
 
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(7, minmax(0,1fr))", gap: 6 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0,1fr))", gap: 6 }}>
             {cells.map(cell => {
               const isToday = cell.key === todayKey;
-              const isWeekend = cell.date.getDay() === 0 || cell.date.getDay() === 6;
               const isPast = cell.date < new Date(today.getFullYear(), today.getMonth(), today.getDate());
               return (
                 <div key={cell.key} style={{
                   minHeight: 92, borderRadius: "var(--radius-md)", padding: "6px 7px",
                   background: isToday ? "var(--accent-quiet)"
-                    : cell.inMonth ? (isWeekend ? "rgba(0,0,0,0.18)" : "var(--surface-inset)")
-                    : "transparent",
+                    : cell.inMonth ? "var(--surface-inset)" : "transparent",
                   border: `1px solid ${isToday ? "var(--border-cyan)" : cell.inMonth ? "var(--border-hairline)" : "transparent"}`,
                   opacity: cell.inMonth ? (isPast && !isToday ? 0.5 : 1) : 0.25,
                 }}>
