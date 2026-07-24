@@ -34,14 +34,14 @@ function Sparkline({ history }) {
   const pts = totals.map((t, i) => `${(i / (totals.length - 1)) * w},${h - 4 - ((t - min) / range) * (h - 8)}`).join(" ");
   const delta = totals[totals.length - 1] - totals[0];
   const days = Math.max(1, Math.round((new Date(history[history.length - 1].fetchedAt) - new Date(history[0].fetchedAt)) / 86400000));
-  const color = delta > 0 ? "#34d399" : delta < 0 ? "#ef4444" : "#64748b";
+  const color = delta > 0 ? "var(--pos)" : delta < 0 ? "var(--neg)" : "var(--ink-400)";
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8 }} title={`${history.length} readings over ${days} day${days > 1 ? "s" : ""}`}>
       <svg width={w} height={h} style={{ display: "block" }}>
         <polyline points={pts} fill="none" stroke={color} strokeWidth="1.5" />
       </svg>
       <span style={{ fontSize: 11, fontWeight: 700, color }}>
-        {delta >= 0 ? "+" : ""}{delta}B <span style={{ color: "#64748b", fontWeight: 400 }}>/ {days}d</span>
+        {delta >= 0 ? "+" : ""}{delta}B <span style={{ color: "var(--ink-400)", fontWeight: 400 }}>/ {days}d</span>
       </span>
     </div>
   );
@@ -134,31 +134,32 @@ export default function CapexSankey({
 
   return (
     <div style={{
-      width: "100%", borderRadius: 4, padding: "22px 26px", boxSizing: "border-box",
-      background: "linear-gradient(to bottom, #1c1917, #0a0a0a)",
-      border: "1px solid #27272a", borderTop: "3px solid #fbbf24",
-      boxShadow: "inset 0 1px 0 rgba(255,255,255,0.05), 0 4px 12px rgba(0,0,0,0.6)",
+      width: "100%", borderRadius: "var(--radius-2xl)", padding: "22px 26px", boxSizing: "border-box",
+      background: "var(--surface-card)", backdropFilter: "var(--glass-blur)",
+      WebkitBackdropFilter: "var(--glass-blur)",
+      border: "1px solid var(--border-hairline)",
+      boxShadow: "var(--shadow-panel)",
     }}>
       {/* header: total + live badge + guidance trend */}
       <div style={{ display: "flex", alignItems: "flex-end", justifyContent: "space-between", flexWrap: "wrap", gap: 12, marginBottom: 14 }}>
         <div>
-          <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 6, fontFamily: "'Roboto Condensed', sans-serif" }}>
+          <div style={{ fontSize: 11, color: "var(--ink-300)", letterSpacing: "0.3em", textTransform: "uppercase", marginBottom: 6, fontFamily: "var(--font-condensed)" }}>
             Total Investment Flow
           </div>
           <div style={{ display: "flex", alignItems: "baseline", gap: 12, flexWrap: "wrap" }}>
-            <span className="capex-number" style={{ fontSize: 56, fontWeight: 800, color: "#fbbf24", lineHeight: 1, textShadow: "0 2px 4px rgba(0,0,0,0.5)" }}>
+            <span className="capex-number" style={{ fontSize: 56, fontWeight: 800, color: "var(--accent)", lineHeight: 1, textShadow: "var(--text-glow-cyan)" }}>
               ~${total}B{live ? "" : "+"}
             </span>
-            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: live ? "#34d399" : "#d97706" }}>
+            <span style={{ fontSize: 11, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase", color: live ? "var(--pos)" : "var(--warn)" }}>
               {subtitle} {live ? "(live, search-grounded)" : "(2026 est.)"}
             </span>
           </div>
         </div>
         <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
-          <div style={{ fontSize: 9.5, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700 }}>Guidance trend</div>
+          <div style={{ fontSize: 9.5, color: "var(--ink-500)", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700 }}>Guidance trend</div>
           {history?.length >= 2
             ? <Sparkline history={history} />
-            : <span style={{ fontSize: 10, color: "#475569" }}>building history…</span>}
+            : <span style={{ fontSize: 10, color: "var(--ink-500)" }}>building history…</span>}
         </div>
       </div>
 
@@ -188,17 +189,17 @@ export default function CapexSankey({
                   <path d={`M ${LEFT_X - 2} ${c.y + c.h / 2} L ${LEFT_X - 7} ${c.labelY}`}
                     stroke="rgba(148,163,184,0.35)" strokeWidth="1" fill="none" />
                 )}
-                <text x={LEFT_X - 10} y={c.labelY - 8} textAnchor="end" style={{ fill: "#f8fafc", fontSize: 13, fontWeight: 800 }}>{c.label || c.id}</text>
+                <text x={LEFT_X - 10} y={c.labelY - 8} textAnchor="end" style={{ fill: "var(--ink-050)", fontSize: 13, fontWeight: 800 }}>{c.label || c.id}</text>
                 <text x={LEFT_X - 10} y={c.labelY + 6} textAnchor="end" style={{ fill: "#fbbf24", fontSize: 11, fontWeight: 700 }}>{fmtB(c.capex)}</text>
                 {entry ? (
                   <text x={LEFT_X - 10} y={c.labelY + 19} textAnchor="end"
-                    style={{ fill: entry?.change != null ? (pos ? "#10b981" : "#ef4444") : "#475569", fontSize: 10, fontWeight: 700 }}>
+                    style={{ fill: entry?.change != null ? (pos ? "var(--up-500)" : "var(--neg)") : "var(--ink-500)", fontSize: 10, fontWeight: 700 }}>
                     {entry?.price ? `$${entry.price.toLocaleString("en-US", { maximumFractionDigits: 2 })} ` : ""}
                     {entry?.change != null ? `${pos ? "+" : ""}${entry.change.toFixed(2)}%` : ""}
                   </text>
                 ) : c.isPublic === false ? (
                   <text x={LEFT_X - 10} y={c.labelY + 19} textAnchor="end"
-                    style={{ fill: "#475569", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em" }}>
+                    style={{ fill: "var(--ink-500)", fontSize: 9, fontWeight: 700, letterSpacing: "0.08em" }}>
                     PRIVATE
                   </text>
                 ) : null}
@@ -216,7 +217,7 @@ export default function CapexSankey({
                 onMouseEnter={() => setHover(t.id)} onMouseLeave={() => setHover(null)}
                 opacity={hover && hover !== t.id && !ribbons.some(r => r.company === hover) ? 0.45 : 1}>
                 <rect x={RIGHT_X - (isActive ? 2 : 0)} y={t.y} width={BAR_W + (isActive ? 4 : 0)} height={Math.max(t.h, 2)} rx={2}
-                  fill={t.color} stroke={isActive ? "#e2e8f0" : "none"} strokeWidth={isActive ? 1.4 : 0} />
+                  fill={t.color} stroke={isActive ? "var(--ink-100)" : "none"} strokeWidth={isActive ? 1.4 : 0} />
                 {Math.abs(t.labelY - (t.y + t.h / 2)) > 8 && (
                   <path d={`M ${RIGHT_X + BAR_W + 2} ${t.y + t.h / 2} L ${RIGHT_X + BAR_W + 7} ${t.labelY}`}
                     stroke="rgba(148,163,184,0.35)" strokeWidth="1" fill="none" />
@@ -224,9 +225,9 @@ export default function CapexSankey({
                 <text x={RIGHT_X + BAR_W + 10} y={t.labelY - 2} style={{ fill: t.color, fontSize: 12, fontWeight: isActive ? 800 : 700 }}>
                   {t.label}{isActive ? " ▾" : ""}
                 </text>
-                <text x={RIGHT_X + BAR_W + 10} y={t.labelY + 12} style={{ fill: "#94a3b8", fontSize: 10.5, fontWeight: 700 }}>
+                <text x={RIGHT_X + BAR_W + 10} y={t.labelY + 12} style={{ fill: "var(--ink-300)", fontSize: 10.5, fontWeight: 700 }}>
                   {t.value || fmtB(t.capex)}
-                  {t.tickerCount > 0 && <tspan style={{ fill: "#475569", fontWeight: 400 }}> · {t.tickerCount} tickers</tspan>}
+                  {t.tickerCount > 0 && <tspan style={{ fill: "var(--ink-500)", fontWeight: 400 }}> · {t.tickerCount} tickers</tspan>}
                 </text>
                 <title>{`${t.label}: ${t.value || fmtB(t.capex)} · ${t.tickerCount} tickers — click to ${isActive ? "collapse" : "expand"} sub-sectors`}</title>
               </g>
@@ -235,7 +236,7 @@ export default function CapexSankey({
         </svg>
       </div>
 
-      <div style={{ fontSize: 9.5, color: "#475569", marginTop: 8, lineHeight: 1.4 }}>
+      <div style={{ fontSize: 9.5, color: "var(--ink-500)", marginTop: 8, lineHeight: 1.4 }}>
         Company totals from search-grounded intel (refreshed ~6h); sector split from live allocations.
         Per-company sector mix is not publicly disclosed — ribbons fan out proportionally. Click a sector to open its track.
       </div>

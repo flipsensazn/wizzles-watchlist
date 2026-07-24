@@ -23,9 +23,9 @@ export default function FearGreedGauge() {
         width: 260,
         padding: "8px 12px",
         background: "#262626",
-        border: "1px solid rgba(255,255,255,0.07)",
+        border: "1px solid var(--border-hairline)",
         borderRadius: 12, display: "flex", alignItems: "center",
-        justifyContent: "center", fontSize: 11, color: "#334155",
+        justifyContent: "center", fontSize: 11, color: "var(--ink-600)",
         minHeight: 56,
       }}>
         Loading CNN Index…
@@ -36,9 +36,9 @@ export default function FearGreedGauge() {
   const { score, label } = cnnData;
 
   let color, emoji;
-  if (score <= 24)      { color = "#ef4444"; emoji = "😱"; }
+  if (score <= 24)      { color = "var(--neg)"; emoji = "😱"; }
   else if (score <= 44) { color = "#f97316"; emoji = "😰"; }
-  else if (score <= 55) { color = "#facc15"; emoji = "😐"; }
+  else if (score <= 55) { color = "var(--star-400)"; emoji = "😐"; }
   else if (score <= 75) { color = "#86efac"; emoji = "😄"; }
   else                  { color = "#22c55e"; emoji = "🤑"; }
 
@@ -46,7 +46,7 @@ export default function FearGreedGauge() {
     <div style={{
       padding: "8px 12px",
       background: "#262626",
-      border: "1px solid rgba(255,255,255,0.07)",
+      border: "1px solid var(--border-hairline)",
       borderRadius: 12,
       flexShrink: 0,
       width: 260,
@@ -55,7 +55,7 @@ export default function FearGreedGauge() {
       gap: 6,
     }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-end" }}>
-        <div style={{ fontSize: 9, fontWeight: 700, color: "#475569", letterSpacing: "0.15em", textTransform: "uppercase" }}>
+        <div style={{ fontSize: 9, fontWeight: 700, color: "var(--ink-500)", letterSpacing: "0.15em", textTransform: "uppercase" }}>
           CNN Fear & Greed
         </div>
         <div style={{ fontSize: 18, fontWeight: 800, color, lineHeight: 1, textShadow: `0 0 10px ${color}55` }}>
@@ -92,11 +92,11 @@ export default function FearGreedGauge() {
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-        <span style={{ fontSize: 9, color: "#64748b", fontWeight: 700, letterSpacing: "0.05em" }}>FEAR</span>
+        <span style={{ fontSize: 9, color: "var(--ink-400)", fontWeight: 700, letterSpacing: "0.05em" }}>FEAR</span>
         <span style={{ fontSize: 10, color, fontWeight: 800, letterSpacing: "0.05em" }}>
           {emoji} {label}
         </span>
-        <span style={{ fontSize: 9, color: "#64748b", fontWeight: 700, letterSpacing: "0.05em" }}>GREED</span>
+        <span style={{ fontSize: 9, color: "var(--ink-400)", fontWeight: 700, letterSpacing: "0.05em" }}>GREED</span>
       </div>
     </div>
   );

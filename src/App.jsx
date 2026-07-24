@@ -5,9 +5,10 @@ import CapexSankey from "./components/CapexSankey";
 import CompositeMovers from "./components/CompositeMovers";
 import FearGreedGauge from "./components/FearGreedGauge";
 import SignalScoreboard from "./components/SignalScoreboard";
+import { TabNav } from "./components/ds";
 import StatusBanner from "./components/StatusBanner";
 import TopBar from "./components/TopBar";
-import EarningsWeek from "./components/EarningsWeek";
+import EarningsCalendar from "./components/EarningsCalendar";
 import SupplyGraph from "./components/capex-map/SupplyGraph";
 import TrackPane from "./components/capex-map/TrackPane";
 import { MUSK_CAPEX_DATA, MUSK_COMPANIES, MUSK_GRAPH_NODES, MUSK_GRAPH_EDGES, MUSK_LAYERS } from "./components/capex-map/muskData";
@@ -168,7 +169,7 @@ const CAPEX_DATA = {
   tracks: [
     {
       id: "compute", label: "Compute & Silicon", value: "~$180B", capex: 180,
-      color: "#60a5fa", borderColor: "#3b82f6",
+      color: "var(--info)", borderColor: "var(--info-500)",
       subsectors: [
         { id: "gpu", label: "GPU & AI Accelerators", tickers: ["NVDA","AMD"], materials: ["Cobalt","Tungsten","Silicon Wafer 300mm","HBM DRAM"] },
         { id: "memory", label: "Memory & Storage", tickers: ["MU","PSTG","NTAP","SNDK","RMBS","DRAM"], materials: ["HBM3e Stacks","LPDDR5","3D NAND Flash","Silicon Wafer 300mm"] },
@@ -182,7 +183,7 @@ const CAPEX_DATA = {
     },
     {
       id: "networking", label: "Networking & Connectivity", value: "~$50B", capex: 50,
-      color: "#34d399", borderColor: "#10b981",
+      color: "var(--pos)", borderColor: "var(--up-500)",
       subsectors: [
         { id: "eth", label: "Ethernet Switching", tickers: ["ANET","CSCO","HPE"], materials: ["Copper Cat8","PCB Laminate","Silicon"] },
         { id: "cable", label: "Cables & Connectors", tickers: ["GLW","TEL","APH"], materials: ["Copper","Optical Fiber SiO2","Polymer Cladding"] },
@@ -195,7 +196,7 @@ const CAPEX_DATA = {
       color: "#fbbf24", borderColor: "#f59e0b",
       subsectors: [
         { id: "engine", label: "Optical Engine & Transceiver L1", tickers: ["LITE","COHR","AAOI","MTSI","SIVEF","SMTC"], materials: ["InP Chips","Silicon Photonics Dies","Single-Mode Fiber"] },
-        { id: "inp", label: "InP Substrate & Epiwafer L2", tickers: ["AXTI","IQEPF"], materials: [ { name: "Indium", constraint: "CRITICAL — 70% supply from China", color: "#ef4444" }, { name: "Phosphorus", constraint: "Moderate supply risk", color: "#f59e0b" }, { name: "InP Wafer 2-4\"", constraint: "Capacity severely limited", color: "#ef4444" }, { name: "Gallium", constraint: "China export controls active", color: "#ef4444" }, ] },
+        { id: "inp", label: "InP Substrate & Epiwafer L2", tickers: ["AXTI","IQEPF"], materials: [ { name: "Indium", constraint: "CRITICAL — 70% supply from China", color: "var(--neg)" }, { name: "Phosphorus", constraint: "Moderate supply risk", color: "#f59e0b" }, { name: "InP Wafer 2-4\"", constraint: "Capacity severely limited", color: "var(--neg)" }, { name: "Gallium", constraint: "China export controls active", color: "var(--neg)" }, ] },
         { id: "epitaxy", label: "Epitaxy Equipment L3", tickers: ["VECO"], materials: ["Trimethylindium TMIn","Phosphine PH3","Quartz Chambers"] },
         { id: "siph", label: "SiPh Foundry & SOI Substrates L4", tickers: ["TSEM","GFS","SLOIF"], materials: ["Silicon-on-Insulator Wafers","Germanium","TiN Electrodes"] },
         { id: "retimers", label: "Connectivity Silicon (Retimers & AECs)", tickers: ["ALAB","CRDO"], materials: ["High-Speed Copper","Differential Pair PCB","Signal Integrity"] },
@@ -206,7 +207,7 @@ const CAPEX_DATA = {
     },
     {
       id: "neoclouds", label: "Neoclouds & Data Centers", value: "~$120B", capex: 120,
-      color: "#c084fc", borderColor: "#a855f7",
+      color: "var(--event)", borderColor: "var(--event-500)",
       subsectors: [
         { id: "reit", label: "Hyperscale REITs", tickers: ["EQIX","DLR","AMT"], materials: ["Structural Steel","Concrete","Copper Busbar","Fiber"] },
         { id: "neocloud", label: "GPU Cloud Operators", tickers: ["CIFR","IREN","CORZ","APLD","CRWV","NBIS","DGXX"], materials: ["Power Infrastructure","Cooling Systems","High-density Racks"] },
@@ -216,7 +217,7 @@ const CAPEX_DATA = {
     },
     {
       id: "power", label: "Power & Cooling", value: "~$45B", capex: 45,
-      color: "#fb923c", borderColor: "#f97316",
+      color: "var(--orange-400)", borderColor: "#f97316",
       subsectors: [
         { id: "grid", label: "Power Generation & Utilities", tickers: ["VST","NEE","BE","GEV","POW"], materials: ["Copper Grid","Silicon Steel Transformers","Lithium Storage"] },
         { id: "nuclear", label: "Nuclear", tickers: ["OKLO","SMR","LEU","ASPI","NNE","IMSR","BWXT"], materials: ["Enriched Uranium","Zirconium Cladding","Boron Control Rods"] },
@@ -228,15 +229,15 @@ const CAPEX_DATA = {
     },
     {
       id: "frontier", label: "Frontier / Speculative", value: "Early", capex: 15,
-      color: "#f472b6", borderColor: "#ec4899",
+      color: "var(--frontier-400)", borderColor: "#ec4899",
       subsectors: [
-        { id: "quantum", label: "Quantum Computing", tickers: ["IONQ","RGTI","QUBT","ARQQ","QTUM"], materials: [ { name: "Helium-3", constraint: "CRITICAL — extremely scarce", color: "#ef4444" }, { name: "Niobium", constraint: "Limited processing capacity", color: "#f59e0b" }, { name: "Sapphire Substrate", constraint: "Moderate availability", color: "#60a5fa" }, ] },
+        { id: "quantum", label: "Quantum Computing", tickers: ["IONQ","RGTI","QUBT","ARQQ","QTUM"], materials: [ { name: "Helium-3", constraint: "CRITICAL — extremely scarce", color: "var(--neg)" }, { name: "Niobium", constraint: "Limited processing capacity", color: "#f59e0b" }, { name: "Sapphire Substrate", constraint: "Moderate availability", color: "var(--info)" }, ] },
         { id: "edge", label: "Edge AI & IoT Connectivity", tickers: ["OSS","QCOM","SYNA"], materials: ["NPU IP","LPDDR","RF Front-Ends"] },
         { id: "space", label: "Space", tickers: ["RKLB","ASTS","NASA","SIDU","SATL","PL","RDW","MNTS","FLTCF"], materials: ["Radiation-Hardened Chips","Composites","RF Amplifiers"] },
         { id: "saas", label: "SaaS", tickers: ["PLTR","SNOW","NOW","CRM","DDOG"], materials: ["Cloud Infrastructure","API Gateways","Multi-tenant Architecture"] },
         { id: "robotics", label: "Robotics", tickers: ["SYM","TSLA","KRKNF","ONDS","LIDR","UMAC","AVAV","CTS"], materials: ["Servo Motors","LiDAR Sensors","Carbon Fiber Composites"] },
-        { id: "metals", label: "Precious Metals & Commodities", tickers: ["USAS","COPX","SLV","GLD","NEM"], materials: [ { name: "Gold", constraint: "Safe haven demand rising", color: "#f59e0b" }, { name: "Silver", constraint: "Industrial + monetary demand", color: "#94a3b8" }, { name: "Copper", constraint: "CRITICAL — AI grid buildout demand", color: "#fb923c" }, ] },
-        { id: "minerals", label: "Critical Minerals & Rare Earths", tickers: ["UUUU","MP","USAR","CRML","RIO","NB","REMX"], materials: [ { name: "Rare Earth Magnets", constraint: "China processing dominance", color: "#ef4444" }, "Uranium", "Niobium" ] },
+        { id: "metals", label: "Precious Metals & Commodities", tickers: ["USAS","COPX","SLV","GLD","NEM"], materials: [ { name: "Gold", constraint: "Safe haven demand rising", color: "#f59e0b" }, { name: "Silver", constraint: "Industrial + monetary demand", color: "var(--ink-300)" }, { name: "Copper", constraint: "CRITICAL — AI grid buildout demand", color: "var(--orange-400)" }, ] },
+        { id: "minerals", label: "Critical Minerals & Rare Earths", tickers: ["UUUU","MP","USAR","CRML","RIO","NB","REMX"], materials: [ { name: "Rare Earth Magnets", constraint: "China processing dominance", color: "var(--neg)" }, "Uranium", "Niobium" ] },
       ],
     },
   ],
@@ -323,7 +324,7 @@ function MiniChart({ data, dates, color, ticker }) {
           <polygon fill={`url(#${gradientId})`} points={`${points} ${width},${height} 0,${height}`} />
           <polyline fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" points={points} />
         </svg>
-        <div style={{ position: 'relative', height: height, width: 45, marginLeft: 8, fontSize: 9, color: "#94a3b8", fontFamily: "monospace" }}>
+        <div style={{ position: 'relative', height: height, width: 45, marginLeft: 8, fontSize: 9, color: "var(--ink-300)", fontFamily: "monospace" }}>
           {priceLabels.map((val, i) => {
               const yPos = height - ((val - yMin) / (range || 1)) * height;
               return <span key={i} style={{ position: 'absolute', top: yPos, transform: 'translateY(-50%)', left: 0 }}>${val.toFixed(2)}</span>;
@@ -342,7 +343,7 @@ function CompanyPopup({ ticker, change, anchorRect, onClose, onOpenAnalysis }) {
   const [analysisError, setAnalysisError] = useState(null);
   const popupRef = useRef(null);
   const pos = (change ?? 0) >= 0;
-  const changeColor = change === undefined ? "#475569" : pos ? "#34d399" : "#f87171";
+  const changeColor = change === undefined ? "var(--ink-500)" : pos ? "var(--pos)" : "var(--down-300)";
 
   const runAnalysis = async () => {
     if (analysisLoading) return;
@@ -406,41 +407,43 @@ function CompanyPopup({ ticker, change, anchorRect, onClose, onOpenAnalysis }) {
   if (data?.chartData && data.chartData.length >= 2) {
       const firstPrice = data.chartData[0];
       const lastPrice = data.chartData[data.chartData.length - 1];
-      chartColor = lastPrice >= firstPrice ? "#34d399" : "#f87171";
+      chartColor = lastPrice >= firstPrice ? "var(--pos)" : "var(--down-300)";
       monthChangePct = ((lastPrice - firstPrice) / firstPrice) * 100;
   }
 
   return (
     <div ref={popupRef} style={{
       position: "fixed", top, left, width: POPUP_W, zIndex: 3000,
-      background: "rgba(18,18,18,0.97)", border: `1px solid ${changeColor}44`,
-      borderRadius: 14, boxShadow: `0 8px 48px rgba(0,0,0,0.85), 0 0 30px ${changeColor}18`,
-      fontFamily: "'DM Mono','Fira Code',monospace", animation: "fadeSlideIn .18s ease-out",
+      background: "var(--surface-popup)", border: `1px solid ${changeColor}44`,
+      borderRadius: "var(--radius-xl)",
+      boxShadow: `var(--shadow-popup), 0 0 30px ${changeColor}18`,
+      backdropFilter: "var(--glass-blur-strong)", WebkitBackdropFilter: "var(--glass-blur-strong)",
+      fontFamily: "var(--font-mono)", animation: "fadeSlideIn .18s var(--ease-out)",
       overflow: "hidden",
     }}>
       <div style={{
         display: "flex", alignItems: "flex-start", justifyContent: "space-between",
-        padding: "14px 16px 10px", borderBottom: "1px solid rgba(255,255,255,0.06)",
+        padding: "14px 16px 10px", borderBottom: "1px solid var(--border-hairline)",
         background: `linear-gradient(135deg, ${changeColor}12 0%, transparent 100%)`,
       }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
-            <span style={{ fontSize: 16, fontWeight: 800, color: "#f1f5f9", letterSpacing: "0.04em" }}>{ticker}</span>
-            {data?.currentPrice && <span style={{ fontSize: 15, fontWeight: 700, color: "#e2e8f0" }}>{data.currentPrice}</span>}
+            <span style={{ fontSize: 16, fontWeight: 800, color: "var(--ink-050)", letterSpacing: "0.04em" }}>{ticker}</span>
+            {data?.currentPrice && <span style={{ fontSize: 15, fontWeight: 700, color: "var(--ink-100)" }}>{data.currentPrice}</span>}
             {change !== undefined && (
               <span style={{ fontSize: 11, fontWeight: 700, color: changeColor, background: changeColor + "18", border: `1px solid ${changeColor}44`, borderRadius: 5, padding: "1px 7px" }}>
                 {pos ? "+" : ""}{change}%
               </span>
             )}
           </div>
-          {data?.name && data.name !== ticker && <div style={{ fontSize: 11, color: "#94a3b8", lineHeight: 1.4 }}>{data.name}</div>}
+          {data?.name && data.name !== ticker && <div style={{ fontSize: 11, color: "var(--ink-300)", lineHeight: 1.4 }}>{data.name}</div>}
         </div>
         
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", justifyContent: "flex-end" }}>
           {data?.earningsDate && (
             <div style={{ display: "flex", alignItems: "center", gap: 4, background: "rgba(192,132,252,0.12)", border: "1px solid rgba(192,132,252,0.3)", padding: "4px 8px", borderRadius: 6 }}>
-              <span style={{ fontSize: 9, fontWeight: 800, color: "#c084fc", letterSpacing: "0.05em" }}>EARNINGS:</span>
-              <span style={{ fontSize: 9, fontWeight: 700, color: "#e2e8f0" }}>
+              <span style={{ fontSize: 9, fontWeight: 800, color: "var(--event)", letterSpacing: "0.05em" }}>EARNINGS:</span>
+              <span style={{ fontSize: 9, fontWeight: 700, color: "var(--ink-100)" }}>
                 {new Date(data.earningsDate * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric", timeZone: "UTC" })}
               </span>
             </div>
@@ -455,7 +458,7 @@ function CompanyPopup({ ticker, change, anchorRect, onClose, onOpenAnalysis }) {
                 background: analysisLoading ? "rgba(96,165,250,0.05)" : "rgba(96,165,250,0.12)",
                 border: "1px solid rgba(96,165,250,0.35)",
                 borderRadius: 6, padding: "4px 10px",
-                color: analysisLoading ? "#475569" : "#60a5fa",
+                color: analysisLoading ? "var(--ink-500)" : "var(--info)",
                 cursor: analysisLoading ? "default" : "pointer",
                 fontSize: 9, fontWeight: 800, letterSpacing: "0.08em",
                 textTransform: "uppercase", fontFamily: "inherit",
@@ -468,27 +471,27 @@ function CompanyPopup({ ticker, change, anchorRect, onClose, onOpenAnalysis }) {
             </button>
           )}
           {analysisError && (
-            <span style={{ fontSize: 9, color: "#f87171", maxWidth: 160, whiteSpace: "normal", lineHeight: 1.3, textAlign: "right" }}>
+            <span style={{ fontSize: 9, color: "var(--down-300)", maxWidth: 160, whiteSpace: "normal", lineHeight: 1.3, textAlign: "right" }}>
               ⚠ {analysisError.length > 80 ? analysisError.slice(0, 80) + "…" : analysisError}
             </span>
           )}
-          <button onClick={onClose} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "#64748b", width: 24, height: 24, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit" }}>×</button>
+          <button onClick={onClose} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid var(--border-soft)", borderRadius: 6, color: "var(--ink-400)", width: 24, height: 24, cursor: "pointer", fontSize: 14, display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "inherit" }}>×</button>
         </div>
       </div>
 
       <div style={{ padding: "12px 16px 14px" }}>
         {loading ? (
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 80, color: "#475569", fontSize: 12 }}>Loading…</div>
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "center", height: 80, color: "var(--ink-500)", fontSize: 12 }}>Loading…</div>
         ) : !data ? (
-          <div style={{ color: "#475569", fontSize: 12, textAlign: "center", padding: "20px 0" }}>No data available for {ticker}</div>
+          <div style={{ color: "var(--ink-500)", fontSize: 12, textAlign: "center", padding: "20px 0" }}>No data available for {ticker}</div>
         ) : (
           <div style={{ display: "flex", gap: 20 }}>
             
             <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
               {(data.sector !== "—" || data.industry !== "—") && (
                 <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
-                  {data.sector !== "—" && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: "rgba(96,165,250,0.12)", border: "1px solid rgba(96,165,250,0.25)", color: "#60a5fa" }}>{data.sector}</span>}
-                  {data.industry !== "—" && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", color: "#94a3b8" }}>{data.industry}</span>}
+                  {data.sector !== "—" && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: "rgba(96,165,250,0.12)", border: "1px solid rgba(96,165,250,0.25)", color: "var(--info)" }}>{data.sector}</span>}
+                  {data.industry !== "—" && <span style={{ fontSize: 10, padding: "2px 8px", borderRadius: 4, background: "rgba(255,255,255,0.05)", border: "1px solid var(--border-soft)", color: "var(--ink-300)" }}>{data.industry}</span>}
                 </div>
               )}
 
@@ -502,19 +505,19 @@ function CompanyPopup({ ticker, change, anchorRect, onClose, onOpenAnalysis }) {
                   { label: "Country",    value: data.country },
                 ].map(({ label, value }) => (
                   <div key={label}>
-                    <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 1 }}>{label}</div>
-                    <div style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0" }}>{value}</div>
+                    <div style={{ fontSize: 9, color: "var(--ink-500)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 1 }}>{label}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: "var(--ink-100)" }}>{value}</div>
                   </div>
                 ))}
               </div>
 
               {data.description && (
-                <div style={{ fontSize: 10.5, color: "#94a3b8", lineHeight: 1.55, borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 10, overflowY: "auto", maxHeight: 130, paddingRight: 6 }}>
+                <div style={{ fontSize: 10.5, color: "var(--ink-300)", lineHeight: 1.55, borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 10, overflowY: "auto", maxHeight: 130, paddingRight: 6 }}>
                   {data.description}
                 </div>
               )}
               {data.website && (
-                <a href={data.website} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", marginTop: "auto", paddingTop: 8, fontSize: 10, color: "#60a5fa", textDecoration: "none", opacity: 0.7 }} onMouseEnter={e => e.currentTarget.style.opacity = "1"} onMouseLeave={e => e.currentTarget.style.opacity = "0.7"}>
+                <a href={data.website} target="_blank" rel="noopener noreferrer" style={{ display: "inline-block", marginTop: "auto", paddingTop: 8, fontSize: 10, color: "var(--info)", textDecoration: "none", opacity: 0.7 }} onMouseEnter={e => e.currentTarget.style.opacity = "1"} onMouseLeave={e => e.currentTarget.style.opacity = "0.7"}>
                   {data.website.replace(/^https?:\/\//, "")} ↗
                 </a>
               )}
@@ -523,25 +526,25 @@ function CompanyPopup({ ticker, change, anchorRect, onClose, onOpenAnalysis }) {
             <div style={{ width: 220, display: "flex", flexDirection: "column", flexShrink: 0 }}>
               
               {data.news && (
-                <div style={{ marginBottom: 14, padding: "8px 10px", background: "rgba(255,255,255,0.03)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 6 }}>
+                <div style={{ marginBottom: 14, padding: "8px 10px", background: "rgba(255,255,255,0.03)", border: "1px solid var(--border-hairline)", borderRadius: 6 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 6 }}>
-                    <span style={{ fontSize: 9, color: "#94a3b8", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700 }}>🗞 Latest News</span>
-                    <a href={data.news.link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 9, color: "#60a5fa", textDecoration: "none", fontWeight: 600, background: "rgba(96,165,250,0.15)", padding: "2px 6px", borderRadius: 4 }}>
+                    <span style={{ fontSize: 9, color: "var(--ink-300)", letterSpacing: "0.1em", textTransform: "uppercase", fontWeight: 700 }}>🗞 Latest News</span>
+                    <a href={data.news.link} target="_blank" rel="noopener noreferrer" style={{ fontSize: 9, color: "var(--info)", textDecoration: "none", fontWeight: 600, background: "rgba(96,165,250,0.15)", padding: "2px 6px", borderRadius: 4 }}>
                       Read ↗
                     </a>
                   </div>
-                  <div style={{ fontSize: 11, color: "#e2e8f0", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", fontWeight: 500 }} title={data.news.title}>
+                  <div style={{ fontSize: 11, color: "var(--ink-100)", lineHeight: 1.4, display: "-webkit-box", WebkitLineClamp: 3, WebkitBoxOrient: "vertical", overflow: "hidden", fontWeight: 500 }} title={data.news.title}>
                     {data.news.title}
                   </div>
                   {data.news.publisher && (
-                    <div style={{ fontSize: 9, color: "#475569", marginTop: 4, fontFamily: "'Inter', sans-serif" }}>via {data.news.publisher}</div>
+                    <div style={{ fontSize: 9, color: "var(--ink-500)", marginTop: 4, fontFamily: "'Inter', sans-serif" }}>via {data.news.publisher}</div>
                   )}
                 </div>
               )}
 
               {data.chartData && data.chartData.length > 0 && (
                 <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
-                  <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase" }}>1-Month Trend</div>
+                  <div style={{ fontSize: 9, color: "var(--ink-500)", letterSpacing: "0.1em", textTransform: "uppercase" }}>1-Month Trend</div>
                   {monthChangePct !== null && (
                     <div style={{ fontSize: 10, fontWeight: 700, color: chartColor, background: chartColor + "15", padding: "1px 6px", borderRadius: 4, border: `1px solid ${chartColor}44` }}>
                       {monthChangePct >= 0 ? "+" : ""}{monthChangePct.toFixed(2)}%
@@ -556,9 +559,9 @@ function CompanyPopup({ ticker, change, anchorRect, onClose, onOpenAnalysis }) {
                 )}
                 {data.raw52Low != null && data.raw52High != null && data.rawPrice != null && (
                   <div>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "#475569", marginBottom: 6, fontFamily: "monospace" }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 9, color: "var(--ink-500)", marginBottom: 6, fontFamily: "monospace" }}>
                       <span>{data.week52Low}</span>
-                      <span style={{ color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.1em" }}>52W Range</span>
+                      <span style={{ color: "var(--ink-300)", textTransform: "uppercase", letterSpacing: "0.1em" }}>52W Range</span>
                       <span>{data.week52High}</span>
                     </div>
                     <div style={{ position: "relative", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2 }}>
@@ -627,25 +630,25 @@ function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline, isAd
     if (change >= 8)  return "#065f46";
     if (change >= 4)  return "#047857";
     if (change >= 1)  return "#059669";
-    if (change >= 0)  return "#10b981";
-    if (change >= -1) return "#ef4444";
+    if (change >= 0)  return "var(--up-500)";
+    if (change >= -1) return "var(--neg)";
     if (change >= -4) return "#dc2626";
     if (change >= -8) return "#b91c1c";
     return "#7f1d1d";
   }
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: isMobile ? "12px 8px" : 20, height: "100%", overflowX: "hidden", boxSizing: "border-box", width: "100%" }}>
+    <div style={{ borderRadius: "var(--radius-2xl)", border: "1px solid var(--border-hairline)", background: "var(--bg-raised)", padding: isMobile ? "12px 8px" : 20, height: "100%", overflowX: "hidden", boxSizing: "border-box", width: "100%" }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 12 }}>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <h3 style={{ fontSize: 14, fontWeight: 700, color: "#e2e8f0", margin: 0 }}>Portfolio Heat Map</h3>
+            <h3 style={{ fontSize: 14, fontWeight: 700, color: "var(--ink-100)", margin: 0 }}>Portfolio Heat Map</h3>
             <div style={{ display: "flex", background: "rgba(255,255,255,0.05)", borderRadius: 6, padding: 2 }}>
               {["1D", "5D", "1M", "6M", "YTD", "1Y"].map(t => (
                 <button key={t} onClick={() => setTimeline(t)} style={{
                   background: timeline === t ? "rgba(255,255,255,0.1)" : "transparent",
-                  color: timeline === t ? "#e2e8f0" : "#64748b",
+                  color: timeline === t ? "var(--ink-100)" : "var(--ink-400)",
                   border: "none", borderRadius: 4, padding: "2px 8px",
                   fontSize: 10, fontWeight: timeline === t ? 700 : 500,
                   cursor: "pointer", transition: "all .15s"
@@ -656,13 +659,13 @@ function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline, isAd
             </div>
           </div>
 
-          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 10, color: "#64748b" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap", fontSize: 10, color: "var(--ink-400)" }}>
             {[
               { id: "near52WLow", label: "within 25% of 52W low", icon: <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(251,191,36,0.25)", border: "1px solid #f59e0b", boxShadow: "0 0 6px #f59e0b88", flexShrink: 0 }} /> },
               { id: "near52WHigh", label: "within 10% of 52W high", icon: <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(52,211,153,0.25)", border: "1px solid #34d399", boxShadow: "0 0 6px #34d39988", flexShrink: 0 }} /> },
               { id: "ath", label: "All Time High (ATH)", icon: <span style={{ display: "inline-block", width: 8, height: 8, borderRadius: 2, background: "rgba(52,211,153,0.35)", border: "2.5px solid #34d399", boxShadow: "0 0 8px #34d399cc", flexShrink: 0 }} /> },
-              { id: "earnings", label: "Earnings in 3 Days", icon: <span style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 10, height: 10, borderRadius: 2, background: "rgba(192,132,252,0.25)", border: "1px solid #c084fc", color: "#c084fc", fontSize: 7, fontWeight: 800, flexShrink: 0 }}>E</span> },
-              { id: "starred", label: "Wizzle's Holdings", icon: <span style={{ display: "inline-block", color: "#facc15", fontSize: 11, lineHeight: 1, textShadow: "0 0 6px #facc1588", flexShrink: 0 }}>★</span> }
+              { id: "earnings", label: "Earnings in 3 Days", icon: <span style={{ display: "flex", alignItems: "center", justifyContent: "center", width: 10, height: 10, borderRadius: 2, background: "rgba(192,132,252,0.25)", border: "1px solid #c084fc", color: "var(--event)", fontSize: 7, fontWeight: 800, flexShrink: 0 }}>E</span> },
+              { id: "starred", label: "Wizzle's Holdings", icon: <span style={{ display: "inline-block", color: "var(--star-400)", fontSize: 11, lineHeight: 1, textShadow: "0 0 6px #facc1588", flexShrink: 0 }}>★</span> }
             ].map(f => (
               <button
                 key={f.id}
@@ -674,7 +677,7 @@ function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline, isAd
                   borderColor: activeFilter === f.id ? "rgba(255,255,255,0.2)" : "transparent",
                   padding: "4px 8px",
                   borderRadius: 6,
-                  color: activeFilter === f.id ? "#e2e8f0" : "#64748b",
+                  color: activeFilter === f.id ? "var(--ink-100)" : "var(--ink-400)",
                   cursor: "pointer",
                   transition: "all 0.15s",
                   outline: "none",
@@ -787,7 +790,7 @@ function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline, isAd
                     onMouseOut={e => { e.currentTarget.style.filter = ""; e.currentTarget.style.transform = ""; }}>
                     
                     {isUpcomingEarnings && (
-                      <div style={{ position: "absolute", top: 3, left: 4, fontSize: 8, fontWeight: 800, color: "#c084fc", letterSpacing: "0.05em", lineHeight: 1 }}>E</div>
+                      <div style={{ position: "absolute", top: 3, left: 4, fontSize: 8, fontWeight: 800, color: "var(--event)", letterSpacing: "0.05em", lineHeight: 1 }}>E</div>
                     )}
 
                     {sessionLabel && !near52W && !athInfo && !near52WH && (
@@ -797,14 +800,14 @@ function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline, isAd
                       <div style={{ position: "absolute", top: 3, right: 4, fontSize: 7, fontWeight: 800, color: "#f59e0b", letterSpacing: "0.05em", lineHeight: 1 }}>▼52W</div>
                     )}
                     {athInfo && (
-                      <div style={{ position: "absolute", top: 3, right: 4, fontSize: 7, fontWeight: 800, color: "#34d399", letterSpacing: "0.05em", lineHeight: 1 }}>ATH</div>
+                      <div style={{ position: "absolute", top: 3, right: 4, fontSize: 7, fontWeight: 800, color: "var(--pos)", letterSpacing: "0.05em", lineHeight: 1 }}>ATH</div>
                     )}
                     {near52WH && (
-                      <div style={{ position: "absolute", top: 3, right: 4, fontSize: 7, fontWeight: 800, color: "#34d399", letterSpacing: "0.05em", lineHeight: 1 }}>▲52W</div>
+                      <div style={{ position: "absolute", top: 3, right: 4, fontSize: 7, fontWeight: 800, color: "var(--pos)", letterSpacing: "0.05em", lineHeight: 1 }}>▲52W</div>
                     )}
-                    <div style={{ fontSize: 12, fontWeight: 700, color: near52W ? "#fef3c7" : (athInfo || near52WH) ? "#d1fae5" : "#f1f5f9" }}>{ticker}</div>
+                    <div style={{ fontSize: 12, fontWeight: 700, color: near52W ? "#fef3c7" : (athInfo || near52WH) ? "#d1fae5" : "var(--ink-050)" }}>{ticker}</div>
                     {change !== undefined ? (
-                      <div style={{ fontSize: 10, fontWeight: 600, color: pos ? "#a7f3d0" : "#fca5a5", marginTop: 2 }}>
+                      <div style={{ fontSize: 10, fontWeight: 600, color: pos ? "var(--up-100)" : "var(--down-100)", marginTop: 2 }}>
                         {typeof change === 'number' ? (change >= 0 ? "+" : "") + change.toFixed(2) + "%" : "—"}
                       </div>
                     ) : (
@@ -825,7 +828,7 @@ function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline, isAd
                         style={{
                           position: "absolute", bottom: 4, left: 5,
                           fontSize: 10, lineHeight: 1,
-                          color: isStarred ? "#facc15" : "rgba(255,255,255,0.3)",
+                          color: isStarred ? "var(--star-400)" : "rgba(255,255,255,0.3)",
                           cursor: isAdmin ? "pointer" : "default",
                           zIndex: 2,
                         }}
@@ -842,19 +845,19 @@ function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline, isAd
       })}
       
       {tooltip && (
-        <div style={{ position: "fixed", top: tooltip.rect.top - (tooltip.near52W || tooltip.near52WH || tooltip.athInfo || tooltip.isUpcomingEarnings ? 68 : 52), left: tooltip.rect.left, background: "rgba(18,18,18,0.95)", border: `1px solid ${tooltip.near52W ? "#f59e0b" : tooltip.near52WH ? "#34d399" : (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171"}44`, borderRadius: 8, padding: "7px 12px", pointerEvents: "none", zIndex: 1000, display: "flex", flexDirection: "column", gap: 4, minWidth: 140 }}>
+        <div style={{ position: "fixed", top: tooltip.rect.top - (tooltip.near52W || tooltip.near52WH || tooltip.athInfo || tooltip.isUpcomingEarnings ? 68 : 52), left: tooltip.rect.left, background: "rgba(18,18,18,0.95)", border: `1px solid ${tooltip.near52W ? "#f59e0b" : tooltip.near52WH ? "var(--pos)" : (tooltip.change ?? 0) >= 0 ? "var(--pos)" : "var(--down-300)"}44`, borderRadius: 8, padding: "7px 12px", pointerEvents: "none", zIndex: 1000, display: "flex", flexDirection: "column", gap: 4, minWidth: 140 }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-            <span style={{ fontSize: 13, fontWeight: 700, color: "#f1f5f9" }}>{tooltip.ticker}</span>
-            {tooltip.price !== undefined && <span style={{ fontSize: 12, fontWeight: 600, color: "#e2e8f0" }}>${tooltip.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
-            {tooltip.change !== undefined && <span style={{ fontSize: 12, fontWeight: 700, color: (tooltip.change ?? 0) >= 0 ? "#34d399" : "#f87171" }}>{typeof tooltip.change === 'number' ? (tooltip.change >= 0 ? "+" : "") + tooltip.change.toFixed(2) + "%" : "—"}</span>}
-            {tooltip.session && <span style={{ fontSize: 9, fontWeight: 700, color: "#64748b", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.05em" }}>{tooltip.session}</span>}
-            <span style={{ fontSize: 10, color: "#475569" }}>{tooltip.track}</span>
+            <span style={{ fontSize: 13, fontWeight: 700, color: "var(--ink-050)" }}>{tooltip.ticker}</span>
+            {tooltip.price !== undefined && <span style={{ fontSize: 12, fontWeight: 600, color: "var(--ink-100)" }}>${tooltip.price.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>}
+            {tooltip.change !== undefined && <span style={{ fontSize: 12, fontWeight: 700, color: (tooltip.change ?? 0) >= 0 ? "var(--pos)" : "var(--down-300)" }}>{typeof tooltip.change === 'number' ? (tooltip.change >= 0 ? "+" : "") + tooltip.change.toFixed(2) + "%" : "—"}</span>}
+            {tooltip.session && <span style={{ fontSize: 9, fontWeight: 700, color: "var(--ink-400)", background: "rgba(255,255,255,0.06)", border: "1px solid var(--border-soft)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.05em" }}>{tooltip.session}</span>}
+            <span style={{ fontSize: 10, color: "var(--ink-500)" }}>{tooltip.track}</span>
           </div>
           
           {tooltip.isUpcomingEarnings && (
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 8, fontWeight: 800, color: "#c084fc", background: "rgba(192,132,252,0.15)", border: "1px solid rgba(192,132,252,0.4)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.08em" }}>E EARNINGS SOON</span>
-              <span style={{ fontSize: 10, color: "#c084fc" }}>Within 3 Days</span>
+              <span style={{ fontSize: 8, fontWeight: 800, color: "var(--event)", background: "rgba(192,132,252,0.15)", border: "1px solid rgba(192,132,252,0.4)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.08em" }}>E EARNINGS SOON</span>
+              <span style={{ fontSize: 10, color: "var(--event)" }}>Within 3 Days</span>
             </div>
           )}
 
@@ -866,14 +869,14 @@ function HeatMap({ prices, capexData, onTickerClick, timeline, setTimeline, isAd
           )}
           {tooltip.near52WH && (
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 8, fontWeight: 800, color: "#34d399", background: "rgba(52,211,153,0.15)", border: "1px solid rgba(52,211,153,0.4)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.08em" }}>▲ 52W HIGH ZONE</span>
-              <span style={{ fontSize: 10, color: "#34d399" }}>within 10% of ${Number(tooltip.near52WH.raw52High).toFixed(2)}</span>
+              <span style={{ fontSize: 8, fontWeight: 800, color: "var(--pos)", background: "rgba(52,211,153,0.15)", border: "1px solid rgba(52,211,153,0.4)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.08em" }}>▲ 52W HIGH ZONE</span>
+              <span style={{ fontSize: 10, color: "var(--pos)" }}>within 10% of ${Number(tooltip.near52WH.raw52High).toFixed(2)}</span>
             </div>
           )}
           {tooltip.athInfo && (
             <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-              <span style={{ fontSize: 8, fontWeight: 800, color: "#34d399", background: "rgba(52,211,153,0.2)", border: "1.5px solid rgba(52,211,153,0.6)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.08em" }}>🏆 ALL TIME HIGH</span>
-              <span style={{ fontSize: 10, color: "#34d399", fontWeight: 700 }}>ATH: ${Number(tooltip.athInfo.raw52High).toFixed(2)}</span>
+              <span style={{ fontSize: 8, fontWeight: 800, color: "var(--pos)", background: "rgba(52,211,153,0.2)", border: "1.5px solid rgba(52,211,153,0.6)", borderRadius: 3, padding: "1px 5px", letterSpacing: "0.08em" }}>🏆 ALL TIME HIGH</span>
+              <span style={{ fontSize: 10, color: "var(--pos)", fontWeight: 700 }}>ATH: ${Number(tooltip.athInfo.raw52High).toFixed(2)}</span>
             </div>
           )}
         </div>
@@ -891,7 +894,7 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
   const [filter, setFilter]   = useState("all");
 
   const isShort = tab === "short";
-  const accent  = isShort ? "#f59e0b" : "#60a5fa";
+  const accent  = isShort ? "#f59e0b" : "var(--info)";
 
   const watchList = useMemo(
     () => [...new Set(capexData.tracks.flatMap(t => t.subsectors.flatMap(s => s.tickers)))],
@@ -954,7 +957,7 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
   const avg          = validChanges.reduce((s, x) => s + x.change, 0) / (validChanges.length || 1);
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: isMobile ? "12px 8px" : 20, display: "flex", flexDirection: "column", gap: 14, height: "100%", boxSizing: "border-box", width: "100%", overflowX: "hidden" }}>
+    <div style={{ borderRadius: "var(--radius-2xl)", border: "1px solid var(--border-hairline)", background: "var(--bg-raised)", padding: isMobile ? "12px 8px" : 20, display: "flex", flexDirection: "column", gap: 14, height: "100%", boxSizing: "border-box", width: "100%", overflowX: "hidden" }}>
 
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
         <div style={{ display: "flex", gap: 2, background: "rgba(255,255,255,0.03)", borderRadius: 10, padding: 3 }}>
@@ -962,26 +965,26 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
             <button key={id} onClick={() => switchTab(id)} style={{
               background: tab === id ? (id === "short" ? "rgba(245,158,11,0.15)" : "rgba(96,165,250,0.12)") : "transparent",
               border: `1px solid ${tab === id ? (id === "short" ? "rgba(245,158,11,0.35)" : "rgba(96,165,250,0.25)") : "transparent"}`,
-              color: tab === id ? (id === "short" ? "#f59e0b" : "#60a5fa") : "#475569",
+              color: tab === id ? (id === "short" ? "#f59e0b" : "var(--info)") : "var(--ink-500)",
               borderRadius: 7, padding: "5px 14px", cursor: "pointer", fontSize: 12, fontFamily: "inherit",
               fontWeight: tab === id ? 700 : 400, transition: "all .15s",
             }}>{label}</button>
           ))}
         </div>
         <div style={{ display: "flex", gap: 12, fontSize: 12 }}>
-          <div style={{ textAlign: "center" }}><div style={{ color: "#34d399", fontWeight: 700 }}>{filtered.filter(x => (typeof x.change === 'number' ? x.change : -1) >= 0).length}</div><div style={{ color: "#475569", fontSize: 10 }}>UP</div></div>
-          <div style={{ textAlign: "center" }}><div style={{ color: "#f87171", fontWeight: 700 }}>{filtered.filter(x => (typeof x.change === 'number' ? x.change : 0) < 0).length}</div><div style={{ color: "#475569", fontSize: 10 }}>DOWN</div></div>
-          <div style={{ textAlign: "center" }}><div style={{ color: avg >= 0 ? "#34d399" : "#f87171", fontWeight: 700 }}>{validChanges.length ? (avg >= 0 ? "+" : "") + avg.toFixed(2) + "%" : "—"}</div><div style={{ color: "#475569", fontSize: 10 }}>AVG</div></div>
+          <div style={{ textAlign: "center" }}><div style={{ color: "var(--pos)", fontWeight: 700 }}>{filtered.filter(x => (typeof x.change === 'number' ? x.change : -1) >= 0).length}</div><div style={{ color: "var(--ink-500)", fontSize: 10 }}>UP</div></div>
+          <div style={{ textAlign: "center" }}><div style={{ color: "var(--down-300)", fontWeight: 700 }}>{filtered.filter(x => (typeof x.change === 'number' ? x.change : 0) < 0).length}</div><div style={{ color: "var(--ink-500)", fontSize: 10 }}>DOWN</div></div>
+          <div style={{ textAlign: "center" }}><div style={{ color: avg >= 0 ? "var(--pos)" : "var(--down-300)", fontWeight: 700 }}>{validChanges.length ? (avg >= 0 ? "+" : "") + avg.toFixed(2) + "%" : "—"}</div><div style={{ color: "var(--ink-500)", fontSize: 10 }}>AVG</div></div>
         </div>
       </div>
 
       {isShort ? (
-        <p style={{ fontSize: 11, color: "#64748b", margin: 0, marginTop: -6 }}>
+        <p style={{ fontSize: 11, color: "var(--ink-400)", margin: 0, marginTop: -6 }}>
           Potential investment opportunities · shared with all users
         </p>
       ) : (
-        <p style={{ fontSize: 11, color: "#475569", margin: 0, marginTop: -6, display: "flex", alignItems: "center", gap: 5 }}>
-          <span style={{ color: "#334155" }}>⟳</span> Auto-synced from Portfolio Heat Map
+        <p style={{ fontSize: 11, color: "var(--ink-500)", margin: 0, marginTop: -6, display: "flex", alignItems: "center", gap: 5 }}>
+          <span style={{ color: "var(--ink-600)" }}>⟳</span> Auto-synced from Portfolio Heat Map
         </p>
       )}
 
@@ -989,7 +992,7 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
         !isAdmin ? (
           <div style={{ display: "flex", alignItems: "center", gap: 10, background: "rgba(245,158,11,0.06)", border: "1px solid rgba(245,158,11,0.15)", borderRadius: 8, padding: "10px 14px" }}>
             <span style={{ fontSize: 14 }}>🔒</span>
-            <span style={{ fontSize: 12, color: "#64748b" }}>The Shortlist is editable by administrators only</span>
+            <span style={{ fontSize: 12, color: "var(--ink-400)" }}>The Shortlist is editable by administrators only</span>
           </div>
         ) : (
           <div style={{ display: "flex", gap: 8 }}>
@@ -998,7 +1001,7 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
               onChange={e => setInput(e.target.value.toUpperCase())}
               onKeyDown={e => e.key === "Enter" && handleAdd()}
               placeholder="Add opportunity… e.g. NVDA"
-              style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 8, padding: "7px 12px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit", outline: "none" }}
+              style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid var(--border-soft)", borderRadius: 8, padding: "7px 12px", color: "var(--ink-100)", fontSize: 12, fontFamily: "inherit", outline: "none" }}
             />
             <button onClick={handleAdd} style={{ background: `${accent}1a`, border: `1px solid ${accent}40`, color: accent, borderRadius: 8, padding: "7px 14px", cursor: "pointer", fontSize: 12, fontFamily: "inherit" }}>+ Add</button>
           </div>
@@ -1012,10 +1015,10 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
           style={{
             flex: 1,
             background: "rgba(255,255,255,0.05)",
-            border: `1px solid ${filter === "all" ? "rgba(255,255,255,0.1)" : (capexData.tracks.find(t => t.id === filter)?.color ?? "#60a5fa") + "66"}`,
+            border: `1px solid ${filter === "all" ? "rgba(255,255,255,0.1)" : (capexData.tracks.find(t => t.id === filter)?.color ?? "var(--info)") + "66"}`,
             borderRadius: 8,
             padding: "5px 10px",
-            color: filter === "all" ? "#e2e8f0" : (capexData.tracks.find(t => t.id === filter)?.color ?? "#e2e8f0"),
+            color: filter === "all" ? "var(--ink-100)" : (capexData.tracks.find(t => t.id === filter)?.color ?? "var(--ink-100)"),
             fontSize: 11,
             fontFamily: "inherit",
             cursor: "pointer",
@@ -1027,20 +1030,20 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
             paddingRight: 28,
           }}
         >
-          <option value="all" style={{ background: "#1e293b", color: "#e2e8f0" }}>All Sectors</option>
+          <option value="all" style={{ background: "#1e293b", color: "var(--ink-100)" }}>All Sectors</option>
           {capexData.tracks.map(track => {
             const label = TRACK_SHORT[track.id] ?? track.label.split(" ")[0];
             return (
-              <option key={track.id} value={track.id} style={{ background: "#1e293b", color: "#e2e8f0" }}>{label}</option>
+              <option key={track.id} value={track.id} style={{ background: "#1e293b", color: "var(--ink-100)" }}>{label}</option>
             );
           })}
         </select>
-        <button onClick={() => setSortDir(d => d === "desc" ? "asc" : "desc")} style={{ flexShrink: 0, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>Sort {sortDir === "desc" ? "↓" : "↑"}</button>
+        <button onClick={() => setSortDir(d => d === "desc" ? "asc" : "desc")} style={{ flexShrink: 0, background: "rgba(255,255,255,0.04)", border: "1px solid var(--border-hairline)", color: "var(--ink-400)", borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>Sort {sortDir === "desc" ? "↓" : "↑"}</button>
       </div>
 
       <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 2, overflowY: "auto", minHeight: 0, paddingRight: 4 }}>
         {sorted.length === 0 && (
-          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: "#334155", fontSize: 12 }}>
+          <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 8, color: "var(--ink-600)", fontSize: 12 }}>
             <span style={{ fontSize: 28 }}>{isShort ? "⭐" : "👁"}</span>
             <span>{isShort ? "Add tickers you're watching for entry" : "No tickers match this filter"}</span>
           </div>
@@ -1053,15 +1056,15 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
           const pLive = pData.price;
           const has52W = w52L != null && w52H != null && pLive != null && (w52H > w52L);
           const dotPos = has52W ? Math.max(0, Math.min(100, ((pLive - w52L) / (w52H - w52L)) * 100)) : 50;
-          const dotColor = pos ? "#34d399" : "#f87171";
+          const dotColor = pos ? "var(--pos)" : "var(--down-300)";
 
           return (
             <div key={item.ticker} style={{ borderRadius: 8, padding: "10px 10px", display: "flex", alignItems: "center", gap: isMobile ? 6 : 10, borderBottom: "1px solid rgba(255,255,255,0.04)", transition: "background .15s" }}
               onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.04)"}
               onMouseLeave={e => e.currentTarget.style.background = ""}>
-              <span style={{ fontSize: 10, color: "#334155", width: 16, textAlign: "right", flexShrink: 0 }}>{idx + 1}</span>
+              <span style={{ fontSize: 10, color: "var(--ink-600)", width: 16, textAlign: "right", flexShrink: 0 }}>{idx + 1}</span>
               <div style={{ flex: "0 0 auto", minWidth: isMobile ? 46 : 60, cursor: "pointer" }} onClick={e => onTickerClick?.(item.ticker, e.currentTarget.getBoundingClientRect())}>
-                <div style={{ fontSize: isMobile ? 11 : 13, fontWeight: 700, color: "#f1f5f9" }}>{item.ticker}</div>
+                <div style={{ fontSize: isMobile ? 11 : 13, fontWeight: 700, color: "var(--ink-050)" }}>{item.ticker}</div>
                 {item.track
                   ? <div style={{ fontSize: 9, color: item.track.color, marginTop: 1 }}>{item.track.label.split(" ").slice(0,2).join(" ")}</div>
                   : isShort && <div style={{ fontSize: 9, color: "#f59e0b", marginTop: 1 }}>Shortlist</div>
@@ -1084,29 +1087,29 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
                           : "translateX(-50%)",
                       }}>
                         <span style={{
-                          fontSize: 8.5, fontWeight: 700, color: "#e2e8f0",
+                          fontSize: 8.5, fontWeight: 700, color: "var(--ink-100)",
                           whiteSpace: "nowrap",
-                          background: "rgba(24,24,24,0.85)", padding: "1px 4px", borderRadius: 3,
+                          background: "var(--bg-raised)", padding: "1px 4px", borderRadius: 3,
                         }}>${pLive.toFixed(2)}</span>
                       </div>
                     </div>
                     <div style={{ position: "relative", height: 4, background: "rgba(255,255,255,0.08)", borderRadius: 2 }}>
                       <div style={{ position: "absolute", left: `${dotPos}%`, top: "50%", transform: "translate(-50%,-50%)", width: 8, height: 8, borderRadius: "50%", background: dotColor, boxShadow: `0 0 6px ${dotColor}88` }} />
                     </div>
-                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, color: "#475569", marginTop: 1 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", fontSize: 8, color: "var(--ink-500)", marginTop: 1 }}>
                       <span>{w52L}</span>
                       <span>{w52H}</span>
                     </div>
                   </>
                 ) : (
-                  <span style={{ textAlign: "center", color: "#475569", fontSize: 9 }}>—</span>
+                  <span style={{ textAlign: "center", color: "var(--ink-500)", fontSize: 9 }}>—</span>
                 )}
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, fontSize: isMobile ? 11 : 13, fontWeight: 700, minWidth: isMobile ? 54 : 68, textAlign: "right", flexShrink: 0, color: typeof item.change !== 'number' ? "#334155" : pos ? "#34d399" : "#f87171" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", gap: 4, fontSize: isMobile ? 11 : 13, fontWeight: 700, minWidth: isMobile ? 54 : 68, textAlign: "right", flexShrink: 0, color: typeof item.change !== 'number' ? "var(--ink-600)" : pos ? "var(--pos)" : "var(--down-300)" }}>
                 {typeof item.change !== 'number' ? "—" : <><span style={{ fontSize: 10 }}>{pos ? "▲" : "▼"}</span>{Math.abs(item.change).toFixed(2)}%</>}
               </div>
-              <button onClick={() => removeTicker(item.ticker)} style={{ background: "none", border: "none", color: "#1e293b", cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1, transition: "color .15s", fontFamily: "inherit", visibility: !isShort || !isAdmin ? "hidden" : "visible", flexShrink: 0 }} onMouseEnter={e => e.currentTarget.style.color = "#ef4444"} onMouseLeave={e => e.currentTarget.style.color = "#1e293b"}>×</button>
+              <button onClick={() => removeTicker(item.ticker)} style={{ background: "none", border: "none", color: "#1e293b", cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1, transition: "color .15s", fontFamily: "inherit", visibility: !isShort || !isAdmin ? "hidden" : "visible", flexShrink: 0 }} onMouseEnter={e => e.currentTarget.style.color = "var(--neg)"} onMouseLeave={e => e.currentTarget.style.color = "#1e293b"}>×</button>
             </div>
           );
         })}
@@ -1117,8 +1120,8 @@ function Watchlist({ prices, capexData, onTickerClick, isAdmin, shortList, onSav
 
 // ── PRE-MARKET GAP SCANNER PANEL ──────────────────────────
 const TJL_BADGES = {
-  PASS:          { label: "PASS",     color: "#34d399", title: "Trend Join Long: daily breakout + intraday breakout confirmed" },
-  fail_daily:    { label: "FAIL · D", color: "#f87171", title: "Failed daily leg: below prev daily high or close under 200 SMA" },
+  PASS:          { label: "PASS",     color: "var(--pos)", title: "Trend Join Long: daily breakout + intraday breakout confirmed" },
+  fail_daily:    { label: "FAIL · D", color: "var(--down-300)", title: "Failed daily leg: below prev daily high or close under 200 SMA" },
   fail_intraday: { label: "FAIL · I", color: "#fbbf24", title: "Failed intraday leg: below premarket high or high-of-day" },
 };
 
@@ -1163,20 +1166,20 @@ function GapScannerPanel({ prices, onTickerClick }) {
   const fmtVol = v => v == null ? "—" : v >= 1e6 ? (v / 1e6).toFixed(1) + "M" : v >= 1e3 ? (v / 1e3).toFixed(0) + "K" : String(v);
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.07)", background: "rgba(24,24,24,0.7)", padding: isMobile ? "12px 8px" : 20, display: "flex", flexDirection: "column", height: "100%", boxSizing: "border-box", width: "100%", overflowX: "hidden" }}>
+    <div style={{ borderRadius: "var(--radius-2xl)", border: "1px solid var(--border-hairline)", background: "var(--bg-raised)", padding: isMobile ? "12px 8px" : 20, display: "flex", flexDirection: "column", height: "100%", boxSizing: "border-box", width: "100%", overflowX: "hidden" }}>
 
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 16, flexWrap: "wrap", gap: 8, flexShrink: 0, minWidth: 0 }}>
         <div>
           <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
             <h3 style={{ fontSize: 14, fontWeight: 700, color: "#fbbf24" }}>Pre-market Gap Scanner</h3>
-            <span style={{ fontSize: 9, color: "#60a5fa", background: "rgba(96,165,250,0.1)", border: "1px solid rgba(96,165,250,0.3)", borderRadius: 4, padding: "2px 7px", fontWeight: 700, letterSpacing: "0.1em" }}>● TJL STRATEGY</span>
+            <span style={{ fontSize: 9, color: "var(--info)", background: "rgba(96,165,250,0.1)", border: "1px solid rgba(96,165,250,0.3)", borderRadius: 4, padding: "2px 7px", fontWeight: 700, letterSpacing: "0.1em" }}>● TJL STRATEGY</span>
             {passCount > 0 && (
-              <span style={{ fontSize: 9, color: "#34d399", background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.3)", borderRadius: 4, padding: "2px 7px", fontWeight: 700, letterSpacing: "0.1em" }}>
+              <span style={{ fontSize: 9, color: "var(--pos)", background: "rgba(52,211,153,0.1)", border: "1px solid rgba(52,211,153,0.3)", borderRadius: 4, padding: "2px 7px", fontWeight: 700, letterSpacing: "0.1em" }}>
                 {passCount} PASS{passCount > 1 ? "ES" : ""}
               </span>
             )}
           </div>
-          <p style={{ fontSize: 11, color: "#475569", marginTop: 3 }}>
+          <p style={{ fontSize: 11, color: "var(--ink-500)", marginTop: 3 }}>
             Gap &gt;5% · price &gt;$3 · vol &gt;25K · Trend Join Long: above prev daily high, 200 SMA, PMH &amp; HOD
             {scannedAgo ? ` · scanned ${scannedAgo}` : ""}
           </p>
@@ -1184,7 +1187,7 @@ function GapScannerPanel({ prices, onTickerClick }) {
 
         <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
           <button onClick={() => fetchScan()}
-            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b", borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>
+            style={{ background: "rgba(255,255,255,0.04)", border: "1px solid var(--border-hairline)", color: "var(--ink-400)", borderRadius: 8, padding: "6px 12px", fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>
             ↻ Refresh
           </button>
         </div>
@@ -1192,22 +1195,22 @@ function GapScannerPanel({ prices, onTickerClick }) {
 
       <div style={{ flex: 1, overflowY: "auto", overflowX: "auto", minHeight: 400, paddingRight: isMobile ? 0 : 4, WebkitOverflowScrolling: "touch" }}>
         {error && (
-          <div style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "#94a3b8", fontSize: 12 }}>⚠ {error}</div>
+          <div style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "var(--ink-300)", fontSize: 12 }}>⚠ {error}</div>
         )}
         <table style={{ width: "100%", borderCollapse: "collapse", fontSize: isMobile ? 10 : 11, textAlign: "left" }}>
           <thead>
-            <tr style={{ color: "#475569", borderBottom: "1px solid rgba(255,255,255,0.05)", position: "sticky", top: 0, background: "rgba(14,17,23,0.95)", zIndex: 10 }}>
+            <tr style={{ color: "var(--ink-500)", borderBottom: "1px solid rgba(255,255,255,0.05)", position: "sticky", top: 0, background: "rgba(14,17,23,0.95)", zIndex: 10 }}>
               {['#','TICKER','PRICE','GAP %','PM VOL','CATALYST','PREV HIGH','SMA200','PMH','HOD'].map(h => <th key={h} style={{ padding: isMobile ? '6px 4px' : '10px 8px', whiteSpace: 'nowrap' }}>{h}</th>)}
               <th style={{ padding: isMobile ? '6px 4px' : '10px 8px', textAlign: 'right', whiteSpace: 'nowrap' }}>TJL</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="11" style={{ padding: 20, color: "#475569" }}>
+              <tr><td colSpan="11" style={{ padding: 20, color: "var(--ink-500)" }}>
                 Loading gap scan…
               </td></tr>
             ) : !scan?.gappers?.length ? (
-              <tr><td colSpan="11" style={{ padding: 20, color: "#475569" }}>
+              <tr><td colSpan="11" style={{ padding: 20, color: "var(--ink-500)" }}>
                 No gappers today (or the morning pipeline hasn't pushed yet).
               </td></tr>
             ) : scan.gappers.map(g => {
@@ -1215,7 +1218,7 @@ function GapScannerPanel({ prices, onTickerClick }) {
               const livePrice  = priceEntry?.price ?? g.tjl?.curr_price ?? g.price;
               const change     = priceEntry?.change;
               const tjl        = g.tjl || {};
-              const badge      = TJL_BADGES[tjl.result] || { label: "—", color: "#475569", title: "TJL not evaluated" };
+              const badge      = TJL_BADGES[tjl.result] || { label: "—", color: "var(--ink-500)", title: "TJL not evaluated" };
               const fmtPx = v => v == null ? "—" : "$" + Number(v).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
               return (
@@ -1224,30 +1227,30 @@ function GapScannerPanel({ prices, onTickerClick }) {
                   onMouseEnter={e => e.currentTarget.style.background = "rgba(255,255,255,0.03)"}
                   onMouseLeave={e => e.currentTarget.style.background = tjl.result === "PASS" ? "rgba(52,211,153,0.05)" : ""}>
 
-                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "#334155", fontSize: 10 }}>{g.rank ?? "—"}</td>
+                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "var(--ink-600)", fontSize: 10 }}>{g.rank ?? "—"}</td>
 
                   <td onClick={e => onTickerClick(g.symbol, e.currentTarget.getBoundingClientRect())}
                     style={{ padding: isMobile ? "8px 4px" : "12px 8px", cursor: "pointer" }}>
-                    <span style={{ fontWeight: 700, color: "#f1f5f9" }}>{g.symbol}</span>
+                    <span style={{ fontWeight: 700, color: "var(--ink-050)" }}>{g.symbol}</span>
                     {change !== undefined && (
-                      <div style={{ fontSize: 9, color: change >= 0 ? "#34d399" : "#f87171" }}>
+                      <div style={{ fontSize: 9, color: change >= 0 ? "var(--pos)" : "var(--down-300)" }}>
                         {change >= 0 ? "+" : ""}{change}%
                       </div>
                     )}
                   </td>
 
-                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "#e2e8f0", fontWeight: 600 }}>{fmtPx(livePrice)}</td>
-                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "#34d399", fontWeight: 700 }}>+{Number(g.gap_pct).toFixed(1)}%</td>
-                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "#cbd5e1" }}>{fmtVol(g.premarket_volume)}</td>
+                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "var(--ink-100)", fontWeight: 600 }}>{fmtPx(livePrice)}</td>
+                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "var(--pos)", fontWeight: 700 }}>+{Number(g.gap_pct).toFixed(1)}%</td>
+                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "var(--ink-200)" }}>{fmtVol(g.premarket_volume)}</td>
 
-                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "#94a3b8", maxWidth: isMobile ? 120 : 260 }} title={g.catalyst || undefined}>
+                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "var(--ink-300)", maxWidth: isMobile ? 120 : 260 }} title={g.catalyst || undefined}>
                     <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{g.catalyst || "—"}</div>
                   </td>
 
-                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "#cbd5e1" }}>{fmtPx(tjl.prev_daily_high)}</td>
-                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "#cbd5e1" }}>{fmtPx(tjl.sma200)}</td>
-                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "#cbd5e1" }}>{fmtPx(tjl.pmh)}</td>
-                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "#cbd5e1" }}>{fmtPx(tjl.today_hod)}</td>
+                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "var(--ink-200)" }}>{fmtPx(tjl.prev_daily_high)}</td>
+                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "var(--ink-200)" }}>{fmtPx(tjl.sma200)}</td>
+                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "var(--ink-200)" }}>{fmtPx(tjl.pmh)}</td>
+                  <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", color: "var(--ink-200)" }}>{fmtPx(tjl.today_hod)}</td>
 
                   <td style={{ padding: isMobile ? "8px 4px" : "12px 8px", textAlign: "right" }}>
                     <span title={badge.title} style={{ fontSize: 10, fontWeight: 800, letterSpacing: "0.08em", color: badge.color, background: badge.color + "18", border: `1px solid ${badge.color}55`, borderRadius: 4, padding: "2px 8px", whiteSpace: "nowrap" }}>
@@ -1266,16 +1269,18 @@ function GapScannerPanel({ prices, onTickerClick }) {
 
 // ── GLOBAL STYLES ─────────────────────────────────────────
 const GLOBAL_STYLES = `
-  * { box-sizing: border-box; margin: 0; padding: 0; box-shadow: none !important; }
-  html, body { background: #1a1a1f; font-family: 'Inter', sans-serif; max-width: 100vw; overflow-x: hidden; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--void-800); font-family: var(--font-ui); max-width: 100vw; overflow-x: hidden; }
   img, svg, video, table { max-width: 100%; }
   :root { --topbar-h: 72px; }
-  @media (max-width: 767px) { :root { --topbar-h: 172px; } }
+  /* The mobile bar used to wrap its pills onto two grid rows (172px). The
+     handoff turns them into one horizontal swipe row, so it is ~93px now —
+     reserving the old height left a dead band under the chrome. */
+  @media (max-width: 767px) { :root { --topbar-h: 96px; } }
   
   html.light-mode { filter: invert(1) hue-rotate(180deg); }
   
   table, .market-strip span, .ticker-tape, .capex-number { font-family: 'Roboto Condensed', sans-serif !important; letter-spacing: 0.02em; }
-  div[style*="border-radius: 12px"], div[style*="border-radius: 14px"], div[style*="border-radius: 18px"], div[style*="border-radius: 22px"] { border-radius: 6px !important; }
   ::-webkit-scrollbar { width: 6px; height: 6px; }
   ::-webkit-scrollbar-track { background: transparent; }
   ::-webkit-scrollbar-thumb { background: rgba(255,255,255,.15); border-radius: 4px; }
@@ -1303,18 +1308,48 @@ const GLOBAL_STYLES = `
   .span-3 { grid-column: 1 / -1; }
   .panel-wrapper { position: relative; height: 600px; min-height: 600px; }
   .panel-inner { position: absolute; top: 0; left: 0; right: 0; bottom: 0; }
-  .watchlist-wrapper { position: relative; height: 100%; min-height: 400px; }
+  .watchlist-wrapper { position: relative; height: 100%; min-height: 800px; }
   .watchlist-inner { position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; flex-direction: column; }
   .panel-tall { height: 850px !important; min-height: 850px !important; }
   @media (max-width: 1024px) { .panel-tall { min-height: 700px !important; height: auto !important; } }
   @media (max-width: 767px) { .panel-tall { min-height: 550px !important; } }
-  @media (max-width: 1024px) {
+  /* ── Responsive (mobile handoff) ──────────────────────────────────────
+     Additive, max-width scoped: nothing above 1100px changes. Handoff class
+     hooks map onto this app's own elements:
+       .hm-grid → .bottom-grid-all · .wl-wrap → .watchlist-wrapper
+       .dash-wrap → .main-content · .tb-pills → TopBar pill row
+       .ec-scroll / .ec-inner → EarningsCalendar scroll container
+     Several targets carry inline styles, so these declarations need
+     !important to win — the same reason the design prototype used it. */
+  @media (max-width: 1100px) {
     .bottom-grid-all { grid-template-columns: 1fr !important; }
     .span-2, .span-1 { grid-column: 1 / -1 !important; }
     .panel-wrapper { position: relative; height: auto !important; min-height: unset !important; }
     .panel-inner { position: relative !important; height: auto !important; min-height: 500px; }
     .watchlist-wrapper { position: relative !important; height: auto !important; min-height: 600px; }
     .watchlist-inner { position: relative !important; height: auto !important; }
+  }
+  @media (max-width: 900px) {
+    .main-content { padding: 14px 12px 60px !important; }
+    /* Market pills become a native horizontal swipe row. The mobile top bar
+       lays them out as a grid, so force flex for both variants; no JS
+       carousel, just an overflow container with the scrollbar hidden. */
+    .tb-pills {
+      display: flex !important;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+    }
+    .tb-pills::-webkit-scrollbar { display: none; }
+    .tb-pills > div { flex: 0 0 148px !important; }
+    /* Earnings week: five day columns stop fitting, so scroll them instead. */
+    .ec-scroll { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+    .ec-scroll::-webkit-scrollbar { display: none; }
+    .ec-inner { min-width: 640px; }
+    .bottom-grid-all > div { min-height: 0 !important; }
+    /* Descendant selector on purpose: it must out-specify the > div reset
+       above, which also matches the watchlist wrapper. */
+    .bottom-grid-all .watchlist-wrapper { min-height: 560px !important; }
   }
   @media (max-width: 1100px) {
     .side-panel { display: none !important; }
@@ -1327,8 +1362,12 @@ const GLOBAL_STYLES = `
     .top-node-center > div:first-child { width: 100% !important; box-sizing: border-box !important; }
     .capex-number { font-size: 44px !important; }
     .subsector-grid { grid-template-columns: 1fr !important; }
-    .earnings-week-grid { grid-template-columns: 1fr !important; }
-    .main-content { padding: 12px 8px !important; max-width: 100vw !important; }
+    /* The earnings week no longer stacks here — the mobile handoff turns it
+       into a horizontal swipe row instead (.ec-scroll / .ec-inner above), so
+       collapsing to one column would leave a single tall column scrolling
+       sideways. Padding likewise comes from the ≤900 rule, which keeps the
+       60px bottom that clears the fixed ticker tape. */
+    .main-content { max-width: 100vw !important; }
     .header-controls { gap: 8px !important; }
     .panel-wrapper { min-height: 400px; }
     .bottom-grid-all { gap: 10px !important; }
@@ -1362,8 +1401,9 @@ export default function App() {
       .catch(() => {});
   }, []);
 
-  // "ai" = hyperscaler capex flow · "musk" = Musk Galaxy · "robotics" = humanoid robotics
-  const VALID_VIEWS = ["ai", "musk", "robotics"];
+  // "ai" = hyperscaler capex flow · "musk" = Musk Galaxy · "robotics" = humanoid
+  // robotics · "earnings" = this week's calendar as its own view
+  const VALID_VIEWS = ["ai", "musk", "robotics", "earnings"];
   const [view, setView] = useState(() => {
     const h = window.location.hash.replace("#", "");
     return VALID_VIEWS.includes(h) ? h : "ai";
@@ -1637,6 +1677,9 @@ export default function App() {
   const liveMuskData = useMemo(() => mergeIntel(muskCapexData, muskIntel), [muskCapexData, muskIntel]);
   const liveRoboticsData = useMemo(() => mergeIntel(roboticsCapexData, roboticsIntel), [roboticsCapexData, roboticsIntel]);
   const isRobotics = view === "robotics";
+  // The earnings view is a standalone calendar — it still needs a map for the
+  // ticker universe, so it borrows the AI map without rendering its panels.
+  const isEarnings = view === "earnings";
   const activeLiveData = isRobotics ? liveRoboticsData : isMusk ? liveMuskData : liveCapexData;
   const activeIntelStatus = isRobotics ? roboticsIntelStatus : isMusk ? muskIntelStatus : capexIntelStatus;
   const activeIntel = isRobotics ? roboticsIntel : isMusk ? muskIntel : capexIntel;
@@ -1695,26 +1738,32 @@ export default function App() {
   return (
     <MobileCtx.Provider value={isMobileApp}>
       <style>{GLOBAL_STYLES}</style>
-      <div style={{ position: "relative", zIndex: 1, minHeight: "100vh", color: "#fff" }}>
-        
+      {/* Deep-space void base with the design's fixed radial cyan glow. */}
+      <div style={{ position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none", background: "var(--void-800)" }} />
+      <div style={{
+        position: "fixed", inset: 0, zIndex: 0, pointerEvents: "none",
+        background: "radial-gradient(50% 40% at 50% -6%, rgba(0,240,255,0.07), transparent 70%)",
+      }} />
+      <div style={{ position: "relative", zIndex: 1, minHeight: "100vh", color: "var(--ink-100)" }}>
+
         <TopBar marketData={marketData} />
         <StatusBanner notice={appNotice} onDismiss={() => setAppNotice(null)} />
 
-        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", marginTop: "var(--topbar-h, 72px)", borderBottom: "1px solid rgba(255,255,255,.04)", background: "rgba(24,24,24,0.6)", flexWrap: "wrap", gap: 12 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "14px 16px", marginTop: "var(--topbar-h, 72px)", borderBottom: "1px solid rgba(255,255,255,.04)", background: "var(--bg-raised)", flexWrap: "wrap", gap: 12 }}>
           
           {/* LEFT SIDE: Title & Controls Stacked */}
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-  <div style={{ fontSize: 19, fontWeight: 800, color: "#e2e8f0", letterSpacing: "-0.01em" }}>
+  <div style={{ fontSize: 19, fontWeight: 800, color: "var(--ink-100)", letterSpacing: "-0.01em" }}>
     AI Capex Flow Intelligence
   </div>
   <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(52,211,153,0.08)", border: "1px solid rgba(52,211,153,0.25)", padding: "3px 8px", borderRadius: 6 }}>
     <span style={{ 
-      width: 6, height: 6, borderRadius: "50%", background: "#34d399", 
+      width: 6, height: 6, borderRadius: "50%", background: "var(--pos)", 
       display: "inline-block", boxShadow: "0 0 8px #34d399",
       animation: "pulseDot 2s infinite" 
     }} />
-    <span style={{ fontSize: 10, fontWeight: 700, color: "#34d399", letterSpacing: "0.05em", fontFamily: "'DM Mono', monospace" }}>
+    <span style={{ fontSize: 10, fontWeight: 700, color: "var(--pos)", letterSpacing: "0.05em", fontFamily: "'DM Mono', monospace" }}>
       {onlineCount} ONLINE
     </span>
   </div>
@@ -1722,19 +1771,19 @@ export default function App() {
 
             <div className="header-controls" style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap" }}>
               {isAdmin && (
-                <span style={{ fontSize: 10, background: "rgba(52,211,153,0.1)", color: "#34d399", border: "1px solid rgba(52,211,153,0.3)", padding: "4px 10px", borderRadius: 6, fontWeight: 700 }}>
+                <span style={{ fontSize: 10, background: "rgba(52,211,153,0.1)", color: "var(--pos)", border: "1px solid rgba(52,211,153,0.3)", padding: "4px 10px", borderRadius: 6, fontWeight: 700 }}>
                   🔓 EDITING ACTIVE
                 </span>
               )}
 
-              <span className="pulse" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#64748b" }}>
-                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#34d399", display: "inline-block", boxShadow: "0 0 6px #34d399" }} />{gainers} advancing
+              <span className="pulse" style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--ink-400)" }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--pos)", display: "inline-block", boxShadow: "0 0 6px #34d399" }} />{gainers} advancing
               </span>
-              <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "#64748b" }}>
-                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "#f87171", display: "inline-block", boxShadow: "0 0 6px #f87171" }} />{losers} declining
+              <span style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 11, color: "var(--ink-400)" }}>
+                <span style={{ width: 6, height: 6, borderRadius: "50%", background: "var(--down-300)", display: "inline-block", boxShadow: "0 0 6px #f87171" }} />{losers} declining
               </span>
-              <span style={{ fontSize: 11, color: "#2d3a52" }}>{allTickerCount} tickers</span>
-              <button onClick={refresh} disabled={refreshing} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 8, color: "#64748b", padding: "5px 12px", cursor: "pointer", fontSize: 11, fontFamily: "inherit", opacity: refreshing ? 0.5 : 1 }}>
+              <span style={{ fontSize: 11, color: "var(--ink-700)" }}>{allTickerCount} tickers</span>
+              <button onClick={refresh} disabled={refreshing} style={{ background: "rgba(255,255,255,.03)", border: "1px solid rgba(255,255,255,.07)", borderRadius: 8, color: "var(--ink-400)", padding: "5px 12px", cursor: "pointer", fontSize: 11, fontFamily: "inherit", opacity: refreshing ? 0.5 : 1 }}>
                 {refreshing ? "↻" : `↻${lastUpdated ? " · " + lastUpdated : ""}`}
               </button>
               <a
@@ -1757,32 +1806,37 @@ export default function App() {
             </div>
           </div>
 
-          {/* RIGHT SIDE: Fear & Greed Gauge */}
-          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 10 }}>
-            <FearGreedGauge />
-          </div>
-
         </div>
 
         <div className="main-content" style={{ maxWidth: 1480, margin: "0 auto", padding: "32px 20px 64px", display: "flex", flexDirection: "column", gap: 28, overflowX: "hidden", boxSizing: "border-box", width: "100%" }}>
           
-          {/* VIEW SWITCHER: AI hyperscaler capex flow · Musk Galaxy · Robotics */}
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            {[["ai", "🌐 AI Capex Flow"], ["musk", "🚀 Musk Galaxy"], ["robotics", "🦾 Robotics"]].map(([id, label]) => (
-              <button key={id} onClick={() => switchView(id)}
-                style={{
-                  background: view === id ? "rgba(251,191,36,0.12)" : "rgba(255,255,255,0.03)",
-                  border: `1px solid ${view === id ? "#fbbf24" : "rgba(255,255,255,0.1)"}`,
-                  color: view === id ? "#fbbf24" : "#64748b",
-                  borderRadius: 8, padding: "8px 18px", cursor: "pointer",
-                  fontSize: 12, fontWeight: 800, letterSpacing: "0.08em",
-                  textTransform: "uppercase", fontFamily: "inherit", transition: "all .15s",
-                }}>
-                {label}
-              </button>
-            ))}
+          {/* VIEW SWITCHER + market sentiment, per the design's header row */}
+          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 16, flexWrap: "wrap" }}>
+            <TabNav
+              value={view}
+              onChange={switchView}
+              tabs={[
+                { value: "ai", label: "AI Capex", icon: "⚡" },
+                { value: "musk", label: "Musk Galaxy", icon: "🚀" },
+                { value: "robotics", label: "Robotics", icon: "🦾" },
+                { value: "earnings", label: "Earnings", icon: "🗓" },
+              ]}
+            />
+            <div style={{ width: 280, maxWidth: "100%" }}>
+              <FearGreedGauge />
+            </div>
           </div>
 
+          {/* Earnings is its own view: just the week's calendar, full width. */}
+          {isEarnings && (
+            <EarningsCalendar
+              tickers={watchlistTickers}
+              prices={prices}
+              onTickerClick={openPopup}
+            />
+          )}
+
+          {!isEarnings && <>
           {/* HERO: capex flow Sankey — spenders → tracks, with guidance trend */}
           <CapexSankey
             key={`sankey-${view}`}
@@ -1834,12 +1888,6 @@ export default function App() {
             title={isRobotics ? "Robotics Dependency Graph" : isMusk ? "Musk Galaxy Dependency Graph" : undefined}
           />
 
-          <EarningsWeek
-            tickers={watchlistTickers}
-            prices={prices}
-            onTickerClick={openPopup}
-          />
-
           <BottleneckScout
             candidates={candidates}
             isAdmin={isAdmin}
@@ -1875,6 +1923,7 @@ export default function App() {
               </div>
             </div>
           </div>
+          </>}
        </div>
       </div>
       {/* TICKER TAPE */}
@@ -1896,10 +1945,10 @@ export default function App() {
               const chg = val?.change ?? val;
               const sessionLabel = val?.session === "POST" || val?.session === "CLOSED" ? "AH" : val?.session === "PRE" ? "PM" : null;
               return (
-                <span key={`${sym}-${i}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "#64748b", fontSize: 11 }}>
-                  <span style={{ color: "#e2e8f0", fontWeight: 600 }}>{sym}</span>
-                  {sessionLabel && <span style={{ fontSize: 8, fontWeight: 700, color: "#475569", background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.08)", borderRadius: 2, padding: "0px 3px" }}>{sessionLabel}</span>}
-                  {chg !== undefined && <span style={{ color: chg >= 0 ? "#34d399" : "#f87171" }}>{chg >= 0 ? "▲" : "▼"} {Math.abs(chg).toFixed(2)}%</span>}
+                <span key={`${sym}-${i}`} style={{ display: "inline-flex", alignItems: "center", gap: 4, color: "var(--ink-400)", fontSize: 11 }}>
+                  <span style={{ color: "var(--ink-100)", fontWeight: 600 }}>{sym}</span>
+                  {sessionLabel && <span style={{ fontSize: 8, fontWeight: 700, color: "var(--ink-500)", background: "rgba(255,255,255,0.05)", border: "1px solid var(--border-hairline)", borderRadius: 2, padding: "0px 3px" }}>{sessionLabel}</span>}
+                  {chg !== undefined && <span style={{ color: chg >= 0 ? "var(--pos)" : "var(--down-300)" }}>{chg >= 0 ? "▲" : "▼"} {Math.abs(chg).toFixed(2)}%</span>}
                 </span>
               )
             })}

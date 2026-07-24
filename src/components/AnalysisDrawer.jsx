@@ -51,7 +51,7 @@ function inlineBold(text) {
   const parts = text.split(/(\*\*[^*]+\*\*)/g);
   return parts.map((p, i) =>
     p.startsWith("**") && p.endsWith("**")
-      ? <strong key={i} style={{ color: "#e2e8f0", fontWeight: 700 }}>{p.slice(2, -2)}</strong>
+      ? <strong key={i} style={{ color: "var(--ink-100)", fontWeight: 700 }}>{p.slice(2, -2)}</strong>
       : p
   );
 }
@@ -59,26 +59,26 @@ function inlineBold(text) {
 function MarkdownBody({ md }) {
   const blocks = renderMarkdown(md);
   return (
-    <div style={{ fontSize: 13, color: "#94a3b8", lineHeight: 1.65, fontFamily: "'Inter', sans-serif" }}>
+    <div style={{ fontSize: 13, color: "var(--ink-300)", lineHeight: 1.65, fontFamily: "'Inter', sans-serif" }}>
       {blocks.map((b, i) => {
         if (b.type === "h2") return (
-          <h2 key={i} style={{ fontSize: 12, fontWeight: 800, color: "#60a5fa", letterSpacing: "0.12em", textTransform: "uppercase", marginTop: 22, marginBottom: 6 }}>{b.text}</h2>
+          <h2 key={i} style={{ fontSize: 12, fontWeight: 800, color: "var(--info)", letterSpacing: "0.12em", textTransform: "uppercase", marginTop: 22, marginBottom: 6 }}>{b.text}</h2>
         );
         if (b.type === "h3") return (
-          <h3 key={i} style={{ fontSize: 11, fontWeight: 700, color: "#94a3b8", letterSpacing: "0.08em", textTransform: "uppercase", marginTop: 14, marginBottom: 4 }}>{b.text}</h3>
+          <h3 key={i} style={{ fontSize: 11, fontWeight: 700, color: "var(--ink-300)", letterSpacing: "0.08em", textTransform: "uppercase", marginTop: 14, marginBottom: 4 }}>{b.text}</h3>
         );
         if (b.type === "hr") return (
-          <hr key={i} style={{ border: "none", borderTop: "1px solid rgba(255,255,255,0.07)", margin: "18px 0" }} />
+          <hr key={i} style={{ border: "none", borderTop: "1px solid var(--border-hairline)", margin: "18px 0" }} />
         );
         if (b.type === "ul") return (
           <ul key={i} style={{ margin: "6px 0 10px 0", padding: "0 0 0 18px", display: "flex", flexDirection: "column", gap: 4 }}>
             {b.items.map((item, j) => (
-              <li key={j} style={{ color: "#94a3b8", fontSize: 13, lineHeight: 1.55 }}>{inlineBold(item)}</li>
+              <li key={j} style={{ color: "var(--ink-300)", fontSize: 13, lineHeight: 1.55 }}>{inlineBold(item)}</li>
             ))}
           </ul>
         );
         if (b.type === "p") return (
-          <p key={i} style={{ margin: "3px 0 8px", color: "#94a3b8", fontSize: 13, lineHeight: 1.65 }}>{inlineBold(b.text)}</p>
+          <p key={i} style={{ margin: "3px 0 8px", color: "var(--ink-300)", fontSize: 13, lineHeight: 1.65 }}>{inlineBold(b.text)}</p>
         );
         if (b.type === "spacer") return <div key={i} style={{ height: 6 }} />;
         return null;
@@ -92,7 +92,7 @@ function ScoreBar({ label, score, color }) {
   return (
     <div>
       <div style={{ display: "flex", justifyContent: "space-between", marginBottom: 4 }}>
-        <span style={{ fontSize: 10, color: "#64748b", letterSpacing: "0.08em", textTransform: "uppercase" }}>{label}</span>
+        <span style={{ fontSize: 10, color: "var(--ink-400)", letterSpacing: "0.08em", textTransform: "uppercase" }}>{label}</span>
         <span style={{ fontSize: 11, fontWeight: 700, color }}>{score}</span>
       </div>
       <div style={{ height: 4, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
@@ -111,21 +111,21 @@ function ProjectionTable({ projection }) {
     : "—";
 
   const rows = [
-    { label: "Bear Case",  value: projection.bear, color: "#f87171" },
+    { label: "Bear Case",  value: projection.bear, color: "var(--down-300)" },
     { label: "Base Case",  value: projection.base, color: "#fbbf24" },
-    { label: "Bull Case",  value: projection.bull, color: "#34d399" },
+    { label: "Bull Case",  value: projection.bull, color: "var(--pos)" },
   ];
 
   return (
-    <div style={{ marginTop: 8, borderRadius: 8, overflow: "hidden", border: "1px solid rgba(255,255,255,0.07)" }}>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", background: "rgba(255,255,255,0.03)", padding: "6px 12px", borderBottom: "1px solid rgba(255,255,255,0.06)" }}>
-        <span style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase" }}>Scenario</span>
-        <span style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase", textAlign: "center" }}>3Y Target</span>
-        <span style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", textTransform: "uppercase", textAlign: "right" }}>Return</span>
+    <div style={{ marginTop: 8, borderRadius: 8, overflow: "hidden", border: "1px solid var(--border-hairline)" }}>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", background: "rgba(255,255,255,0.03)", padding: "6px 12px", borderBottom: "1px solid var(--border-hairline)" }}>
+        <span style={{ fontSize: 9, color: "var(--ink-500)", letterSpacing: "0.1em", textTransform: "uppercase" }}>Scenario</span>
+        <span style={{ fontSize: 9, color: "var(--ink-500)", letterSpacing: "0.1em", textTransform: "uppercase", textAlign: "center" }}>3Y Target</span>
+        <span style={{ fontSize: 9, color: "var(--ink-500)", letterSpacing: "0.1em", textTransform: "uppercase", textAlign: "right" }}>Return</span>
       </div>
       {rows.map(({ label, value, color }) => (
         <div key={label} style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", padding: "8px 12px", borderBottom: "1px solid rgba(255,255,255,0.04)" }}>
-          <span style={{ fontSize: 12, color: "#cbd5e1", fontWeight: 600 }}>{label}</span>
+          <span style={{ fontSize: 12, color: "var(--ink-200)", fontWeight: 600 }}>{label}</span>
           <span style={{ fontSize: 12, fontWeight: 700, color, textAlign: "center" }}>{fmt(value)}</span>
           <span style={{ fontSize: 12, fontWeight: 700, color, textAlign: "right" }}>
             {value ? (value >= projection.current ? "+" : "") + pct(value) : "—"}
@@ -133,7 +133,7 @@ function ProjectionTable({ projection }) {
         </div>
       ))}
       <div style={{ padding: "6px 12px" }}>
-        <span style={{ fontSize: 9, color: "#334155", fontStyle: "italic" }}>{projection.assumptions}</span>
+        <span style={{ fontSize: 9, color: "var(--ink-600)", fontStyle: "italic" }}>{projection.assumptions}</span>
       </div>
     </div>
   );
@@ -163,7 +163,7 @@ export default function AnalysisDrawer({ ticker, analysis, onClose }) {
 
   const { fundamentals: F, technical: T, macro: M, report, weightedScore, verdict, projection, disclaimer, generatedAt, fromCache } = analysis;
 
-  const verdictColor = verdict === "BUY" ? "#34d399" : verdict === "HOLD" ? "#fbbf24" : "#f87171";
+  const verdictColor = verdict === "BUY" ? "var(--pos)" : verdict === "HOLD" ? "#fbbf24" : "var(--down-300)";
   const agentAge = generatedAt
     ? (() => {
         const diff = Math.floor((Date.now() - generatedAt) / 60000);
@@ -212,41 +212,41 @@ export default function AnalysisDrawer({ ticker, analysis, onClose }) {
           top: 0,
           zIndex: 10,
           background: "rgba(13,13,17,0.98)",
-          borderBottom: "1px solid rgba(255,255,255,0.07)",
+          borderBottom: "1px solid var(--border-hairline)",
           padding: "16px 20px 14px",
           backdropFilter: "blur(10px)",
         }}>
           <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", marginBottom: 14 }}>
             <div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 3 }}>
-                <span style={{ fontSize: 18, fontWeight: 800, color: "#f1f5f9", fontFamily: "'DM Mono', monospace", letterSpacing: "0.04em" }}>{ticker}</span>
-                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", color: "#60a5fa" }}>DEEP ANALYSIS</span>
+                <span style={{ fontSize: 18, fontWeight: 800, color: "var(--ink-050)", fontFamily: "'DM Mono', monospace", letterSpacing: "0.04em" }}>{ticker}</span>
+                <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.05em", color: "var(--info)" }}>DEEP ANALYSIS</span>
               </div>
-              <div style={{ fontSize: 10, color: "#334155" }}>
+              <div style={{ fontSize: 10, color: "var(--ink-600)" }}>
                 {agentAge && <span>{fromCache ? "Cached" : "Generated"} {agentAge} · </span>}
                 <span>3-agent AI research · Not financial advice</span>
               </div>
             </div>
-            <button onClick={onClose} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 6, color: "#64748b", width: 28, height: 28, cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>×</button>
+            <button onClick={onClose} style={{ background: "rgba(255,255,255,0.06)", border: "1px solid var(--border-soft)", borderRadius: 6, color: "var(--ink-400)", width: 28, height: 28, cursor: "pointer", fontSize: 16, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0 }}>×</button>
           </div>
 
           {/* Verdict + Composite Score */}
           <div style={{ display: "flex", alignItems: "center", gap: 14, padding: "10px 14px", background: verdictColor + "10", border: `1px solid ${verdictColor}30`, borderRadius: 10 }}>
             <div style={{ textAlign: "center", minWidth: 52 }}>
               <div style={{ fontSize: 24, fontWeight: 900, color: verdictColor, letterSpacing: "0.04em", lineHeight: 1 }}>{verdict}</div>
-              <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.1em", marginTop: 2 }}>VERDICT</div>
+              <div style={{ fontSize: 9, color: "var(--ink-500)", letterSpacing: "0.1em", marginTop: 2 }}>VERDICT</div>
             </div>
             <div style={{ flex: 1, display: "flex", flexDirection: "column", gap: 6 }}>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <span style={{ fontSize: 10, color: "#64748b", letterSpacing: "0.08em" }}>COMPOSITE SCORE</span>
-                <span style={{ fontSize: 13, fontWeight: 800, color: verdictColor }}>{weightedScore}<span style={{ fontSize: 9, color: "#475569", fontWeight: 400 }}>/100</span></span>
+                <span style={{ fontSize: 10, color: "var(--ink-400)", letterSpacing: "0.08em" }}>COMPOSITE SCORE</span>
+                <span style={{ fontSize: 13, fontWeight: 800, color: verdictColor }}>{weightedScore}<span style={{ fontSize: 9, color: "var(--ink-500)", fontWeight: 400 }}>/100</span></span>
               </div>
               <div style={{ height: 6, background: "rgba(255,255,255,0.08)", borderRadius: 3, overflow: "hidden" }}>
                 <div style={{ height: "100%", width: `${weightedScore}%`, background: `linear-gradient(90deg, ${verdictColor}66, ${verdictColor})`, borderRadius: 3, transition: "width 1s cubic-bezier(.4,0,.2,1)" }} />
               </div>
               <div style={{ display: "flex", gap: 8 }}>
-                <Pill label={`F: ${F?.score ?? "—"}`} color="#60a5fa" />
-                <Pill label={`T: ${T?.score ?? "—"}`} color="#c084fc" />
+                <Pill label={`F: ${F?.score ?? "—"}`} color="var(--info)" />
+                <Pill label={`T: ${T?.score ?? "—"}`} color="var(--event)" />
                 <Pill label={`M: ${M?.score ?? "—"}`} color="#f59e0b" />
               </div>
             </div>
@@ -257,21 +257,21 @@ export default function AnalysisDrawer({ ticker, analysis, onClose }) {
         <div style={{ padding: "16px 20px 32px", display: "flex", flexDirection: "column", gap: 18 }}>
 
           {/* Agent score bars */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 14px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 8 }}>
-            <div style={{ fontSize: 9, color: "#475569", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 4, fontWeight: 700 }}>Agent Scores · Weighted 40/30/30</div>
-            {F && <ScoreBar label="Fundamentals (40%)" score={F.score} color="#60a5fa" />}
-            {T && <ScoreBar label="Technical (30%)"    score={T.score} color="#c084fc" />}
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "12px 14px", background: "rgba(255,255,255,0.02)", border: "1px solid var(--border-hairline)", borderRadius: 8 }}>
+            <div style={{ fontSize: 9, color: "var(--ink-500)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 4, fontWeight: 700 }}>Agent Scores · Weighted 40/30/30</div>
+            {F && <ScoreBar label="Fundamentals (40%)" score={F.score} color="var(--info)" />}
+            {T && <ScoreBar label="Technical (30%)"    score={T.score} color="var(--event)" />}
             {M && <ScoreBar label="Macro / Qual (30%)" score={M.score} color="#f59e0b" />}
           </div>
 
           {/* Quick-glance tags */}
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
-            {F?.financial_health && <Pill label={`Health: ${F.financial_health}`} color="#60a5fa" />}
-            {F?.valuation_signal && <Pill label={`Val: ${F.valuation_signal}`}    color="#60a5fa" />}
-            {F?.capex_trend      && <Pill label={`CapEx: ${F.capex_trend}`}       color="#60a5fa" />}
-            {T?.trend            && <Pill label={T.trend}                          color="#c084fc" />}
-            {T?.rsi_signal       && <Pill label={`RSI: ${T.rsi_signal}`}          color="#c084fc" />}
-            {T?.macd_signal      && <Pill label={`MACD: ${T.macd_signal}`}        color="#c084fc" />}
+            {F?.financial_health && <Pill label={`Health: ${F.financial_health}`} color="var(--info)" />}
+            {F?.valuation_signal && <Pill label={`Val: ${F.valuation_signal}`}    color="var(--info)" />}
+            {F?.capex_trend      && <Pill label={`CapEx: ${F.capex_trend}`}       color="var(--info)" />}
+            {T?.trend            && <Pill label={T.trend}                          color="var(--event)" />}
+            {T?.rsi_signal       && <Pill label={`RSI: ${T.rsi_signal}`}          color="var(--event)" />}
+            {T?.macd_signal      && <Pill label={`MACD: ${T.macd_signal}`}        color="var(--event)" />}
             {M?.ai_capex_exposure && <Pill label={M.ai_capex_exposure.replace("_", " ")} color="#f59e0b" />}
             {M?.competitive_moat && <Pill label={`Moat: ${M.competitive_moat}`}  color="#f59e0b" />}
             {M?.sector_tailwind  && <Pill label={`Sector: ${M.sector_tailwind}`} color="#f59e0b" />}
@@ -285,7 +285,7 @@ export default function AnalysisDrawer({ ticker, analysis, onClose }) {
           {/* 3-Year Projection */}
           {projection && (
             <div>
-              <div style={{ fontSize: 12, fontWeight: 800, color: "#60a5fa", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8 }}>3-Year Price Projection</div>
+              <div style={{ fontSize: 12, fontWeight: 800, color: "var(--info)", letterSpacing: "0.12em", textTransform: "uppercase", marginBottom: 8 }}>3-Year Price Projection</div>
               <ProjectionTable projection={projection} />
             </div>
           )}
@@ -293,8 +293,8 @@ export default function AnalysisDrawer({ ticker, analysis, onClose }) {
           {/* CapEx note */}
           {F?.capex_note && (
             <div style={{ padding: "10px 12px", background: "rgba(96,165,250,0.05)", border: "1px solid rgba(96,165,250,0.15)", borderRadius: 7 }}>
-              <div style={{ fontSize: 9, color: "#60a5fa", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>CapEx Strategy Note</div>
-              <div style={{ fontSize: 12, color: "#94a3b8", lineHeight: 1.5 }}>{F.capex_note}</div>
+              <div style={{ fontSize: 9, color: "var(--info)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>CapEx Strategy Note</div>
+              <div style={{ fontSize: 12, color: "var(--ink-300)", lineHeight: 1.5 }}>{F.capex_note}</div>
             </div>
           )}
 
@@ -304,7 +304,7 @@ export default function AnalysisDrawer({ ticker, analysis, onClose }) {
               <div style={{ fontSize: 9, color: "#f59e0b", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>Supply Chain Risks</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                 {M.supply_chain_risks.map((r, i) => (
-                  <div key={i} style={{ fontSize: 12, color: "#94a3b8", display: "flex", gap: 6 }}>
+                  <div key={i} style={{ fontSize: 12, color: "var(--ink-300)", display: "flex", gap: 6 }}>
                     <span style={{ color: "#f59e0b", flexShrink: 0 }}>▸</span>{r}
                   </div>
                 ))}
@@ -315,11 +315,11 @@ export default function AnalysisDrawer({ ticker, analysis, onClose }) {
           {/* Sector catalysts */}
           {M?.sector_catalysts?.length > 0 && (
             <div style={{ padding: "10px 12px", background: "rgba(52,211,153,0.05)", border: "1px solid rgba(52,211,153,0.15)", borderRadius: 7 }}>
-              <div style={{ fontSize: 9, color: "#34d399", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>Near-Term Catalysts</div>
+              <div style={{ fontSize: 9, color: "var(--pos)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 6 }}>Near-Term Catalysts</div>
               <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                 {M.sector_catalysts.map((c, i) => (
-                  <div key={i} style={{ fontSize: 12, color: "#94a3b8", display: "flex", gap: 6 }}>
-                    <span style={{ color: "#34d399", flexShrink: 0 }}>▸</span>{c}
+                  <div key={i} style={{ fontSize: 12, color: "var(--ink-300)", display: "flex", gap: 6 }}>
+                    <span style={{ color: "var(--pos)", flexShrink: 0 }}>▸</span>{c}
                   </div>
                 ))}
               </div>
@@ -330,19 +330,19 @@ export default function AnalysisDrawer({ ticker, analysis, onClose }) {
           {T?.estimated_support && T?.estimated_resistance && (
             <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
               <div style={{ padding: "8px 12px", background: "rgba(52,211,153,0.06)", border: "1px solid rgba(52,211,153,0.15)", borderRadius: 7, textAlign: "center" }}>
-                <div style={{ fontSize: 9, color: "#34d399", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 3 }}>Est. Support</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#34d399" }}>${T.estimated_support}</div>
+                <div style={{ fontSize: 9, color: "var(--pos)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 3 }}>Est. Support</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "var(--pos)" }}>${T.estimated_support}</div>
               </div>
               <div style={{ padding: "8px 12px", background: "rgba(248,113,113,0.06)", border: "1px solid rgba(248,113,113,0.15)", borderRadius: 7, textAlign: "center" }}>
-                <div style={{ fontSize: 9, color: "#f87171", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 3 }}>Est. Resistance</div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: "#f87171" }}>${T.estimated_resistance}</div>
+                <div style={{ fontSize: 9, color: "var(--down-300)", letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 3 }}>Est. Resistance</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: "var(--down-300)" }}>${T.estimated_resistance}</div>
               </div>
             </div>
           )}
 
           {/* Disclaimer */}
-          <div style={{ padding: "10px 12px", background: "rgba(255,255,255,0.02)", border: "1px solid rgba(255,255,255,0.06)", borderRadius: 7 }}>
-            <div style={{ fontSize: 10, color: "#334155", lineHeight: 1.5 }}>⚠ {disclaimer}</div>
+          <div style={{ padding: "10px 12px", background: "rgba(255,255,255,0.02)", border: "1px solid var(--border-hairline)", borderRadius: 7 }}>
+            <div style={{ fontSize: 10, color: "var(--ink-600)", lineHeight: 1.5 }}>⚠ {disclaimer}</div>
           </div>
 
         </div>

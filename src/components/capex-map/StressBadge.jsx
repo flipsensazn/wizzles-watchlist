@@ -5,23 +5,23 @@ import { memo } from "react";
 //   { score, trend, count, companies: [{ ticker, score, delta, direction, summary, quotes, fy, fq }] }
 
 export function stressColor(score) {
-  if (score >= 70) return "#ef4444"; // severe — allocation / sold-out language
+  if (score >= 70) return "var(--neg)"; // severe — allocation / sold-out language
   if (score >= 40) return "#f59e0b"; // clear constraint language
-  if (score >= 15) return "#60a5fa"; // mild tightness
-  return "#34d399";                  // routine
+  if (score >= 15) return "var(--info)"; // mild tightness
+  return "var(--pos)";                  // routine
 }
 
 const DIRECTION_LABELS = {
-  constrained_supplier: { text: "BOTTLENECK OWNER", color: "#ef4444", hint: "Cannot make enough of what it sells — pricing power" },
+  constrained_supplier: { text: "BOTTLENECK OWNER", color: "var(--neg)", hint: "Cannot make enough of what it sells — pricing power" },
   constrained_buyer:    { text: "INPUT-CONSTRAINED", color: "#f59e0b", hint: "Cannot get enough inputs — downstream of a bottleneck" },
-  both:                 { text: "OWNER + CONSTRAINED", color: "#f472b6", hint: "Supply-limited on both sides" },
+  both:                 { text: "OWNER + CONSTRAINED", color: "var(--frontier-400)", hint: "Supply-limited on both sides" },
 };
 
 function TrendArrow({ trend }) {
   if (trend == null) return null;
-  if (trend > 5)  return <span style={{ color: "#ef4444" }} title={`+${trend.toFixed(0)} QoQ`}>↑</span>;
-  if (trend < -5) return <span style={{ color: "#34d399" }} title={`${trend.toFixed(0)} QoQ`}>↓</span>;
-  return <span style={{ color: "#64748b" }} title="flat QoQ">→</span>;
+  if (trend > 5)  return <span style={{ color: "var(--neg)" }} title={`+${trend.toFixed(0)} QoQ`}>↑</span>;
+  if (trend < -5) return <span style={{ color: "var(--pos)" }} title={`${trend.toFixed(0)} QoQ`}>↓</span>;
+  return <span style={{ color: "var(--ink-400)" }} title="flat QoQ">→</span>;
 }
 
 // Compact chip shown in the SubsectorCard header. Live counterpart to the
@@ -71,7 +71,7 @@ export function gaugeSummary(tickers = [], gauges = {}) {
 export const GaugeChip = memo(function GaugeChip({ tickers, gauges, onClick, open }) {
   const sum = gaugeSummary(tickers, gauges);
   if (!sum || sum.avgGap < 10) return null;
-  const color = sum.avgGap >= 50 ? "#ef4444" : "#f59e0b";
+  const color = sum.avgGap >= 50 ? "var(--neg)" : "#f59e0b";
   return (
     <button
       onClick={e => { e.stopPropagation(); onClick?.(); }}
@@ -130,7 +130,7 @@ export const CompositeChip = memo(function CompositeChip({ tickers, composite, o
 });
 
 // Tiny inline history sparkline for the drilldown rows.
-export function CbsSparkline({ history, color = "#94a3b8" }) {
+export function CbsSparkline({ history, color = "var(--ink-300)" }) {
   if (!history || history.length < 2) return null;
   const scores = history.map(h => h.score).filter(s => s != null);
   if (scores.length < 2) return null;
@@ -160,12 +160,12 @@ export function CompositeLine({ c }) {
     <div style={{ fontSize: 10.5, marginTop: 5, display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
       <span style={{ color, fontWeight: 700 }}>⬢ CBS {c.score.toFixed(0)}</span>
       {c.delta != null && (
-        <span style={{ color: c.delta > 0 ? "#ef4444" : c.delta < 0 ? "#34d399" : "#64748b" }}>
+        <span style={{ color: c.delta > 0 ? "var(--neg)" : c.delta < 0 ? "var(--pos)" : "var(--ink-400)" }}>
           {c.delta > 0 ? "+" : ""}{c.delta.toFixed(0)} wk
         </span>
       )}
       <CbsSparkline history={c.history} color={color} />
-      {parts.length > 0 && <span style={{ color: "#475569" }}>({parts.join(" · ")})</span>}
+      {parts.length > 0 && <span style={{ color: "var(--ink-500)" }}>({parts.join(" · ")})</span>}
     </div>
   );
 }
@@ -175,7 +175,7 @@ function GaugeLine({ g }) {
   const hasBacklog = g.rpoYoy != null;
   const hasInv = g.inventoryDays != null;
   if (!hasBacklog && !hasInv) return null;
-  const gapColor = g.orderGap > 50 ? "#ef4444" : g.orderGap > 10 ? "#f59e0b" : "#64748b";
+  const gapColor = g.orderGap > 50 ? "var(--neg)" : g.orderGap > 10 ? "#f59e0b" : "var(--ink-400)";
   return (
     <div style={{ fontSize: 10.5, color: "#7dd3fc", marginTop: 5, display: "flex", gap: 12, flexWrap: "wrap" }}>
       {hasBacklog && (
@@ -188,7 +188,7 @@ function GaugeLine({ g }) {
       {hasInv && (
         <span>
           Inv days {g.inventoryDays.toFixed(0)}
-          {g.inventoryDaysYoy != null && <span style={{ color: g.inventoryDaysYoy > 15 ? "#f59e0b" : "#64748b" }}> ({g.inventoryDaysYoy >= 0 ? "+" : ""}{g.inventoryDaysYoy.toFixed(0)} YoY)</span>}
+          {g.inventoryDaysYoy != null && <span style={{ color: g.inventoryDaysYoy > 15 ? "#f59e0b" : "var(--ink-400)" }}> ({g.inventoryDaysYoy >= 0 ? "+" : ""}{g.inventoryDaysYoy.toFixed(0)} YoY)</span>}
         </span>
       )}
     </div>
@@ -216,20 +216,20 @@ export function StressDetail({ stress, tickers = [], gauges = {}, composite = {}
       {order.map(ticker => {
         const c = byTicker[ticker];
         const g = gauges[ticker];
-        const color = c ? stressColor(c.score) : "#475569";
+        const color = c ? stressColor(c.score) : "var(--ink-500)";
         const dir = c ? DIRECTION_LABELS[c.direction] : null;
         return (
           <div key={ticker} style={{ borderRadius: 8, border: `1px solid ${color}33`, background: "rgba(0,0,0,0.25)", padding: "8px 10px" }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span
                 onClick={e => onTickerClick?.(ticker, e.currentTarget.getBoundingClientRect())}
-                style={{ fontSize: 12, fontWeight: 700, color: "#e2e8f0", cursor: "pointer" }}
+                style={{ fontSize: 12, fontWeight: 700, color: "var(--ink-100)", cursor: "pointer" }}
               >
                 {ticker}
               </span>
               {c && <span style={{ fontSize: 11, fontWeight: 700, color }}>{c.score.toFixed(0)}</span>}
               {c?.delta != null && (
-                <span style={{ fontSize: 10, color: c.delta > 0 ? "#ef4444" : c.delta < 0 ? "#34d399" : "#64748b" }}>
+                <span style={{ fontSize: 10, color: c.delta > 0 ? "var(--neg)" : c.delta < 0 ? "var(--pos)" : "var(--ink-400)" }}>
                   {c.delta > 0 ? "+" : ""}{c.delta.toFixed(0)} QoQ
                 </span>
               )}
@@ -238,21 +238,21 @@ export function StressDetail({ stress, tickers = [], gauges = {}, composite = {}
                   {dir.text}
                 </span>
               )}
-              <span style={{ fontSize: 10, color: "#475569", marginLeft: "auto" }}>
+              <span style={{ fontSize: 10, color: "var(--ink-500)", marginLeft: "auto" }}>
                 {c ? `${c.fy}Q${c.fq}` : g?.latestQuarterEnd ? `Q end ${g.latestQuarterEnd}` : ""}
               </span>
             </div>
             {c?.summary && (
-              <div style={{ fontSize: 11, color: "#94a3b8", marginTop: 5, lineHeight: 1.5 }}>{c.summary}</div>
+              <div style={{ fontSize: 11, color: "var(--ink-300)", marginTop: 5, lineHeight: 1.5 }}>{c.summary}</div>
             )}
             <CompositeLine c={composite[ticker]} />
             <GaugeLine g={g} />
             {c?.quotes?.length > 0 && (
               <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 4 }}>
                 {c.quotes.map((q, i) => (
-                  <div key={i} style={{ fontSize: 10.5, color: "#cbd5e1", borderLeft: `2px solid ${color}66`, paddingLeft: 8, lineHeight: 1.5, fontStyle: "italic" }}>
+                  <div key={i} style={{ fontSize: 10.5, color: "var(--ink-200)", borderLeft: `2px solid ${color}66`, paddingLeft: 8, lineHeight: 1.5, fontStyle: "italic" }}>
                     “{q.quote}”
-                    {q.signal && <span style={{ color: "#64748b", fontStyle: "normal" }}> — {q.signal}</span>}
+                    {q.signal && <span style={{ color: "var(--ink-400)", fontStyle: "normal" }}> — {q.signal}</span>}
                   </div>
                 ))}
               </div>
@@ -260,7 +260,7 @@ export function StressDetail({ stress, tickers = [], gauges = {}, composite = {}
           </div>
         );
       })}
-      <div style={{ fontSize: 9.5, color: "#475569", lineHeight: 1.4 }}>
+      <div style={{ fontSize: 9.5, color: "var(--ink-500)", lineHeight: 1.4 }}>
         Transcript scores from supply-stress language in the latest earnings calls
         (lexicon scan + AI classification; quotes verbatim). Backlog/inventory gauges
         from SEC XBRL filings — order gap is backlog growth minus revenue growth, YoY.

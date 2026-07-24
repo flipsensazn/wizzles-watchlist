@@ -32,9 +32,9 @@ export default function CompositeMovers({ tickers = [], composite = {}, onTicker
           background: "rgba(255,255,255,0.03)", border: `1px solid ${color}55`,
           borderRadius: 8, padding: "5px 10px", cursor: "pointer", fontFamily: "inherit",
         }}>
-        <span style={{ fontSize: 11.5, fontWeight: 800, color: "#e2e8f0" }}>{c.ticker}</span>
+        <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--ink-100)" }}>{c.ticker}</span>
         <span style={{ fontSize: 11, fontWeight: 700, color }}>⬢ {c.score.toFixed(0)}</span>
-        <span style={{ fontSize: 10, fontWeight: 700, color: heat ? "#ef4444" : "#34d399" }}>
+        <span style={{ fontSize: 10, fontWeight: 700, color: heat ? "var(--neg)" : "var(--pos)" }}>
           {c.delta > 0 ? "+" : ""}{c.delta.toFixed(0)}
         </span>
         <CbsSparkline history={c.history} color={color} />
@@ -43,25 +43,25 @@ export default function CompositeMovers({ tickers = [], composite = {}, onTicker
   };
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(24,24,24,0.92)", padding: "14px 18px" }}>
+    <div style={{ borderRadius: "var(--radius-2xl)", border: "1px solid var(--border-hairline)", background: "var(--surface-card)", backdropFilter: "var(--glass-blur)", WebkitBackdropFilter: "var(--glass-blur)", boxShadow: "var(--shadow-panel)", padding: "14px 18px" }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 10 }}>
-        <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ fontSize: 11, color: "var(--ink-300)", letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ fontSize: 14 }}>⬢</span> Bottleneck Score Movers
         </div>
-        <div style={{ fontSize: 10, color: "#475569" }}>
+        <div style={{ fontSize: 10, color: "var(--ink-500)" }}>
           composite of transcript + XBRL + concentration · weekly change
         </div>
       </div>
       <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
         {heating.length > 0 && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#ef4444", minWidth: 62 }}>HEATING</span>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "var(--neg)", minWidth: 62 }}>HEATING</span>
             {heating.map(c => <Chip key={c.ticker} c={c} heat />)}
           </div>
         )}
         {cooling.length > 0 && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "#34d399", minWidth: 62 }}>COOLING</span>
+            <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: "var(--pos)", minWidth: 62 }}>COOLING</span>
             {cooling.map(c => <Chip key={c.ticker} c={c} heat={false} />)}
           </div>
         )}
