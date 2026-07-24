@@ -67,15 +67,15 @@ export default function EarningsWeek({ tickers = [], prices = {}, onTickerClick 
   const todayKey = new Date().toDateString();
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(24,24,24,0.92)", padding: 18 }}>
+    <div style={{ borderRadius: "var(--radius-2xl)", border: "1px solid var(--border-hairline)", background: "var(--surface-card)", backdropFilter: "var(--glass-blur)", WebkitBackdropFilter: "var(--glass-blur)", boxShadow: "var(--shadow-panel)", padding: 18 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-        <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ fontSize: 11, color: "var(--ink-300)", letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ fontSize: 14 }}>🗓</span> Earnings This Week
           {total > 0 && (
             <span style={{ fontSize: 10, fontWeight: 800, color: "#fbbf24", border: "1px solid #fbbf24", borderRadius: 8, padding: "0 7px" }}>{total}</span>
           )}
         </div>
-        <div style={{ fontSize: 10, color: "#475569" }}>
+        <div style={{ fontSize: 10, color: "var(--ink-500)" }}>
           tracked tickers only · <span style={{ color: "#60a5fa" }}>BMO</span> before open · <span style={{ color: "#c084fc" }}>AMC</span> after close
         </div>
       </div>
@@ -92,15 +92,15 @@ export default function EarningsWeek({ tickers = [], prices = {}, onTickerClick 
               opacity: isPast ? 0.55 : 1,
             }}>
               <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", marginBottom: 8 }}>
-                <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", color: isToday ? "#fbbf24" : "#94a3b8", textTransform: "uppercase" }}>
+                <span style={{ fontSize: 11, fontWeight: 800, letterSpacing: "0.1em", color: isToday ? "#fbbf24" : "var(--ink-300)", textTransform: "uppercase" }}>
                   {day.label}{isToday ? " · today" : ""}
                 </span>
-                <span style={{ fontSize: 10, color: "#475569" }}>
+                <span style={{ fontSize: 10, color: "var(--ink-500)" }}>
                   {day.date.toLocaleDateString("en-US", { month: "numeric", day: "numeric" })}
                 </span>
               </div>
               {day.entries.length === 0 ? (
-                <div style={{ fontSize: 10, color: "#334155", textAlign: "center", paddingTop: 12 }}>—</div>
+                <div style={{ fontSize: 10, color: "var(--ink-600)", textAlign: "center", paddingTop: 12 }}>—</div>
               ) : (
                 <div style={{ display: "flex", flexDirection: "column", gap: 5 }}>
                   {day.entries.map(e => {
@@ -108,8 +108,8 @@ export default function EarningsWeek({ tickers = [], prices = {}, onTickerClick 
                     return (
                       <div key={e.ticker}
                         onClick={ev => onTickerClick?.(e.ticker, ev.currentTarget.getBoundingClientRect())}
-                        style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 8px", borderRadius: 6, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", cursor: "pointer" }}>
-                        <span style={{ fontSize: 11.5, fontWeight: 800, color: "#e2e8f0" }}>{e.ticker}</span>
+                        style={{ display: "flex", alignItems: "center", gap: 6, padding: "4px 8px", borderRadius: 6, background: "rgba(255,255,255,0.04)", border: "1px solid var(--border-hairline)", cursor: "pointer" }}>
+                        <span style={{ fontSize: 11.5, fontWeight: 800, color: "var(--ink-100)" }}>{e.ticker}</span>
                         {e.session && (
                           <span title={e.session.hint} style={{ fontSize: 8.5, fontWeight: 800, color: e.session.color, border: `1px solid ${e.session.color}55`, borderRadius: 3, padding: "0 4px", letterSpacing: "0.05em" }}>
                             {e.session.text}
@@ -131,7 +131,7 @@ export default function EarningsWeek({ tickers = [], prices = {}, onTickerClick 
       </div>
 
       {total === 0 && (
-        <div style={{ fontSize: 11, color: "#475569", textAlign: "center", marginTop: 10 }}>
+        <div style={{ fontSize: 11, color: "var(--ink-500)", textAlign: "center", marginTop: 10 }}>
           No earnings calls this week from tracked tickers.
         </div>
       )}

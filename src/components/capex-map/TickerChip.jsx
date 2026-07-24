@@ -5,7 +5,7 @@ const TickerChip = memo(function TickerChip({ symbol, changeData, onRemove, onTi
   const change = changeData?.change ?? changeData;
   const session = changeData?.session;
   const pos = (change ?? 0) >= 0;
-  const changeColor = change === undefined ? "#475569" : pos ? "#34d399" : "#f87171";
+  const changeColor = change === undefined ? "var(--ink-500)" : pos ? "#34d399" : "#f87171";
   const sessionLabel = session === "POST" || session === "CLOSED" ? "AH" : session === "PRE" ? "PM" : null;
 
   return (
@@ -36,10 +36,10 @@ const TickerChip = memo(function TickerChip({ symbol, changeData, onRemove, onTi
           {change}%
         </span>
       ) : (
-        <span style={{ fontSize: 11, color: "#475569" }}>…</span>
+        <span style={{ fontSize: 11, color: "var(--ink-500)" }}>…</span>
       )}
       {sessionLabel && (
-        <span style={{ fontSize: 8, fontWeight: 700, color: "#64748b", background: "rgba(255,255,255,0.06)", border: "1px solid rgba(255,255,255,0.1)", borderRadius: 2, padding: "1px 3px", letterSpacing: "0.05em" }}>
+        <span style={{ fontSize: 8, fontWeight: 700, color: "var(--ink-400)", background: "rgba(255,255,255,0.06)", border: "1px solid var(--border-soft)", borderRadius: 2, padding: "1px 3px", letterSpacing: "0.05em" }}>
           {sessionLabel}
         </span>
       )}

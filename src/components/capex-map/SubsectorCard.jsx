@@ -51,7 +51,7 @@ export default function SubsectorCard({
           isAdmin={isAdmin}
           onSave={onRenameSubsector}
           style={{ flex: 1 }}
-          textStyles={{ fontSize: 12, fontWeight: 600, color: "#cbd5e1", lineHeight: 1.4 }}
+          textStyles={{ fontSize: 12, fontWeight: 600, color: "var(--ink-200)", lineHeight: 1.4 }}
         />
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <CompositeChip tickers={sub.tickers} composite={composite} open={stressOpen} onClick={() => setStressOpen(v => !v)} />
@@ -84,7 +84,7 @@ export default function SubsectorCard({
       </div>
       {sub.materials?.length > 0 && (
         <div>
-          <button onClick={() => setOpen(v => !v)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, padding: 0, fontFamily: "inherit" }}>
+          <button onClick={() => setOpen(v => !v)} style={{ background: "none", border: "none", color: "var(--ink-400)", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, padding: 0, fontFamily: "inherit" }}>
             <span style={{ display: "inline-block", transition: "transform .2s", transform: open ? "rotate(90deg)" : "rotate(0deg)" }}>▶</span>
             Raw Materials ({sub.materials.length})
           </button>
@@ -92,7 +92,7 @@ export default function SubsectorCard({
             <div style={{ marginTop: 8, display: "flex", flexWrap: "wrap", gap: 6 }}>
               {sub.materials.map((material, i) =>
                 typeof material === "string" ? (
-                  <span key={i} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 4, background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#94a3b8" }}>
+                  <span key={i} style={{ fontSize: 11, padding: "3px 8px", borderRadius: 4, background: "rgba(255,255,255,0.04)", border: "1px solid var(--border-hairline)", color: "var(--ink-300)" }}>
                     {material}
                   </span>
                 ) : (
@@ -108,7 +108,7 @@ export default function SubsectorCard({
 
       {(stress || hasGaugeData(sub.tickers, gauges) || compositeSummary(sub.tickers, composite)) && (
         <div>
-          <button onClick={() => setStressOpen(v => !v)} style={{ background: "none", border: "none", color: "#64748b", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, padding: 0, fontFamily: "inherit" }}>
+          <button onClick={() => setStressOpen(v => !v)} style={{ background: "none", border: "none", color: "var(--ink-400)", fontSize: 11, cursor: "pointer", display: "flex", alignItems: "center", gap: 5, padding: 0, fontFamily: "inherit" }}>
             <span style={{ display: "inline-block", transition: "transform .2s", transform: stressOpen ? "rotate(90deg)" : "rotate(0deg)" }}>▶</span>
             Stress Signals
           </button>
@@ -121,14 +121,14 @@ export default function SubsectorCard({
           (!addingTicker ? (
             <button
               onClick={() => setAddingTicker(true)}
-              style={{ background: "none", border: "1px dashed rgba(255,255,255,0.1)", borderRadius: 6, color: "#334155", fontSize: 11, padding: "4px 10px", cursor: "pointer", width: "100%", fontFamily: "inherit", transition: "all .15s" }}
+              style={{ background: "none", border: "1px dashed rgba(255,255,255,0.1)", borderRadius: 6, color: "var(--ink-600)", fontSize: 11, padding: "4px 10px", cursor: "pointer", width: "100%", fontFamily: "inherit", transition: "all .15s" }}
               onMouseEnter={e => {
                 e.currentTarget.style.borderColor = "rgba(255,255,255,0.25)";
-                e.currentTarget.style.color = "#64748b";
+                e.currentTarget.style.color = "var(--ink-400)";
               }}
               onMouseLeave={e => {
                 e.currentTarget.style.borderColor = "rgba(255,255,255,0.1)";
-                e.currentTarget.style.color = "#334155";
+                e.currentTarget.style.color = "var(--ink-600)";
               }}
             >
               + add ticker
@@ -147,7 +147,7 @@ export default function SubsectorCard({
                   }
                 }}
                 placeholder="e.g. NVDA"
-                style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, padding: "5px 8px", color: "#e2e8f0", fontSize: 12, fontFamily: "inherit", outline: "none" }}
+                style={{ flex: 1, background: "rgba(255,255,255,0.05)", border: "1px solid rgba(255,255,255,0.15)", borderRadius: 6, padding: "5px 8px", color: "var(--ink-100)", fontSize: 12, fontFamily: "inherit", outline: "none" }}
               />
               <button onClick={handleAdd} style={{ background: "rgba(96,165,250,0.15)", border: "1px solid rgba(96,165,250,0.3)", color: "#60a5fa", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>
                 ✓
@@ -155,7 +155,7 @@ export default function SubsectorCard({
               <button onClick={() => {
                 setAddingTicker(false);
                 setNewTicker("");
-              }} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid rgba(255,255,255,0.08)", color: "#64748b", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>
+              }} style={{ background: "rgba(255,255,255,0.04)", border: "1px solid var(--border-hairline)", color: "var(--ink-400)", borderRadius: 6, padding: "5px 10px", cursor: "pointer", fontSize: 11, fontFamily: "inherit" }}>
                 ✕
               </button>
             </div>

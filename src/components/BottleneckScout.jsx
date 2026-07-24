@@ -49,7 +49,7 @@ const pct = v => `${v >= 0 ? "+" : ""}${v.toFixed(0)}%`;
 function CandidateCard({ c, isAdmin, onReview, onTickerClick }) {
   const [busy, setBusy] = useState(false);
   const decided = c.status !== "pending";
-  const sColor = c.stressScore != null ? stressColor(c.stressScore) : "#475569";
+  const sColor = c.stressScore != null ? stressColor(c.stressScore) : "var(--ink-500)";
   const dir = DIR_LABELS[c.stressDirection];
 
   async function review(action) {
@@ -68,17 +68,17 @@ function CandidateCard({ c, isAdmin, onReview, onTickerClick }) {
       <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
         <span
           onClick={e => onTickerClick?.(c.ticker, e.currentTarget.getBoundingClientRect())}
-          style={{ fontSize: 14, fontWeight: 800, color: "#e2e8f0", cursor: "pointer" }}>
+          style={{ fontSize: 14, fontWeight: 800, color: "var(--ink-100)", cursor: "pointer" }}>
           {c.ticker}
         </span>
-        <span style={{ fontSize: 11, color: "#94a3b8" }}>{c.name}</span>
+        <span style={{ fontSize: 11, color: "var(--ink-300)" }}>{c.name}</span>
         {c.isOtc && (
           <span style={{ fontSize: 9, fontWeight: 800, color: "#fbbf24", border: "1px solid #fbbf2466", background: "#fbbf2414", borderRadius: 3, padding: "1px 5px" }}>OTC</span>
         )}
         {VIEW_CHIP[c.view] && (
           <span title={VIEW_CHIP[c.view].hint} style={{ fontSize: 9, fontWeight: 800, color: VIEW_CHIP[c.view].color, border: `1px solid ${VIEW_CHIP[c.view].color}66`, background: VIEW_CHIP[c.view].color + "14", borderRadius: 3, padding: "1px 5px" }}>{VIEW_CHIP[c.view].text}</span>
         )}
-        <span style={{ fontSize: 10, color: "#475569", marginLeft: "auto" }}>
+        <span style={{ fontSize: 10, color: "var(--ink-500)", marginLeft: "auto" }}>
           {fmtCap(c.marketCap)}{c.price != null && ` · $${c.price.toLocaleString("en-US", { maximumFractionDigits: 2 })}`}
         </span>
       </div>
@@ -87,22 +87,22 @@ function CandidateCard({ c, isAdmin, onReview, onTickerClick }) {
         <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: "#f87171", border: "1px solid #f8717155", background: "#f8717112", borderRadius: 3, padding: "1px 7px", textTransform: "uppercase" }}>
           {c.chokepoint || "bottleneck candidate"}
         </span>
-        <span style={{ fontSize: 10, color: "#64748b" }}>
+        <span style={{ fontSize: 10, color: "var(--ink-400)" }}>
           → {(TRACK_LABELS[c.view] || TRACK_LABELS.ai)[c.trackId] || c.trackId}{c.suggestedSubsector ? ` · ${c.suggestedSubsector}` : ""}
         </span>
       </div>
 
-      {c.thesis && <div style={{ fontSize: 11.5, color: "#cbd5e1", lineHeight: 1.5 }}>{c.thesis}</div>}
+      {c.thesis && <div style={{ fontSize: 11.5, color: "var(--ink-200)", lineHeight: 1.5 }}>{c.thesis}</div>}
 
       {/* stress snapshot — same signals the map runs on */}
-      <div style={{ borderTop: "1px solid rgba(255,255,255,0.06)", paddingTop: 8, display: "flex", flexDirection: "column", gap: 5 }}>
+      <div style={{ borderTop: "1px solid var(--border-hairline)", paddingTop: 8, display: "flex", flexDirection: "column", gap: 5 }}>
         <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
           {c.stressScore != null ? (
             <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.08em", color: sColor, border: `1px solid ${sColor}`, background: sColor + "1c", borderRadius: 3, padding: "1px 7px" }}>
               STRESS {c.stressScore.toFixed(0)}
             </span>
           ) : (
-            <span style={{ fontSize: 10, color: "#475569" }}>no transcript data</span>
+            <span style={{ fontSize: 10, color: "var(--ink-500)" }}>no transcript data</span>
           )}
           {dir && <span style={{ fontSize: 9, fontWeight: 700, letterSpacing: "0.08em", color: dir.color }}>{dir.text}</span>}
           {(c.orderGap != null || c.inventoryDays != null) ? (
@@ -113,12 +113,12 @@ function CandidateCard({ c, isAdmin, onReview, onTickerClick }) {
               {c.inventoryDays != null && <> · inv days {c.inventoryDays.toFixed(0)}</>}
             </span>
           ) : (
-            <span style={{ fontSize: 10, color: "#475569" }}>no XBRL data</span>
+            <span style={{ fontSize: 10, color: "var(--ink-500)" }}>no XBRL data</span>
           )}
         </div>
-        {c.stressSummary && <div style={{ fontSize: 10.5, color: "#94a3b8", lineHeight: 1.45 }}>{c.stressSummary}</div>}
+        {c.stressSummary && <div style={{ fontSize: 10.5, color: "var(--ink-300)", lineHeight: 1.45 }}>{c.stressSummary}</div>}
         {c.stressQuotes?.slice(0, 2).map((q, i) => (
-          <div key={i} style={{ fontSize: 10, color: "#cbd5e1", borderLeft: `2px solid ${sColor}66`, paddingLeft: 7, fontStyle: "italic", lineHeight: 1.4 }}>
+          <div key={i} style={{ fontSize: 10, color: "var(--ink-200)", borderLeft: `2px solid ${sColor}66`, paddingLeft: 7, fontStyle: "italic", lineHeight: 1.4 }}>
             “{q.quote}”
           </div>
         ))}
@@ -126,7 +126,7 @@ function CandidateCard({ c, isAdmin, onReview, onTickerClick }) {
 
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 2 }}>
         {decided ? (
-          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: c.status === "approved" ? "#34d399" : "#64748b", textTransform: "uppercase" }}>
+          <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.1em", color: c.status === "approved" ? "#34d399" : "var(--ink-400)", textTransform: "uppercase" }}>
             {c.status}
           </span>
         ) : isAdmin ? (
@@ -141,9 +141,9 @@ function CandidateCard({ c, isAdmin, onReview, onTickerClick }) {
             </button>
           </>
         ) : (
-          <span style={{ fontSize: 10, color: "#475569" }}>unlock admin to review</span>
+          <span style={{ fontSize: 10, color: "var(--ink-500)" }}>unlock admin to review</span>
         )}
-        <span style={{ fontSize: 9.5, color: "#334155", marginLeft: "auto" }}>
+        <span style={{ fontSize: 9.5, color: "var(--ink-600)", marginLeft: "auto" }}>
           found {c.discoveredAt ? new Date(c.discoveredAt).toLocaleDateString() : ""}
         </span>
       </div>
@@ -157,15 +157,15 @@ export default function BottleneckScout({ candidates = [], isAdmin, onReview, on
   if (!candidates.length) return null;
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(24,24,24,0.92)", padding: 18 }}>
+    <div style={{ borderRadius: "var(--radius-2xl)", border: "1px solid var(--border-hairline)", background: "var(--surface-card)", backdropFilter: "var(--glass-blur)", WebkitBackdropFilter: "var(--glass-blur)", boxShadow: "var(--shadow-panel)", padding: 18 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 12 }}>
-        <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ fontSize: 11, color: "var(--ink-300)", letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ fontSize: 14 }}>🔭</span> Bottleneck Scout
           {pending.length > 0 && (
             <span style={{ fontSize: 10, fontWeight: 800, color: "#fbbf24", border: "1px solid #fbbf24", borderRadius: 8, padding: "0 7px" }}>{pending.length} pending</span>
           )}
         </div>
-        <div style={{ fontSize: 10, color: "#475569" }}>
+        <div style={{ fontSize: 10, color: "var(--ink-500)" }}>
           AI-scouted candidates, identity-verified · approve to add to the map + weekly signal scans
         </div>
       </div>

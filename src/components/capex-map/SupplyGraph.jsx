@@ -18,7 +18,7 @@ function nodeColor(strength, risk) {
   if (strength >= 40) return "#f59e0b";
   if (risk >= 50) return "#fb923c";
   if (risk >= 20) return "#fbbf24";
-  return "#334155";
+  return "var(--ink-600)";
 }
 
 function fmtChange(v) {
@@ -85,7 +85,7 @@ export default function SupplyGraph({
       if (heat >= Math.max(p85, 60)) return own ? "#ef4444" : "#fb923c";
       if (heat >= Math.max(p60, 40)) return own ? "#f59e0b" : "#fbbf24";
       if (heat >= Math.max(p35, 15)) return "#60a5fa";
-      return "#334155";
+      return "var(--ink-600)";
     };
   }, [graphNodes, strength, risk]);
 
@@ -126,12 +126,12 @@ export default function SupplyGraph({
   }
 
   return (
-    <div style={{ borderRadius: 18, border: "1px solid rgba(255,255,255,0.08)", background: "rgba(24,24,24,0.92)", padding: 18, marginTop: 8 }}>
+    <div style={{ borderRadius: "var(--radius-2xl)", border: "1px solid var(--border-hairline)", background: "var(--surface-card)", backdropFilter: "var(--glass-blur)", WebkitBackdropFilter: "var(--glass-blur)", boxShadow: "var(--shadow-panel)", padding: 18, marginTop: 8 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 8, marginBottom: 6 }}>
-        <div style={{ fontSize: 11, color: "#94a3b8", letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
+        <div style={{ fontSize: 11, color: "var(--ink-300)", letterSpacing: "0.15em", textTransform: "uppercase", fontWeight: 700, display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ fontSize: 14 }}>🕸</span> {title}
         </div>
-        <div style={{ fontSize: 10, color: "#475569" }}>
+        <div style={{ fontSize: 10, color: "var(--ink-500)" }}>
           supplier → customer · click a node to trace its cone · {graphNodes.length} nodes / {edges.length} edges
           {edges.some(e => e.exposurePct != null) && ` · ${edges.filter(e => e.exposurePct != null).length} with filed exposure`}
         </div>
@@ -139,7 +139,7 @@ export default function SupplyGraph({
 
       {topBottlenecks.length > 0 && (
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10, alignItems: "center" }}>
-          <span style={{ fontSize: 10, color: "#64748b", fontWeight: 700, letterSpacing: "0.1em" }}>RADIATING:</span>
+          <span style={{ fontSize: 10, color: "var(--ink-400)", fontWeight: 700, letterSpacing: "0.1em" }}>RADIATING:</span>
           {topBottlenecks.map(({ id, s }) => {
             const c = colorFor(s, 0);
             return (
@@ -157,7 +157,7 @@ export default function SupplyGraph({
           {/* layer headers */}
           {layers.map((label, i) => (
             <text key={label} x={PAD_X + i * COL_W + NODE_W / 2} y={18} textAnchor="middle"
-              style={{ fill: "#475569", fontSize: 9.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>
+              style={{ fill: "var(--ink-500)", fontSize: 9.5, fontWeight: 700, letterSpacing: "0.08em", textTransform: "uppercase" }}>
               {label}
             </text>
           ))}
@@ -172,7 +172,7 @@ export default function SupplyGraph({
             const state = edgeState(e);
             const filed = e.exposurePct != null;
             const stroke =
-              state === "active" ? "#e2e8f0" :
+              state === "active" ? "var(--ink-100)" :
               state === "down" ? "#ef4444" :
               state === "up" ? "#60a5fa" :
               filed ? "rgba(125,211,252,0.22)" : "rgba(148,163,184,0.10)";
@@ -200,10 +200,10 @@ export default function SupplyGraph({
                 onClick={() => setSelected(prev => prev === n.id ? null : n.id)}>
                 <rect x={p.x} y={p.y} width={NODE_W} height={NODE_H} rx={6}
                   fill={isBottleneck ? c + "26" : r >= 20 ? c + "14" : "rgba(255,255,255,0.04)"}
-                  stroke={isSel ? "#e2e8f0" : isBottleneck ? c : r >= 20 ? c + "99" : "rgba(255,255,255,0.12)"}
+                  stroke={isSel ? "var(--ink-100)" : isBottleneck ? c : r >= 20 ? c + "99" : "rgba(255,255,255,0.12)"}
                   strokeWidth={isSel ? 1.6 : 1}
                   strokeDasharray={!isBottleneck && r >= 20 ? "3,2" : "none"} />
-                <text x={p.x + 8} y={p.y + 17} style={{ fill: n.type === "external" ? "#94a3b8" : "#e2e8f0", fontSize: 10.5, fontWeight: 700 }}>
+                <text x={p.x + 8} y={p.y + 17} style={{ fill: n.type === "external" ? "var(--ink-300)" : "var(--ink-100)", fontSize: 10.5, fontWeight: 700 }}>
                   {n.id.length > 12 ? n.id.slice(0, 12) : n.id}
                 </text>
                 {(isBottleneck || r >= 20) && (
@@ -225,25 +225,25 @@ export default function SupplyGraph({
       </div>
 
       {/* legend */}
-      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 9.5, color: "#64748b", marginTop: 6 }}>
+      <div style={{ display: "flex", gap: 14, flexWrap: "wrap", fontSize: 9.5, color: "var(--ink-400)", marginTop: 6 }}>
         <span><span style={{ color: "#ef4444" }}>●</span> bottleneck (radiates downstream)</span>
         <span><span style={{ color: "#fbbf24" }}>⚠</span> inherited supply risk</span>
         <span><span style={{ color: "#ef4444" }}>━</span> downstream of selection</span>
         <span><span style={{ color: "#60a5fa" }}>━</span> upstream suppliers</span>
         <span><span style={{ color: "#7dd3fc" }}>━</span> filed revenue exposure (10-K/10-Q)</span>
-        <span style={{ color: "#475569" }}>· colors scale to this chain's heat distribution — red = hottest relative to peers</span>
+        <span style={{ color: "var(--ink-500)" }}>· colors scale to this chain's heat distribution — red = hottest relative to peers</span>
       </div>
 
       {/* detail panel */}
       {selNode && (
-        <div style={{ marginTop: 12, borderRadius: 12, border: "1px solid rgba(255,255,255,0.1)", background: "rgba(0,0,0,0.25)", padding: 14, animation: "fadeSlideIn .2s ease-out" }}>
+        <div style={{ marginTop: 12, borderRadius: 12, border: "1px solid var(--border-soft)", background: "rgba(0,0,0,0.25)", padding: 14, animation: "fadeSlideIn .2s ease-out" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
             <span
               onClick={e => selNode.type !== "external" && onTickerClick?.(selNode.id, e.currentTarget.getBoundingClientRect())}
-              style={{ fontSize: 14, fontWeight: 800, color: "#e2e8f0", cursor: selNode.type !== "external" ? "pointer" : "default" }}>
+              style={{ fontSize: 14, fontWeight: 800, color: "var(--ink-100)", cursor: selNode.type !== "external" ? "pointer" : "default" }}>
               {selNode.label}
             </span>
-            <span style={{ fontSize: 10, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>{layers[selNode.layer]}</span>
+            <span style={{ fontSize: 10, color: "var(--ink-400)", textTransform: "uppercase", letterSpacing: "0.1em" }}>{layers[selNode.layer]}</span>
             {(strength[selected] ?? 0) >= 40 && (
               <span style={{ fontSize: 10, fontWeight: 700, color: colorFor(strength[selected], 0), border: `1px solid ${colorFor(strength[selected], 0)}`, background: colorFor(strength[selected], 0) + "1c", padding: "1px 7px", borderRadius: 3 }}>
                 BOTTLENECK {strength[selected].toFixed(0)}
@@ -254,15 +254,15 @@ export default function SupplyGraph({
                 SUPPLY RISK {risk[selected].score.toFixed(0)}
               </span>
             )}
-            <button onClick={() => setSelected(null)} style={{ marginLeft: "auto", background: "none", border: "none", color: "#64748b", fontSize: 14, cursor: "pointer", fontFamily: "inherit" }}>×</button>
+            <button onClick={() => setSelected(null)} style={{ marginLeft: "auto", background: "none", border: "none", color: "var(--ink-400)", fontSize: 14, cursor: "pointer", fontFamily: "inherit" }}>×</button>
           </div>
 
           {/* intrinsic signals */}
-          <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "#94a3b8", lineHeight: 1.5 }}>
+          <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 4, fontSize: 11, color: "var(--ink-300)", lineHeight: 1.5 }}>
             {selNode.note && <div>{selNode.note}</div>}
             {compositeData[selected]?.score != null && (
               <div>
-                ⬢ Composite Bottleneck Score: <span style={{ color: "#e2e8f0", fontWeight: 700 }}>{compositeData[selected].score.toFixed(0)}</span>
+                ⬢ Composite Bottleneck Score: <span style={{ color: "var(--ink-100)", fontWeight: 700 }}>{compositeData[selected].score.toFixed(0)}</span>
                 {compositeData[selected].delta != null && (
                   <span style={{ color: compositeData[selected].delta > 0 ? "#ef4444" : "#34d399" }}>
                     {" "}({compositeData[selected].delta > 0 ? "+" : ""}{compositeData[selected].delta.toFixed(0)} this week)
@@ -272,7 +272,7 @@ export default function SupplyGraph({
             )}
             {stressData[selected]?.latest && (
               <div>
-                Transcript: <span style={{ color: "#e2e8f0", fontWeight: 700 }}>{stressData[selected].latest.stressScore?.toFixed(0)}</span>
+                Transcript: <span style={{ color: "var(--ink-100)", fontWeight: 700 }}>{stressData[selected].latest.stressScore?.toFixed(0)}</span>
                 {stressData[selected].latest.direction && <> · {DIR_LABEL[stressData[selected].latest.direction] ?? stressData[selected].latest.direction}</>}
                 {stressData[selected].latest.summary && <> — {stressData[selected].latest.summary}</>}
               </div>
@@ -294,7 +294,7 @@ export default function SupplyGraph({
                     {c.ticker ? (
                       <span onClick={() => setSelected(c.ticker)} style={{ fontWeight: 700, cursor: "pointer" }}>{c.ticker}</span>
                     ) : (
-                      <span style={{ color: "#94a3b8" }}>{c.label}</span>
+                      <span style={{ color: "var(--ink-300)" }}>{c.label}</span>
                     )}
                     {" "}{c.pct.toFixed(0)}% of rev{c.period ? ` (${c.period})` : ""}
                   </span>
@@ -308,7 +308,7 @@ export default function SupplyGraph({
                   <span key={c.source}>
                     {i > 0 && " · "}
                     <span onClick={() => setSelected(c.source)} style={{ color: "#fbbf24", cursor: "pointer", fontWeight: 700 }}>{c.source}</span>
-                    <span style={{ color: "#64748b" }}> ({c.score.toFixed(0)} via {c.what}{c.hops > 1 ? `, ${c.hops} hops` : ""})</span>
+                    <span style={{ color: "var(--ink-400)" }}> ({c.score.toFixed(0)} via {c.what}{c.hops > 1 ? `, ${c.hops} hops` : ""})</span>
                   </span>
                 ))}
               </div>
@@ -319,15 +319,15 @@ export default function SupplyGraph({
           <div style={{ display: "flex", gap: 24, flexWrap: "wrap", marginTop: 10 }}>
             {[["Supplied by", selNbrs.suppliers, e => e.from], ["Supplies", selNbrs.customers, e => e.to]].map(([title, list, pick]) => (
               <div key={title} style={{ minWidth: 200, flex: 1 }}>
-                <div style={{ fontSize: 9.5, color: "#475569", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>{title} ({list.length})</div>
+                <div style={{ fontSize: 9.5, color: "var(--ink-500)", fontWeight: 700, letterSpacing: "0.1em", textTransform: "uppercase", marginBottom: 4 }}>{title} ({list.length})</div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
                   {list.sort((a, b) => (b.exposurePct ?? 0) - (a.exposurePct ?? 0) || b.criticality - a.criticality).map((e, i) => {
                     const other = pick(e);
                     const oc = colorFor(strength[other] ?? 0, risk[other]?.score ?? 0);
                     return (
-                      <div key={i} style={{ fontSize: 10.5, color: "#94a3b8" }}>
-                        <span onClick={() => setSelected(other)} style={{ color: oc === "#334155" ? "#cbd5e1" : oc, fontWeight: 700, cursor: "pointer" }}>{other}</span>
-                        <span style={{ color: "#64748b" }}> — {e.what}</span>
+                      <div key={i} style={{ fontSize: 10.5, color: "var(--ink-300)" }}>
+                        <span onClick={() => setSelected(other)} style={{ color: oc === "var(--ink-600)" ? "var(--ink-200)" : oc, fontWeight: 700, cursor: "pointer" }}>{other}</span>
+                        <span style={{ color: "var(--ink-400)" }}> — {e.what}</span>
                         {e.exposurePct != null && (
                           <span title={`${e.exposureQuote || ""}\n(${e.exposureForm}${e.exposurePeriod ? `, ${e.exposurePeriod}` : ""})`}
                             style={{ color: "#7dd3fc", fontWeight: 700 }}> {e.exposurePct.toFixed(0)}% of {e.from} rev (filed)</span>
@@ -337,7 +337,7 @@ export default function SupplyGraph({
                       </div>
                     );
                   })}
-                  {!list.length && <div style={{ fontSize: 10.5, color: "#475569" }}>none mapped</div>}
+                  {!list.length && <div style={{ fontSize: 10.5, color: "var(--ink-500)" }}>none mapped</div>}
                 </div>
               </div>
             ))}
