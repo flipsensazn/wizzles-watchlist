@@ -229,7 +229,7 @@ export function MarketPill({ label, labelColor, price, change, session, spark, s
   const hue = up ? "var(--pos)" : "var(--neg)";
   return (
     <div style={{
-      background: "var(--surface-inset)", border: "1px solid var(--border-hairline)",
+      background: "var(--surface-raised)", border: "1px solid var(--border-soft)",
       borderRadius: "var(--radius-md)", padding: "6px 10px", minWidth: 0, ...style,
     }}>
       <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>

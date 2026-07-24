@@ -64,6 +64,10 @@
   --surface-card: rgba(20, 26, 34, 0.72);
   --surface-card-solid: var(--void-500);
   --surface-inset: rgba(0, 0, 0, 0.25);
+  /* Tiles that sit ON the chrome (top-bar market pills). --surface-inset is a
+     black overlay, so it renders darker than the bar it sits on — these need
+     to read as raised instead. */
+  --surface-raised: var(--void-300);
   --surface-popup: rgba(12, 15, 22, 0.97);
   --surface-hover: var(--void-300);
 

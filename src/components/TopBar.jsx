@@ -313,7 +313,7 @@ export default function TopBar({ marketData }) {
             }
 
             return (
-              <div key={ticker} style={{ background: "var(--surface-inset)", border: "1px solid var(--border-hairline)", borderRadius: "var(--radius-md)", padding: "5px 7px 3px", fontFamily: "var(--font-condensed)", minWidth: 0 }}>
+              <div key={ticker} style={{ background: "var(--surface-raised)", border: "1px solid var(--border-soft)", borderRadius: "var(--radius-md)", padding: "5px 7px 3px", fontFamily: "var(--font-condensed)", minWidth: 0 }}>
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 1 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 3 }}>
                     <span style={{ fontSize: 10, fontWeight: 800, color, letterSpacing: "0.03em", whiteSpace: "nowrap" }}>{label}</span>
@@ -396,8 +396,8 @@ export default function TopBar({ marketData }) {
                 justifyContent: "center",
                 padding: "6px 10px 4px",
                 borderRadius: "var(--radius-md)",
-                background: "var(--surface-inset)",
-                border: "1px solid var(--border-hairline)",
+                background: "var(--surface-raised)",
+                border: "1px solid var(--border-soft)",
                 fontFamily: "var(--font-condensed)",
                 flex: "1 1 0",
                 minWidth: 0,
