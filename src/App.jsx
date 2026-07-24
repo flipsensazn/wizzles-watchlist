@@ -1416,8 +1416,9 @@ export default function App() {
   }, []);
 
   // "ai" = hyperscaler capex flow · "musk" = Musk Galaxy · "robotics" = humanoid
-  // robotics · "earnings" = this week's calendar as its own view
-  const VALID_VIEWS = ["ai", "musk", "robotics", "earnings"];
+  // robotics · "earnings" = the calendar · "scanner" = pre-market gap scanner.
+  // The last two are standalone views that render no capex-map panels.
+  const VALID_VIEWS = ["ai", "musk", "robotics", "earnings", "scanner"];
   const [view, setView] = useState(() => {
     const h = window.location.hash.replace("#", "");
     return VALID_VIEWS.includes(h) ? h : "ai";
@@ -1428,6 +1429,19 @@ export default function App() {
     setActiveTrack(null);
     window.location.hash = next === "ai" ? "" : next;
   }
+
+  // The hash was only read at mount, so browser Back/Forward moved the URL
+  // without moving the view. Following hashchange keeps the two in step;
+  // setting the view it already holds is a no-op, so switchView can't loop.
+  useEffect(() => {
+    const onHashChange = () => {
+      const h = window.location.hash.replace("#", "");
+      setView(VALID_VIEWS.includes(h) ? h : "ai");
+      setActiveTrack(null);
+    };
+    window.addEventListener("hashchange", onHashChange);
+    return () => window.removeEventListener("hashchange", onHashChange);
+  }, []);
 
   const [activeTrack, setActiveTrack] = useState(null);
   const [timeline, setTimeline] = useState("1D");
@@ -1690,6 +1704,9 @@ export default function App() {
   // The earnings view is a standalone calendar — it still needs a map for the
   // ticker universe, so it borrows the AI map without rendering its panels.
   const isEarnings = view === "earnings";
+  const isScanner = view === "scanner";
+  // Both standalone views skip the capex-map panels below.
+  const isMapView = !isEarnings && !isScanner;
   const activeLiveData = isRobotics ? liveRoboticsData : isMusk ? liveMuskData : liveCapexData;
   const activeIntelStatus = isRobotics ? roboticsIntelStatus : isMusk ? muskIntelStatus : capexIntelStatus;
   const activeIntel = isRobotics ? roboticsIntel : isMusk ? muskIntel : capexIntel;
@@ -1772,6 +1789,7 @@ export default function App() {
                 { value: "musk", label: "Musk Galaxy", icon: "🚀" },
                 { value: "robotics", label: "Robotics", icon: "🦾" },
                 { value: "earnings", label: "Earnings", icon: "🗓" },
+                { value: "scanner", label: "Scanner", icon: "🔍" },
               ]}
             />
             <div style={{ width: 280, maxWidth: "100%" }}>
@@ -1788,7 +1806,18 @@ export default function App() {
             />
           )}
 
-          {!isEarnings && <>
+          {/* Scanner is its own view: the gap scanner full width, no capex map.
+              It keeps panel-wrapper/panel-inner so it holds the same 600px box
+              and the same responsive overrides it had inside the grid. */}
+          {isScanner && (
+            <div className="panel-wrapper">
+              <div className="panel-inner">
+                <GapScannerPanel prices={prices} onTickerClick={openPopup} />
+              </div>
+            </div>
+          )}
+
+          {isMapView && <>
           {/* HERO: capex flow Sankey — spenders → tracks, with guidance trend */}
           <CapexSankey
             key={`sankey-${view}`}
@@ -1866,13 +1895,6 @@ export default function App() {
               <div className="span-1 watchlist-wrapper">
                 <div className="watchlist-inner">
                   <Watchlist prices={prices} capexData={activeLiveData} onTickerClick={openPopup} isAdmin={isAdmin} shortList={shortList} onSaveShortlist={saveGlobalShortlist} timeline={timeline} activeFilter={activeFilter} />
-                </div>
-              </div>
-
-              {/* 3. Pre-market Gap Scanner spans the full bottom row */}
-              <div className="span-3 panel-wrapper">
-                <div className="panel-inner">
-                  <GapScannerPanel prices={prices} onTickerClick={openPopup} />
                 </div>
               </div>
             </div>
