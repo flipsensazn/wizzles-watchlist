@@ -220,24 +220,37 @@ footer{border-top:1px solid var(--border-hairline)}
 .footer-legal{font-size:11px;color:var(--ink-600)}
 .footer-ver{font-family:var(--font-mono);font-size:10px;letter-spacing:.14em;color:var(--text-faint)}
 
-/* ── Responsive ── */
-@media (max-width:1199px){.hero-stress-card{display:none}}
+/* ── Responsive ──────────────────────────────────────────────────────────
+   Breakpoints per the mobile handoff. Every rule is additive and scoped to a
+   max-width query, so nothing above 1199px changes. Handoff class hooks map
+   onto this page's own selectors:
+     .lp-sec → .split · .lp-container → .wrap · .lp-nav → .chrome-inner
+     .lp-hero-content → .hero-copy · .lp-h1 → .hero h1
+     .lp-corner-r → .hero-foot.right · .hero-stress-card (same name)
+   The hero stays absolutely positioned at every size — only the overlaid copy
+   re-anchors — so the full-bleed flow canvas is never letterboxed. */
+@media (max-width:1199px){
+  /* Floating stress card overlaps the copy once the viewport narrows. */
+  .hero-stress-card{display:none}
+}
 @media (max-width:900px){
-  .split,.split.reverse{grid-template-columns:1fr;gap:32px;padding:56px 0 48px}
-  .split.first{padding-top:64px}
+  .split,.split.reverse,.split.first{grid-template-columns:1fr;gap:28px;padding:56px 0 40px}
   .split.reverse .col-text,.split.reverse .col-visual{order:0}
   .wrap{padding:0 20px}
-  .chrome-inner{padding:14px 20px}
-  .hero{height:auto;min-height:0;padding:56px 0 40px}
-  .hero canvas{height:340px;top:0;bottom:auto}
-  .hero-scrim{background:linear-gradient(to bottom,rgba(8,11,17,.7),transparent 30%,rgba(8,11,17,.95) 72%)}
-  .hero-copy{position:static;margin:0 auto;padding:0 20px;max-width:none}
-  .hero-foot{display:none}
+  .chrome-inner{padding:14px 16px}
+  /* Panels the handoff doesn't enumerate, but which need the same treatment
+     to stay legible once their columns collapse. */
   .flow-card{height:300px}
   .mover{grid-template-columns:56px 1fr auto;row-gap:4px}
   .mover .spark,.mover .delta,.mover .chip{display:none}
   .scout-row{flex-direction:column;align-items:stretch;gap:10px}
   .weight-row{grid-template-columns:120px 1fr 30px}
+}
+@media (max-width:640px){
+  html,body{overflow-x:hidden}
+  .hero-foot.right{display:none}
+  .hero-copy{bottom:72px;right:20px}
+  .hero h1{font-size:32px}
 }
 @media (prefers-reduced-motion:reduce){
   *{animation-duration:.001ms!important;animation-iteration-count:1!important;transition-duration:.001ms!important}
@@ -554,7 +567,10 @@ footer{border-top:1px solid var(--border-hairline)}
       cv.width = W * dpr; cv.height = H * dpr;
       ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
       x0 = mini ? 92 : 130; x1 = W - (mini ? 130 : 190);
-      showLabels = mini || H >= 720;
+      // The canvas stays full-bleed at every width, but its endpoint labels
+      // need room beside the overlaid copy — on a phone they collide with the
+      // hero eyebrow. Width gates are chosen so desktop is unaffected.
+      showLabels = mini ? W >= 380 : (H >= 720 && W >= 900);
       return true;
     }
     var sy = function(i){ return H * (mini ? (0.18 + i*0.155) : (0.07 + i*0.068)); };

@@ -1273,7 +1273,10 @@ const GLOBAL_STYLES = `
   html, body { background: var(--void-800); font-family: var(--font-ui); max-width: 100vw; overflow-x: hidden; }
   img, svg, video, table { max-width: 100%; }
   :root { --topbar-h: 72px; }
-  @media (max-width: 767px) { :root { --topbar-h: 172px; } }
+  /* The mobile bar used to wrap its pills onto two grid rows (172px). The
+     handoff turns them into one horizontal swipe row, so it is ~93px now —
+     reserving the old height left a dead band under the chrome. */
+  @media (max-width: 767px) { :root { --topbar-h: 96px; } }
   
   html.light-mode { filter: invert(1) hue-rotate(180deg); }
   
@@ -1310,7 +1313,14 @@ const GLOBAL_STYLES = `
   .panel-tall { height: 850px !important; min-height: 850px !important; }
   @media (max-width: 1024px) { .panel-tall { min-height: 700px !important; height: auto !important; } }
   @media (max-width: 767px) { .panel-tall { min-height: 550px !important; } }
-  /* Design stacks the heat map / watchlist pair at 1100px. */
+  /* ── Responsive (mobile handoff) ──────────────────────────────────────
+     Additive, max-width scoped: nothing above 1100px changes. Handoff class
+     hooks map onto this app's own elements:
+       .hm-grid → .bottom-grid-all · .wl-wrap → .watchlist-wrapper
+       .dash-wrap → .main-content · .tb-pills → TopBar pill row
+       .ec-scroll / .ec-inner → EarningsWeek scroll container
+     Several targets carry inline styles, so these declarations need
+     !important to win — the same reason the design prototype used it. */
   @media (max-width: 1100px) {
     .bottom-grid-all { grid-template-columns: 1fr !important; }
     .span-2, .span-1 { grid-column: 1 / -1 !important; }
@@ -1318,6 +1328,28 @@ const GLOBAL_STYLES = `
     .panel-inner { position: relative !important; height: auto !important; min-height: 500px; }
     .watchlist-wrapper { position: relative !important; height: auto !important; min-height: 600px; }
     .watchlist-inner { position: relative !important; height: auto !important; }
+  }
+  @media (max-width: 900px) {
+    .main-content { padding: 14px 12px 60px !important; }
+    /* Market pills become a native horizontal swipe row. The mobile top bar
+       lays them out as a grid, so force flex for both variants; no JS
+       carousel, just an overflow container with the scrollbar hidden. */
+    .tb-pills {
+      display: flex !important;
+      overflow-x: auto;
+      scrollbar-width: none;
+      -webkit-overflow-scrolling: touch;
+    }
+    .tb-pills::-webkit-scrollbar { display: none; }
+    .tb-pills > div { flex: 0 0 148px !important; }
+    /* Earnings week: five day columns stop fitting, so scroll them instead. */
+    .ec-scroll { overflow-x: auto; scrollbar-width: none; -webkit-overflow-scrolling: touch; }
+    .ec-scroll::-webkit-scrollbar { display: none; }
+    .ec-inner { min-width: 640px; }
+    .bottom-grid-all > div { min-height: 0 !important; }
+    /* Descendant selector on purpose: it must out-specify the > div reset
+       above, which also matches the watchlist wrapper. */
+    .bottom-grid-all .watchlist-wrapper { min-height: 560px !important; }
   }
   @media (max-width: 1100px) {
     .side-panel { display: none !important; }
@@ -1330,8 +1362,12 @@ const GLOBAL_STYLES = `
     .top-node-center > div:first-child { width: 100% !important; box-sizing: border-box !important; }
     .capex-number { font-size: 44px !important; }
     .subsector-grid { grid-template-columns: 1fr !important; }
-    .earnings-week-grid { grid-template-columns: 1fr !important; }
-    .main-content { padding: 12px 8px !important; max-width: 100vw !important; }
+    /* The earnings week no longer stacks here — the mobile handoff turns it
+       into a horizontal swipe row instead (.ec-scroll / .ec-inner above), so
+       collapsing to one column would leave a single tall column scrolling
+       sideways. Padding likewise comes from the ≤900 rule, which keeps the
+       60px bottom that clears the fixed ticker tape. */
+    .main-content { max-width: 100vw !important; }
     .header-controls { gap: 8px !important; }
     .panel-wrapper { min-height: 400px; }
     .bottom-grid-all { gap: 10px !important; }

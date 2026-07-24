@@ -298,7 +298,7 @@ export default function TopBar({ marketData }) {
           boxShadow: "var(--shadow-chrome)",
         }}
       >
-        <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 3, padding: "4px 4px 0" }}>
+        <div className="tb-pills" style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 3, padding: "4px 4px 0" }}>
           {TOP_BAR_TICKERS.map(({ ticker, label, color }) => {
             const entry = marketData[ticker] || {};
             const price = entry.price;
@@ -366,6 +366,7 @@ export default function TopBar({ marketData }) {
           the clock. They used to also carry a scaleX() transform, which shrank
           them a second time and left the gap before the clock. */}
       <div
+        className="tb-pills"
         style={{
           display: "flex",
           alignItems: "stretch",

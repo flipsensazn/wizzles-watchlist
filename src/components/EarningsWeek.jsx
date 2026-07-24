@@ -80,7 +80,10 @@ export default function EarningsWeek({ tickers = [], prices = {}, onTickerClick 
         </div>
       </div>
 
-      <div className="earnings-week-grid" style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0,1fr))", gap: 10 }}>
+      {/* ec-scroll / ec-inner: below 900px the five day columns stop fitting,
+          so the week becomes a native horizontal swipe row (see GLOBAL_STYLES). */}
+      <div className="ec-scroll">
+        <div className="earnings-week-grid ec-inner" style={{ display: "grid", gridTemplateColumns: "repeat(5, minmax(0,1fr))", gap: 10 }}>
         {days.map(day => {
           const isToday = day.date.toDateString() === todayKey;
           const isPast = !isToday && day.date < new Date(todayKey);
@@ -128,6 +131,7 @@ export default function EarningsWeek({ tickers = [], prices = {}, onTickerClick 
             </div>
           );
         })}
+        </div>
       </div>
 
       {total === 0 && (
